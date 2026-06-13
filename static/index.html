@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MICHI（道）— японский язык</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-28 -28 56 56'%3E%3Cdefs%3E%3Cpath id='p' d='M0,-4 C-7,-7 -11,-15 -7.5,-21 C-5,-25 -2,-24.5 0,-20.5 C2,-24.5 5,-25 7.5,-21 C11,-15 7,-7 0,-4 Z'/%3E%3C/defs%3E%3Cg fill='%23EF7FA8'%3E%3Cuse href='%23p'/%3E%3Cuse href='%23p' transform='rotate(72)'/%3E%3Cuse href='%23p' transform='rotate(144)'/%3E%3Cuse href='%23p' transform='rotate(216)'/%3E%3Cuse href='%23p' transform='rotate(288)'/%3E%3C/g%3E%3Ccircle r='3.4' fill='%23F8CD6F'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // До загрузки стилей — чтобы тёмная тема не мигала белым
+    (function () {
+      var p = localStorage.getItem("michi_theme") || "auto";
+      var dark = p === "dark" ||
+        (p === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <svg class="logo" viewBox="-28 -28 56 56" width="32" height="32" aria-hidden="true">
+        <defs>
+          <linearGradient id="sakura-g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#F7B8D0"/>
+            <stop offset="1" stop-color="#EF7FA8"/>
+          </linearGradient>
+          <path id="petal" d="M0,-4 C-7,-7 -11,-15 -7.5,-21 C-5,-25 -2,-24.5 0,-20.5 C2,-24.5 5,-25 7.5,-21 C11,-15 7,-7 0,-4 Z"/>
+        </defs>
+        <g fill="url(#sakura-g)">
+          <use href="#petal"/>
+          <use href="#petal" transform="rotate(72)"/>
+          <use href="#petal" transform="rotate(144)"/>
+          <use href="#petal" transform="rotate(216)"/>
+          <use href="#petal" transform="rotate(288)"/>
+        </g>
+        <circle r="3.4" fill="#F8CD6F"/>
+      </svg>
+      <h1>MICHI</h1>
+      <span class="pill" id="streak-pill" style="display:none"></span>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="btn-theme" title="Светлая/тёмная тема">☾</button>
+      <button class="icon-btn" id="btn-settings" title="Настройки озвучки">⚙</button>
+    </header>
+    <main id="view"></main>
+  </div>
+
+  <nav class="tabs">
+    <button data-view="today"><span class="ico">今</span>Сегодня</button>
+    <button data-view="lessons"><span class="ico">道</span>Путь</button>
+    <button data-view="review"><span class="ico">復</span>Повторение</button>
+    <button data-view="stats"><span class="ico">計</span>Статистика</button>
+  </nav>
+
+  <!-- Полноэкранный плеер урока / SRS-сессии -->
+  <div id="player">
+    <div class="player-top">
+      <button class="close" id="player-close" title="Выйти">✕</button>
+      <div class="progress"><div id="player-progress"></div></div>
+      <span id="player-counter" class="stat-label"></span>
+    </div>
+    <div class="player-body" id="player-body"></div>
+  </div>
+
+  <!-- Настройки озвучки -->
+  <div id="settings">
+    <div class="settings-card">
+      <h2>Озвучка</h2>
+      <div id="tts-warn" class="tts-warn" style="display:none"></div>
+      <div class="setting">
+        <label for="set-source">Источник</label>
+        <select id="set-source">
+          <option value="neural">Нейроголос Microsoft (онлайн, лучший звук)</option>
+          <option value="browser">Голос браузера / системы</option>
+        </select>
+      </div>
+      <div class="setting">
+        <label for="set-voice">Голос</label>
+        <select id="set-voice"></select>
+        <p class="vv-hint" id="vv-hint" style="display:none">
+          Хотите аниме-голоса (Дзундамон, Сикоку Мэтан)? Установите бесплатный
+          <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener">VOICEVOX</a>
+          и запустите его — голоса появятся в этом списке автоматически.
+        </p>
+      </div>
+      <div class="setting">
+        <label for="set-volume">Громкость <span class="val" id="val-volume"></span></label>
+        <input type="range" id="set-volume" min="0" max="100" step="5">
+      </div>
+      <div class="setting">
+        <label for="set-rate">Скорость речи <span class="val" id="val-rate"></span></label>
+        <input type="range" id="set-rate" min="60" max="120" step="5">
+      </div>
+      <div class="settings-actions">
+        <button class="ghost" id="set-test">Прослушать</button>
+        <button class="primary" id="set-close">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Подтверждение выхода из сессии -->
+  <div id="confirm">
+    <div class="settings-card confirm-card">
+      <p id="confirm-text"></p>
+      <div class="settings-actions">
+        <button class="ghost" id="confirm-no">Остаться</button>
+        <button class="primary" id="confirm-yes">Выйти</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="tracing.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
