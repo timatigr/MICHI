@@ -18,3 +18,7 @@ tts_cache/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Скриншоты и временные профили браузера от ручной проверки UI
+shot_*.png
+.chrome-tmp*/

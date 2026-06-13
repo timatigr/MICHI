@@ -397,7 +397,8 @@ document.querySelectorAll("nav.tabs button").forEach(b =>
 
 function setStreakPill(streak) {
   const pill = $("#streak-pill");
-  pill.textContent = `${streak} ${plural(streak, ["день", "дня", "дней"])}`;
+  // Единственное место для серии — пилюля в шапке (видна на всех вкладках)
+  pill.textContent = `🔥 ${streak} ${plural(streak, ["день", "дня", "дней"])}`;
   pill.style.display = streak > 0 ? "" : "none";
 }
 
@@ -434,13 +435,10 @@ async function renderToday() {
           <div class="hero-jp jp" data-tts="${jp}">${jp}！</div>
           <div class="hero-ru">${ru}</div>
         </div>
-        <div class="hero-streak" title="Дней занятий подряд">
-          <b>🔥 ${o.streak}</b><span>${plural(o.streak, ["день", "дня", "дней"])} подряд</span>
-        </div>
       </div>
       <div class="hero-stats">
-        <div class="hs"><b>${queueTotal}</b><span>карточек ждут повторения</span></div>
-        <div class="hs"><b>${o.today.reviews}</b><span>повторено сегодня${o.today.accuracy !== null ? `, точность ${o.today.accuracy}%` : ""}</span></div>
+        <div class="hs"><b>${o.today.reviews}</b><span>повторено сегодня</span></div>
+        <div class="hs"><b>${o.today.accuracy !== null ? o.today.accuracy + "%" : "—"}</b><span>точность сегодня</span></div>
       </div>
     </div>
 
@@ -486,50 +484,80 @@ async function renderToday() {
 }
 
 /* ---------- Путь: регионы и сетка уроков ---------- */
+const COURSE_OF = { l: "hiragana", k: "katakana", v: "n5", j: "kanji" };
+const COURSE_LABEL = { all: "Все", hiragana: "Хирагана", katakana: "Катакана", n5: "Слова N5", kanji: "Кандзи" };
+let lessonFilter = localStorage.getItem("michi_lesson_filter") || "all";
+
 async function renderLessons() {
   view.innerHTML = `<div class="empty">Загрузка…</div>`;
   const lessons = await api.get("/api/lessons");
 
-  // Группировка по «регионам» с сохранением порядка
-  const groups = [];
+  // Курсы в порядке появления — для переключателя
+  const present = [];
   for (const l of lessons) {
-    let g = groups[groups.length - 1];
-    if (!g || g.id !== l.group.id) {
-      g = { ...l.group, lessons: [] };
-      groups.push(g);
-    }
-    g.lessons.push(l);
+    const c = COURSE_OF[l.id[0]] || "other";
+    if (!present.includes(c)) present.push(c);
   }
+  const filters = ["all", ...present];
+  if (!filters.includes(lessonFilter)) lessonFilter = "all";
 
-  view.innerHTML = groups.map(g => {
-    const doneCount = g.lessons.filter(l => l.status === "completed").length;
-    return `
-    <div class="region-h">
-      <span class="t">${g.title}</span>
-      <span class="jp">${g.jp}</span>
-      <span class="spacer"></span>
-      <span class="region-progress ${doneCount === g.lessons.length ? "done" : ""}">
-        ${doneCount === g.lessons.length ? "✓ " : ""}${doneCount} из ${g.lessons.length}</span>
-    </div>
-    <div class="lesson-grid">
-      ${g.lessons.map(l => {
-        return `
-        <div class="lesson-card ${l.status}" data-id="${l.id}" data-status="${l.status}">
-          <div class="circle jp c${lessons.indexOf(l) % 6}">${l.icon}</div>
-          ${l.status === "completed"
-            ? `<span class="state done">✓ ${l.score != null ? Math.round(l.score * 100) + "%" : ""}</span>`
-            : l.status === "locked" ? `<span class="state lock">🔒</span>` : ""}
-          <h3>${l.title}</h3>
-          <div class="tag">${l.subtitle}${l.kana_count ? ` · ${l.kana_count} знаков` : ""}${l.locked_hint ? `<br>${l.locked_hint}` : ""}</div>
-        </div>`;
-      }).join("")}
-    </div>`;
-  }).join("");
+  const paint = () => {
+    const shown = lessonFilter === "all"
+      ? lessons
+      : lessons.filter(l => (COURSE_OF[l.id[0]] || "other") === lessonFilter);
 
-  view.querySelectorAll(".lesson-card").forEach(el =>
-    el.addEventListener("click", () => {
-      if (el.dataset.status !== "locked") startLesson(el.dataset.id);
-    }));
+    // Группировка по «регионам» с сохранением порядка
+    const groups = [];
+    for (const l of shown) {
+      let g = groups[groups.length - 1];
+      if (!g || g.id !== l.group.id) {
+        g = { ...l.group, lessons: [] };
+        groups.push(g);
+      }
+      g.lessons.push(l);
+    }
+
+    const tabs = `<div class="course-tabs">${filters.map(f =>
+      `<button class="course-tab ${f === lessonFilter ? "active" : ""}" data-f="${f}">${COURSE_LABEL[f] || f}</button>`
+    ).join("")}</div>`;
+
+    view.innerHTML = tabs + groups.map(g => {
+      const doneCount = g.lessons.filter(l => l.status === "completed").length;
+      return `
+      <div class="region-h">
+        <span class="t">${g.title}</span>
+        <span class="jp">${g.jp}</span>
+        <span class="spacer"></span>
+        <span class="region-progress ${doneCount === g.lessons.length ? "done" : ""}">
+          ${doneCount === g.lessons.length ? "✓ " : ""}${doneCount} из ${g.lessons.length}</span>
+      </div>
+      <div class="lesson-grid">
+        ${g.lessons.map(l => `
+          <div class="lesson-card ${l.status}" data-id="${l.id}" data-status="${l.status}">
+            <div class="circle jp c${lessons.indexOf(l) % 6}">${l.icon}</div>
+            ${l.status === "completed"
+              ? `<span class="state done">✓ ${l.score != null ? Math.round(l.score * 100) + "%" : ""}</span>`
+              : l.status === "locked" ? `<span class="state lock">🔒</span>` : ""}
+            <h3>${l.title}</h3>
+            <div class="tag">${l.subtitle}${l.kana_count ? ` · ${l.kana_count} знаков` : ""}${l.locked_hint ? `<br>${l.locked_hint}` : ""}</div>
+          </div>`).join("")}
+      </div>`;
+    }).join("");
+
+    view.querySelectorAll(".course-tab").forEach(b =>
+      b.addEventListener("click", () => {
+        lessonFilter = b.dataset.f;
+        localStorage.setItem("michi_lesson_filter", lessonFilter);
+        paint();
+        animateIn(view);
+      }));
+    view.querySelectorAll(".lesson-card").forEach(el =>
+      el.addEventListener("click", () => {
+        if (el.dataset.status !== "locked") startLesson(el.dataset.id);
+      }));
+  };
+
+  paint();
 }
 
 /* ---------- Стилизованный диалог подтверждения (вместо confirm()) ---------- */
@@ -702,6 +730,11 @@ async function showIntroKanji(step) {
    afterAnswer — async-колбэк: вызывается после ответа, возвращает
    HTML (SRS-вердикт) для блока фидбека. */
 
+/* Вердикт ответа в виде пилюли с галочкой/крестиком */
+function verdict(ok, html) {
+  return `<span class="verdict">${ok ? "✓ " : "✗ "}${html}</span>`;
+}
+
 async function runExercise(ex, afterAnswer) {
   if (ex.type === "kana_word_build" || ex.type === "vocab_build")
     return runWordBuild(ex, afterAnswer);
@@ -750,8 +783,8 @@ async function runChoice(ex, afterAnswer) {
 
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
-  fb.innerHTML = correct ? "Верно" :
-    `Правильный ответ: <span class="jp">${ex.options[ex.answer]}</span>`;
+  fb.innerHTML = verdict(correct, correct ? "Верно" :
+    `Правильно: <span class="jp">${ex.options[ex.answer]}</span>`);
   speak(ex.prompt.tts || ex.answer_tts);
 
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
@@ -821,9 +854,9 @@ async function runWordBuild(ex, afterAnswer) {
 
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
-  fb.innerHTML = correct
-    ? `Верно · <span class="jp">${word}</span>`
-    : `Правильно: <span class="jp">${ex.answer_tokens.join("")}</span>`;
+  fb.innerHTML = verdict(correct, correct
+    ? `<span class="jp">${word}</span>`
+    : `Правильно: <span class="jp">${ex.answer_tokens.join("")}</span>`);
   speak(ex.prompt.tts);
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
 
@@ -861,9 +894,9 @@ async function runTracing(ex, afterAnswer) {
 
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
-  fb.innerHTML = correct
+  fb.innerHTML = verdict(correct, correct
     ? (result.errors === 0 ? "Написано чисто" : "Зачтено, была помарка")
-    : `Помарок: ${result.errors} — посмотрите анимацию черт ещё раз`;
+    : `Помарок: ${result.errors} — посмотрите анимацию черт ещё раз`);
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, result.usedHint)}</div>`;
 
   playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
