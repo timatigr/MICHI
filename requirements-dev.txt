@@ -1,0 +1,4 @@
+# Инструменты разработки (не нужны для запуска приложения).
+# Установка: .venv\Scripts\pip install -r requirements-dev.txt
+-r requirements.txt
+pytest>=8.0

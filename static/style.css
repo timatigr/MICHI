@@ -361,6 +361,10 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
   text-align: center; font-size: 18px; color: var(--pink); font-weight: 700;
   letter-spacing: 5px; text-transform: uppercase;
 }
+/* Ромадзи отключается в интерфейсе курса после освоения хираганы (2.1):
+   прячем крупную транскрипцию-«костыль» на экранах знакомства; стимулы
+   самих упражнений (выбор чтения) остаются. */
+[data-romaji="off"] .romaji-big { display: none; }
 .mnemonic {
   background: var(--card); border-radius: 16px; box-shadow: var(--shadow-sm);
   padding: 15px 17px; margin: 18px 0 0; font-size: 14.5px; line-height: 1.55;
@@ -521,6 +525,7 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 }
 .settings-card h2 { font-size: 17px; font-weight: 700; margin-bottom: 18px; color: var(--title); }
 .setting { margin-bottom: 16px; }
+.setting-divider { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; }
 .setting label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 .setting select, .setting input[type="range"] { width: 100%; }
 .setting select {

@@ -93,6 +93,14 @@
         <label for="set-rate">Скорость речи <span class="val" id="val-rate"></span></label>
         <input type="range" id="set-rate" min="60" max="120" step="5">
       </div>
+      <div class="setting setting-divider">
+        <label for="set-romaji">Ромадзи (латинская транскрипция)</label>
+        <select id="set-romaji">
+          <option value="auto">Авто — скрыть после хираганы</option>
+          <option value="on">Всегда показывать</option>
+          <option value="off">Никогда не показывать</option>
+        </select>
+      </div>
       <div class="settings-actions">
         <button class="ghost" id="set-test">Прослушать</button>
         <button class="primary" id="set-close">Готово</button>

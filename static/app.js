@@ -179,6 +179,7 @@ function openSettings() {
   $("#set-rate").value = Math.round(TTS.prefs.rate * 100);
   $("#val-volume").textContent = `${Math.round(TTS.prefs.volume * 100)}%`;
   $("#val-rate").textContent = `${Math.round(TTS.prefs.rate * 100)}%`;
+  $("#set-romaji").value = Romaji.pref;
   settingsModal.classList.add("open");
 }
 $("#btn-settings").addEventListener("click", openSettings);
@@ -208,6 +209,7 @@ $("#set-rate").addEventListener("input", e => {
   TTS.save();
 });
 $("#set-test").addEventListener("click", () => speak("こんにちは。ミチへようこそ。"));
+$("#set-romaji").addEventListener("change", e => Romaji.set(e.target.value));
 
 /* ---------- Тема оформления ---------- */
 const Theme = {
@@ -237,6 +239,32 @@ Theme.media.addEventListener("change", () => {
 });
 $("#btn-theme").addEventListener("click", () => Theme.toggle());
 Theme.apply();
+
+/* ---------- Ромадзи в интерфейсе курса (2.1: отключается после хираганы) ---------- */
+const Romaji = {
+  pref: localStorage.getItem("michi_romaji") || "auto",  // auto | on | off
+  hiraganaDone: false,
+  effectiveOn() {
+    if (this.pref === "on") return true;
+    if (this.pref === "off") return false;
+    return !this.hiraganaDone;            // авто: показываем, пока хирагана не пройдена
+  },
+  apply() {
+    document.documentElement.dataset.romaji = this.effectiveOn() ? "on" : "off";
+  },
+  set(pref) {
+    this.pref = pref;
+    localStorage.setItem("michi_romaji", pref);
+    this.apply();
+  },
+  /* Вызывается, когда из /api/overview известен прогресс курсов */
+  syncProgress(courses) {
+    const hira = courses.find(c => c.id === "hiragana");
+    this.hiraganaDone = !!hira && hira.lessons_completed >= hira.lessons_total;
+    this.apply();
+  },
+};
+Romaji.apply();
 
 /* ---------- Анимация появления экранов ---------- */
 function animateIn(el) {
@@ -386,10 +414,18 @@ async function renderToday() {
   view.innerHTML = `<div class="empty">Загрузка…</div>`;
   const o = await api.get("/api/overview");
   setStreakPill(o.streak);
+  Romaji.syncProgress(o.courses);
   const next = o.next_lesson;
   const queueTotal = o.srs.due + o.srs.new_available;
   const [jp, ru] = greeting();
   const estMin = Math.max(1, Math.round(queueTotal * 0.15));
+  // Одноразовое пояснение в момент авто-скрытия ромадзи после хираганы
+  const romajiNote = (Romaji.pref === "auto" && Romaji.hiraganaDone &&
+    !localStorage.getItem("michi_romaji_note"))
+    ? `<p class="note">Хирагана пройдена — ромадзи скрыт, чтобы вы читали каной.
+       Вернуть можно в ⚙ настройках.</p>`
+    : "";
+  if (romajiNote) localStorage.setItem("michi_romaji_note", "1");
 
   view.innerHTML = `
     <div class="hero">
@@ -443,7 +479,8 @@ async function renderToday() {
         <span class="cr-num">${c.lessons_completed}/${c.lessons_total}</span>
       </div>`).join("")}
       <p class="note">Катакану можно учить параллельно с хираганой, слова N5 откроются после хираганы.</p>
-    </div>`;
+    </div>
+    ${romajiNote}`;
   $("#btn-review")?.addEventListener("click", startReview);
   $("#btn-lesson")?.addEventListener("click", () => startLesson(next.id));
 }
@@ -955,6 +992,7 @@ async function renderReviewTab() {
   view.innerHTML = `<div class="empty">Загрузка…</div>`;
   const o = await api.get("/api/overview");
   setStreakPill(o.streak);
+  Romaji.syncProgress(o.courses);
   const total = o.srs.due + o.srs.new_available;
   const estMin = Math.max(1, Math.round(total * 0.15));
   view.innerHTML = `
