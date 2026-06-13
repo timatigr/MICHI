@@ -710,10 +710,18 @@ async function showIntroKanji(step) {
        <span class="ex-w jp">${e.w}</span>
        <span class="ex-r jp">${e.r}</span>
        <span class="ex-ru">${e.ru}</span></button>`).join("");
+  // Разбор на изученные компоненты (6.3): 木 + 木 = 林
+  const parts = (step.components || []).map(c =>
+    `<span class="part jp" data-tts="${c.char}">${c.char}<small>${c.meaning || ""}</small></span>`
+  ).join(`<i class="op">+</i>`);
+  const components = parts
+    ? `<div class="kanji-parts">${parts}<i class="op">=</i><span class="part whole jp">${step.char}</span></div>`
+    : "";
   playerBody.innerHTML = `
     ${glyph}
     <div class="kanji-meaning">${step.meaning}</div>
     <div class="kanji-readings">${readings}</div>
+    ${components}
     ${ttsButton(step.tts)}
     ${step.mnemonic ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
     ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}

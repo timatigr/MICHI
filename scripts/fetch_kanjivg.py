@@ -24,7 +24,7 @@ KATA_SMALL = "ャュョッー"
 KANA_CHARS = BASIC + DAKUTEN + SMALL + KATA_BASIC + KATA_DAKUTEN + KATA_SMALL
 
 # Кандзи курса (раздел 6). Пополняется по мере добавления уроков кандзи.
-KANJI_CHARS = "一二三四五六七八九十"
+KANJI_CHARS = "一二三四五六七八九十日月火水木金土林森明本"
 
 URL = "https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{:05x}.svg"
 PATH_RE = re.compile(r'<path[^>]*\bd="([^"]+)"')

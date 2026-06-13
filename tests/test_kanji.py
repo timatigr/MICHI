@@ -64,3 +64,32 @@ def test_item_info_kanji():
     info = item_info("kanji_meaning", "五")
     assert info["title"] == "五"
     assert info["sub"] == "пять"
+
+
+def test_kanji_components_reference_known_kanji():
+    for k in KANJI:
+        for c in k.get("components", []):
+            assert c["char"] in KANJI_BY_CHAR, \
+                f"{k['char']}: компонент {c['char']} не введён как кандзи"
+
+
+def test_kanji_components_introduced_earlier():
+    """i+1 (6.3): компонент вводится в более раннем уроке, чем составной знак."""
+    order = {}
+    kanji_course = next(c for c in COURSES if c["id"] == "kanji")
+    for pos, lid in enumerate(kanji_course["lesson_ids"]):
+        for ch in LESSON_BY_ID[lid]["kanji"]:
+            order.setdefault(ch, pos)
+    for k in KANJI:
+        kp = order[k["char"]]
+        for c in k.get("components", []):
+            assert order[c["char"]] < kp, \
+                f"{k['char']} (урок {kp}) использует {c['char']} из урока {order[c['char']]}"
+
+
+def test_kanji_reading_options_are_unique_and_correct():
+    for k in KANJI:
+        ex = kanji_reading(k)
+        assert len(set(ex["options"])) == len(ex["options"]), \
+            f"{k['char']}: повтор в вариантах {ex['options']}"
+        assert ex["options"][ex["answer"]] == k["reading"]

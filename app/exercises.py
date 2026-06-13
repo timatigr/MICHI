@@ -235,7 +235,11 @@ def _kanji_meaning_distractors(char, n=3):
 
 
 def _kanji_reading_distractors(char, n=3):
-    pool = [k["reading"] for k in KANJI if k["char"] != char and k.get("reading")]
+    # Исключаем чтение, равное верному: разные кандзи делят чтения (日/火 = ひ),
+    # иначе верный вариант мог бы попасть и в дистракторы
+    target = KANJI_BY_CHAR[char]["reading"]
+    pool = [k["reading"] for k in KANJI
+            if k["char"] != char and k.get("reading") and k["reading"] != target]
     random.shuffle(pool)
     out = []
     for r in pool:
@@ -394,6 +398,8 @@ def _intro_kanji_step(k):
             "on": k.get("on", []), "kun": k.get("kun", []),
             "examples": k.get("examples", []), "mnemonic": k.get("mnemonic"),
             "tts": k["reading"]}
+    if k.get("components"):  # 6.3: разбор знака на изученные компоненты
+        step["components"] = k["components"]
     if k["char"] in STROKES:  # 6.2: анимация порядка черт при знакомстве
         step["strokes"] = STROKES[k["char"]]
     return step
