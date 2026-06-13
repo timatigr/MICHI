@@ -373,6 +373,32 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
   text-align: center; font-size: 19px; margin: 16px 0 0;
   font-family: var(--jp-font); color: var(--title);
 }
+
+/* ---- Знакомство с кандзи ---- */
+.kanji-meaning {
+  text-align: center; font-size: 22px; font-weight: 700;
+  color: var(--title); margin: 4px 0 2px;
+}
+.kanji-readings {
+  display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 2px;
+}
+.kanji-readings .rd {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-family: var(--jp-font); font-size: 17px; font-weight: 600;
+  padding: 5px 12px; border-radius: 12px;
+}
+.kanji-readings .rd small { font-family: inherit; font-size: 11px; opacity: .8; font-weight: 700; }
+.kanji-readings .rd.on  { color: var(--indigo);  background: color-mix(in srgb, var(--indigo) 14%, transparent); }
+.kanji-readings .rd.kun { color: var(--success); background: color-mix(in srgb, var(--success) 16%, transparent); }
+.kanji-examples { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 0; }
+.kanji-ex {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 12px;
+  text-align: left; padding: 11px 14px; border: 1px solid var(--line);
+  border-radius: 14px; background: var(--card); cursor: pointer; width: 100%;
+}
+.kanji-ex .ex-w  { font-size: 20px; color: var(--title); }
+.kanji-ex .ex-r  { font-size: 14px; color: var(--indigo); }
+.kanji-ex .ex-ru { font-size: 13.5px; color: var(--muted); }
 .note { color: var(--muted); font-size: 13.5px; margin: 10px 0 0; line-height: 1.5; }
 .lookalikes { display: flex; gap: 8px; justify-content: center; margin: 8px 0 0; flex-wrap: wrap; }
 .lookalikes span {

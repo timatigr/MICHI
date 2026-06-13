@@ -11,15 +11,23 @@ import random
 from pathlib import Path
 
 from .content.registry import (
-    KANA, KANA_BY_CHAR, LESSON_BY_ID, VOCAB, VOCAB_BY_ID, WORDS,
-    kana_known_by, tokenize_kana, traps_for_lesson,
+    KANA, KANA_BY_CHAR, KANJI, KANJI_BY_CHAR, LESSON_BY_ID, VOCAB, VOCAB_BY_ID,
+    WORDS, kana_known_by, tokenize_kana, traps_for_lesson,
 )
 
 # Не годятся в дистракторы сборки слова: служебные знаки
 NON_TILE = {"っ", "ッ", "ー"}
 
-_STROKES_PATH = Path(__file__).resolve().parent / "content" / "kanjivg_kana.json"
-STROKES = json.loads(_STROKES_PATH.read_text(encoding="utf-8")) if _STROKES_PATH.exists() else {}
+_CONTENT = Path(__file__).resolve().parent / "content"
+
+
+def _load_strokes(name):
+    p = _CONTENT / name
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+
+# Черты каны и кандзи в одном словаре: тип знака различает item_type
+STROKES = {**_load_strokes("kanjivg_kana.json"), **_load_strokes("kanjivg_kanji.json")}
 
 # Триады/пары глухой–звонкий–полузвонкий для kana_dakuten
 _DAKUTEN_SETS = {}
@@ -218,12 +226,71 @@ def vocab_build(word):
             "speak_after": True}
 
 
+# ---------- Кандзи (раздел 5.3, три навыка-карточки) ----------
+
+def _kanji_meaning_distractors(char, n=3):
+    pool = [k["meaning"] for k in KANJI if k["char"] != char]
+    random.shuffle(pool)
+    return pool[:n]
+
+
+def _kanji_reading_distractors(char, n=3):
+    pool = [k["reading"] for k in KANJI if k["char"] != char and k.get("reading")]
+    random.shuffle(pool)
+    out = []
+    for r in pool:
+        if r not in out:
+            out.append(r)
+        if len(out) == n:
+            break
+    return out
+
+
+def kanji_meaning(k):
+    """Тип 18: кандзи -> выбор значения из 4."""
+    options, answer = _with_options(k["meaning"], _kanji_meaning_distractors(k["char"]))
+    return {"type": "kanji_meaning", "item_id": k["char"],
+            "prompt": {"text": k["char"], "tts": None, "style": "jp"},
+            "question": "Что значит этот иероглиф?",
+            "options": options, "answer": answer}
+
+
+def kanji_reading(k):
+    """Тип 20: чтение кандзи в слове -> выбор каны из 4.
+    Озвучка не играет до ответа (выдала бы чтение) — speak_after на клиенте."""
+    word = k["examples"][0]
+    options, answer = _with_options(k["reading"], _kanji_reading_distractors(k["char"]))
+    return {"type": "kanji_reading", "item_id": k["char"],
+            "prompt": {"text": word["w"], "tts": None, "style": "jp"},
+            "question": "Как читается это слово?",
+            "options": options, "answer": answer, "options_are_kana": True,
+            "answer_tts": word["r"]}
+
+
+def kanji_writing(char, mode="memory"):
+    """Тип 21: написание кандзи. Тот же пайплайн проверки черт, что у каны (6.7)."""
+    strokes = STROKES.get(char)
+    if not strokes:
+        return None
+    k = KANJI_BY_CHAR[char]
+    return {"type": "kanji_tracing", "item_id": char, "mode": mode,
+            "prompt": {"text": k["meaning"], "tts": k["reading"]},
+            "question": "Обведите иероглиф по контуру"
+            if mode == "trace" else "Напишите иероглиф по памяти",
+            "char": char, "strokes": strokes}
+
+
 def item_info(item_type, item_id):
     """Карточка-справка для фидбека в SRS-сессии и статистики."""
     if item_type == "kana":
         k = KANA_BY_CHAR.get(item_id)
         if k:
             return {"title": item_id, "sub": k["romaji"], "hint": k.get("mnemonic")}
+    elif item_type.startswith("kanji"):
+        k = KANJI_BY_CHAR.get(item_id)
+        if k:
+            return {"title": k["char"], "sub": k["meaning"],
+                    "hint": f"{k['char']} — {k['meaning']} ({k['reading']}). {k.get('mnemonic', '')}".strip()}
     else:
         w = VOCAB_BY_ID.get(item_id)
         if w:
@@ -244,6 +311,18 @@ def review_exercise(item_type, item_id, reps=0):
         if item_id in STROKES:
             types.append(lambda c: kana_tracing(c, mode="memory"))
         return types[reps % len(types)](item_id)
+
+    if item_type.startswith("kanji"):
+        k = KANJI_BY_CHAR.get(item_id)
+        if k is None:
+            return None
+        if item_type == "kanji_meaning":
+            return kanji_meaning(k)
+        if item_type == "kanji_reading":
+            return kanji_reading(k)
+        if item_type == "kanji_writing":
+            return kanji_writing(item_id, mode="memory")
+        return None
 
     word = VOCAB_BY_ID.get(item_id)
     if word is None:
@@ -310,12 +389,57 @@ def _vocab_lesson_steps(lesson):
     return steps
 
 
+def _intro_kanji_step(k):
+    step = {"type": "intro_kanji", "char": k["char"], "meaning": k["meaning"],
+            "on": k.get("on", []), "kun": k.get("kun", []),
+            "examples": k.get("examples", []), "mnemonic": k.get("mnemonic"),
+            "tts": k["reading"]}
+    if k["char"] in STROKES:  # 6.2: анимация порядка черт при знакомстве
+        step["strokes"] = STROKES[k["char"]]
+    return step
+
+
+def _kanji_lesson_steps(lesson):
+    """Урок кандзи (6.2): знакомство с порядком черт -> трассировка -> значение
+    -> чтение -> написание по памяти. Каждый знак сразу закрепляется."""
+    steps = [{"type": "intro_text", "title": lesson["title"],
+              "subtitle": lesson.get("subtitle", ""), "text": lesson["intro"],
+              "icon": lesson.get("icon", "")}]
+    kanji = [KANJI_BY_CHAR[c] for c in lesson["kanji"]]
+
+    for k in kanji:
+        steps.append(_intro_kanji_step(k))
+        if k["char"] in STROKES:  # трассировка сразу после знакомства
+            steps.append({"type": "exercise",
+                          "exercise": kanji_writing(k["char"], mode="trace")})
+        steps.append({"type": "exercise", "exercise": kanji_meaning(k)})
+
+    # Смешанная проверка: чтение в слове
+    reading = [kanji_reading(k) for k in kanji]
+    random.shuffle(reading)
+    steps.extend({"type": "exercise", "exercise": e} for e in reading)
+
+    # Значение вперемешку — закрепление
+    meaning = [kanji_meaning(k) for k in kanji]
+    random.shuffle(meaning)
+    steps.extend({"type": "exercise", "exercise": e} for e in meaning)
+
+    # Написание по памяти
+    for k in random.sample(kanji, min(3, len(kanji))):
+        if k["char"] in STROKES:
+            steps.append({"type": "exercise",
+                          "exercise": kanji_writing(k["char"], mode="memory")})
+    return steps
+
+
 def make_lesson_steps(lesson_id):
     """Сценарий микроурока (2.1): знакомство -> распознавание -> воспроизведение
     -> слова -> ловушки. Чанки по 2–3 знака с мини-проверкой после каждого."""
     lesson = LESSON_BY_ID[lesson_id]
     if lesson.get("type") == "vocab":
         return _vocab_lesson_steps(lesson)
+    if lesson.get("type") == "kanji":
+        return _kanji_lesson_steps(lesson)
     kana_all = lesson["kana"]
     steps = [{"type": "intro_text", "title": lesson["title"],
               "subtitle": lesson.get("subtitle", ""), "text": lesson["intro"],

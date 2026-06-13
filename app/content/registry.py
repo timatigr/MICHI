@@ -2,7 +2,7 @@
 """Реестр курсов: кана (хирагана + катакана) и лексика N5 в одном
 учебном порядке. Единая точка импорта для движка упражнений и API."""
 
-from . import hiragana, katakana, vocab_n5
+from . import hiragana, katakana, kanji, vocab_n5
 
 for _k in hiragana.KANA:
     _k.setdefault("script", "h")
@@ -14,8 +14,12 @@ KANA_BY_CHAR = {k["char"]: k for k in KANA}
 
 for _l in hiragana.LESSONS + katakana.LESSONS:
     _l.setdefault("type", "kana")
+for _l in vocab_n5.LESSONS:
+    _l.setdefault("type", "vocab")
+for _l in kanji.LESSONS:
+    _l.setdefault("type", "kanji")
 
-LESSONS = hiragana.LESSONS + katakana.LESSONS + vocab_n5.LESSONS
+LESSONS = hiragana.LESSONS + katakana.LESSONS + vocab_n5.LESSONS + kanji.LESSONS
 LESSON_BY_ID = {l["id"]: l for l in LESSONS}
 LESSON_ORDER = [l["id"] for l in LESSONS]
 
@@ -25,6 +29,10 @@ TRAP_GROUPS = hiragana.TRAP_GROUPS + katakana.TRAP_GROUPS
 VOCAB = vocab_n5.WORDS
 VOCAB_BY_ID = vocab_n5.WORD_BY_ID
 VOCAB_UNITS = vocab_n5.UNITS
+
+KANJI = kanji.KANJI
+KANJI_BY_CHAR = kanji.KANJI_BY_CHAR
+KANJI_UNITS = kanji.UNITS
 
 SMALL_YOON = {"ゃ", "ゅ", "ょ", "ャ", "ュ", "ョ"}
 
@@ -57,19 +65,29 @@ for _l in vocab_n5.LESSONS:
                 _req.add(_lid)
     _l["requires"] = sorted(_req)
 
+# Кандзи вводится после каны (2.3): первый урок кандзи открывается, когда
+# пройдена вся хирагана (её чтения записаны хираганой).
+if kanji.LESSONS and hiragana.LESSONS:
+    kanji.LESSONS[0].setdefault("requires", [hiragana.LESSONS[-1]["id"]])
+
 COURSES = [
     {"id": "hiragana", "title": "Хирагана", "lesson_ids": [l["id"] for l in hiragana.LESSONS]},
     {"id": "katakana", "title": "Катакана", "lesson_ids": [l["id"] for l in katakana.LESSONS]},
     {"id": "n5", "title": "Слова N5", "lesson_ids": [l["id"] for l in vocab_n5.LESSONS]},
+    {"id": "kanji", "title": "Кандзи", "lesson_ids": [l["id"] for l in kanji.LESSONS]},
 ]
 
 
 def srs_items_for_lesson(lesson):
     """Какие SRS-карточки создаёт завершение урока: [(item_type, item_id), ...].
-    Слово даёт две карточки с независимыми интервалами (раздел 2.5)."""
+    Слово даёт две карточки (2.5), кандзи — три навыка-карточки (6.4)."""
     if lesson.get("type") == "vocab":
         return ([("vocab_jp_ru", wid) for wid in lesson["words"]] +
                 [("vocab_ru_jp", wid) for wid in lesson["words"]])
+    if lesson.get("type") == "kanji":
+        return ([("kanji_meaning", c) for c in lesson["kanji"]] +
+                [("kanji_reading", c) for c in lesson["kanji"]] +
+                [("kanji_writing", c) for c in lesson["kanji"]])
     return [("kana", c) for c in lesson["kana"]]
 
 

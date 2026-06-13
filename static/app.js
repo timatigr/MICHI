@@ -666,6 +666,37 @@ async function showIntroWord(step) {
   await waitClick($("#next", playerBody));
 }
 
+/* Знакомство с кандзи (6.2): порядок черт, значение, чтения он/кун, примеры */
+async function showIntroKanji(step) {
+  const glyph = step.strokes
+    ? `<div class="kana-anim" id="kana-anim" data-tts="${step.tts}" title="Анимация порядка черт"></div>`
+    : `<div class="big-kana" data-tts="${step.tts}">${step.char}</div>`;
+  const on = (step.on || []).join("、");
+  const kun = (step.kun || []).join("、");
+  // Цветовое кодирование чтений (6.4): онъёми и кунъёми разными цветами
+  const readings = `
+    ${on ? `<span class="rd on"><small>он</small>${on}</span>` : ""}
+    ${kun ? `<span class="rd kun"><small>кун</small>${kun}</span>` : ""}`;
+  const examples = (step.examples || []).map(e =>
+    `<button class="kanji-ex" data-tts="${e.r}">
+       <span class="ex-w jp">${e.w}</span>
+       <span class="ex-r jp">${e.r}</span>
+       <span class="ex-ru">${e.ru}</span></button>`).join("");
+  playerBody.innerHTML = `
+    ${glyph}
+    <div class="kanji-meaning">${step.meaning}</div>
+    <div class="kanji-readings">${readings}</div>
+    ${ttsButton(step.tts)}
+    ${step.mnemonic ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
+    ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
+    <div class="spacer"></div>
+    <button class="primary" id="next">Запомнил</button>`;
+  if (step.strokes) Tracing.preview($("#kana-anim", playerBody), step.strokes, 176);
+  animateIn(playerBody);
+  speak(step.tts);
+  await waitClick($("#next", playerBody));
+}
+
 /* ---------- Упражнения ----------
    Каждый рендерер возвращает {correct, durationMs, usedHint}.
    afterAnswer — async-колбэк: вызывается после ответа, возвращает
@@ -675,7 +706,8 @@ async function runExercise(ex, afterAnswer) {
   if (ex.type === "kana_word_build" || ex.type === "vocab_build")
     return runWordBuild(ex, afterAnswer);
   if (ex.type === "kana_twins") return runTwins(ex, afterAnswer);
-  if (ex.type === "kana_tracing") return runTracing(ex, afterAnswer);
+  if (ex.type === "kana_tracing" || ex.type === "kanji_tracing")
+    return runTracing(ex, afterAnswer);
   return runChoice(ex, afterAnswer);
 }
 
@@ -903,6 +935,7 @@ async function startLesson(lessonId) {
     if (step.type === "intro_text") await showIntroText(step);
     else if (step.type === "intro_kana") await showIntroKana(step);
     else if (step.type === "intro_word") await showIntroWord(step);
+    else if (step.type === "intro_kanji") await showIntroKanji(step);
     else if (step.type === "exercise") {
       const res = await runExercise(step.exercise);
       if (token !== sessionToken) return;

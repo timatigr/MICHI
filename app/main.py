@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import db, srs_engine, tts
 from .content.registry import (
-    COURSES, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_UNITS,
+    COURSES, KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_UNITS,
     srs_items_for_lesson,
 )
 from .exercises import item_info, make_lesson_steps, review_exercise
@@ -58,7 +58,10 @@ def _lesson_statuses(conn):
             status = "available" if prev_completed and kana_ready else "locked"
             out[lid] = {"status": status, "score": None, "completed_at": None}
             if status == "locked" and prev_completed and not kana_ready:
-                out[lid]["locked_hint"] = "Откроется, когда выучите всю кану этих слов"
+                out[lid]["locked_hint"] = (
+                    "Откроется после освоения хираганы"
+                    if LESSON_BY_ID[lid].get("type") == "kanji"
+                    else "Откроется, когда выучите всю кану этих слов")
             prev_completed = False
     return out
 
@@ -141,6 +144,10 @@ def _lesson_group(lesson_id):
         unit = LESSON_BY_ID[lesson_id].get("unit", 1)
         return {"id": f"n5-u{unit}", "jp": "単語",
                 "title": f"Слова N5 · Юнит {unit} — {VOCAB_UNITS.get(unit, '')}"}
+    if course == "j":  # кандзи — регион на тематический юнит
+        unit = LESSON_BY_ID[lesson_id].get("unit", 1)
+        return {"id": f"kanji-u{unit}", "jp": "漢字",
+                "title": f"Кандзи · {KANJI_UNITS.get(unit, '')}"}
     # катакана
     if n <= 10:
         return {"id": "k-gojuon", "jp": "カタカナ", "title": "Катакана: годзюон"}

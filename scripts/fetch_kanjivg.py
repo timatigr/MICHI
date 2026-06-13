@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Скачивает SVG-данные черт KanjiVG (CC BY-SA) для знаков хираганы
-и складывает в компактный JSON: {знак: [path_d черты 1, черты 2, ...]}.
+"""Скачивает SVG-данные черт KanjiVG (CC BY-SA) для каны и кандзи
+и складывает в компактные JSON: {знак: [path_d черты 1, черты 2, ...]}.
+
+Кана -> kanjivg_kana.json, кандзи -> kanjivg_kanji.json.
 
 Запуск (однократно): .venv\\Scripts\\python.exe scripts\\fetch_kanjivg.py
 """
 import json
 import re
-import sys
 import urllib.request
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "app" / "content" / "kanjivg_kana.json"
+CONTENT = Path(__file__).resolve().parent.parent / "app" / "content"
+KANA_OUT = CONTENT / "kanjivg_kana.json"
+KANJI_OUT = CONTENT / "kanjivg_kanji.json"
 
 BASIC = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん"
 DAKUTEN = "がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ"
@@ -18,7 +21,10 @@ SMALL = "ゃゅょっ"
 KATA_BASIC = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン"
 KATA_DAKUTEN = "ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポ"
 KATA_SMALL = "ャュョッー"
-CHARS = BASIC + DAKUTEN + SMALL + KATA_BASIC + KATA_DAKUTEN + KATA_SMALL
+KANA_CHARS = BASIC + DAKUTEN + SMALL + KATA_BASIC + KATA_DAKUTEN + KATA_SMALL
+
+# Кандзи курса (раздел 6). Пополняется по мере добавления уроков кандзи.
+KANJI_CHARS = "一二三四五六七八九十"
 
 URL = "https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{:05x}.svg"
 PATH_RE = re.compile(r'<path[^>]*\bd="([^"]+)"')
@@ -32,11 +38,11 @@ def fetch(char):
     return PATH_RE.findall(svg)
 
 
-def main():
+def fetch_set(chars, out):
     # Догружаем поверх уже скачанного (повторный запуск — только новые знаки)
-    data = json.loads(OUT.read_text(encoding="utf-8")) if OUT.exists() else {}
+    data = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
     failed = []
-    for ch in CHARS:
+    for ch in chars:
         if ch in data:
             continue
         try:
@@ -46,13 +52,20 @@ def main():
             failed.append(ch)
             continue
         if not strokes:
-            print(f"SKIP {ch}: no paths")
+            print(f"SKIP U+{ord(ch):04X}: no paths")
             failed.append(ch)
             continue
         data[ch] = strokes
-        print(f"{ch} ok ({len(strokes)} strokes)")
-    OUT.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    print(f"saved {len(data)} chars -> {OUT}" + (f", failed: {failed}" if failed else ""))
+        # Кодпоинт вместо самого знака — консоль Windows (cp1251) не печатает кану/кандзи
+        print(f"U+{ord(ch):04X} ok ({len(strokes)} strokes)")
+    out.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    fail = ", failed: " + " ".join(f"U+{ord(c):04X}" for c in failed) if failed else ""
+    print(f"saved {len(data)} chars -> {out.name}{fail}")
+
+
+def main():
+    fetch_set(KANA_CHARS, KANA_OUT)
+    fetch_set(KANJI_CHARS, KANJI_OUT)
 
 
 if __name__ == "__main__":
