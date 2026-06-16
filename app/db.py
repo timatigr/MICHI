@@ -94,3 +94,56 @@ def set_setting(conn, key, value):
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, json.dumps(value)),
         )
+
+
+# ---------- Резервная копия (бэкап/восстановление прогресса) ----------
+# Весь прогресс — в одном SQLite-файле. Снимок снимаем/восстанавливаем через
+# backup API SQLite: он транзакционно консистентен и не воюет с WAL и блоками
+# открытых соединений (в отличие от копирования файла «на лету»).
+
+_EXPECTED_TABLES = {"srs_cards", "reviews", "lesson_progress", "settings"}
+
+
+def backup_to(dest_path):
+    """Консистентный снимок текущей БД в dest_path."""
+    src = connect()
+    try:
+        dst = sqlite3.connect(dest_path)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+    finally:
+        src.close()
+
+
+def is_michi_db(path):
+    """Похож ли файл на нашу базу: читаемый SQLite с ожидаемыми таблицами."""
+    try:
+        c = sqlite3.connect(path)
+        try:
+            tables = {r[0] for r in c.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+        finally:
+            c.close()
+    except sqlite3.DatabaseError:
+        return False
+    return _EXPECTED_TABLES <= tables
+
+
+def restore_from(src_path):
+    """Перезаписать текущую БД содержимым src_path. Перед перезаписью кладёт
+    страховочную копию рядом (<DB_PATH>.bak). Возвращает (cards, reviews)."""
+    backup_to(str(DB_PATH) + ".bak")
+    live = connect()
+    try:
+        incoming = sqlite3.connect(src_path)
+        try:
+            incoming.backup(live)          # перезаписываем живую базу копией
+        finally:
+            incoming.close()
+        cards = live.execute("SELECT COUNT(*) FROM srs_cards").fetchone()[0]
+        reviews = live.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
+    finally:
+        live.close()
+    return cards, reviews

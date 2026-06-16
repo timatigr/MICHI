@@ -1596,6 +1596,18 @@ async function renderStats() {
       <p class="note mt">Выше удержание — крепче помните, но больше повторений в день.
       Меньше новых — спокойнее темп. Применяется со следующей сессии.</p>
       <p class="note" id="srs-saved" style="display:none">Сохранено ✓</p>
+    </div>
+    <div class="card">
+      <h2>Резервная копия</h2>
+      <p class="note" style="margin-top:0">Весь прогресс — карточки, журнал ответов,
+      пройденные уроки и настройки — хранится локально в одном файле. Скачайте копию,
+      чтобы перенести его на другой компьютер или вернуть после переустановки.</p>
+      <div class="data-actions">
+        <button class="ghost" id="data-export">Скачать копию</button>
+        <button class="ghost" id="data-import">Восстановить из копии…</button>
+      </div>
+      <input type="file" id="data-file" accept=".db,application/octet-stream" hidden>
+      <p class="note" id="data-msg" style="display:none"></p>
     </div>`;
   // Лимиты SRS — серверные настройки: меняем по месту, сохраняем сразу
   const srsHint = (msg, ok) => {
@@ -1613,6 +1625,35 @@ async function renderStats() {
   $("#srs-new").addEventListener("change", e => saveSrs({ new_per_day: +e.target.value }));
   $("#srs-rev").addEventListener("change", e => saveSrs({ reviews_per_day: +e.target.value }));
   $("#srs-ret").addEventListener("change", e => saveSrs({ desired_retention: +e.target.value }));
+
+  // Резервная копия: скачать снимок / восстановить из файла (перезапись прогресса!)
+  $("#data-export").addEventListener("click", () => { location.href = "/api/export"; });
+  const dataFile = $("#data-file");
+  $("#data-import").addEventListener("click", () => dataFile.click());
+  dataFile.addEventListener("change", async () => {
+    const file = dataFile.files[0];
+    dataFile.value = "";                       // позволить повторный выбор того же файла
+    if (!file) return;
+    const ok = await confirmDialog(
+      "Восстановление заменит весь текущий прогресс данными из копии. " +
+      "Перед заменой рядом сохраняется страховочный michi.db.bak. Продолжить?",
+      "Восстановить");
+    if (!ok) return;
+    const msg = $("#data-msg");
+    msg.classList.remove("err");
+    msg.style.display = "block";
+    msg.textContent = "Восстановление…";
+    try {
+      const res = await fetch("/api/import", { method: "POST", body: file });
+      if (!res.ok) throw await apiError(res);
+      const r = await res.json();
+      msg.textContent = `Готово: ${r.cards} карточек, ${r.reviews} ответов. Перезагрузка…`;
+      setTimeout(() => location.reload(), 1000);
+    } catch (e) {
+      msg.classList.add("err");
+      msg.textContent = "Не удалось восстановить: " + e.message;
+    }
+  });
 
   // Поздравляем с новыми достижениями (диф против ранее показанных)
   const seen = new Set(JSON.parse(localStorage.getItem("michi_ach_seen") || "[]"));

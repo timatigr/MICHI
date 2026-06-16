@@ -504,7 +504,9 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
   padding: 10px 11px; border: 1px solid var(--line); border-radius: 12px;
   font-size: 14px; background: var(--card); color: var(--title);
 }
-#srs-saved.err { color: var(--error); }
+.note.err { color: var(--error); }
+.data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.data-actions button { flex: 1; min-width: 150px; }
 
 /* ---- Знакомство с грамматикой (2.4) ---- */
 .grammar-structure {

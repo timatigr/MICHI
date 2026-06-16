@@ -256,7 +256,7 @@ async def main():
             await settle(900)
             await cdp.js("document.querySelector('nav.tabs button[data-view=stats]').click()")
             await settle(1500)
-            await cdp.js("const e=document.querySelector('#srs-new'); "
+            await cdp.js("const e=document.querySelector('#data-export'); "
                          "e&&e.scrollIntoView({block:'center'});")
             await settle(500)
             await cdp.shot("m_stats")
@@ -266,6 +266,11 @@ async def main():
             print(f"stats SRS-limits selects: {'present' if srs_ok else 'MISSING'}")
             if not srs_ok:
                 problems.append("на вкладке статистики нет селекторов лимитов SRS")
+            backup_ok = await cdp.js(
+                "!!(document.querySelector('#data-export')&&document.querySelector('#data-import'))")
+            print(f"stats backup buttons: {'present' if backup_ok else 'MISSING'}")
+            if not backup_ok:
+                problems.append("на вкладке статистики нет кнопок резервной копии")
             errs_stats = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
             if errs_stats:
                 problems.append(f"JS errors (stats): {errs_stats}")

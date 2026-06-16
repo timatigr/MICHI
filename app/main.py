@@ -4,14 +4,18 @@
 Упрощённый аналог контракта из SRS.md раздела 13.2 (без auth — один
 пользователь, локальный запуск).
 """
+import os
+import sqlite3
+import tempfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from . import db, gamification, srs_engine, tts
 from .content.registry import (
@@ -453,6 +457,41 @@ def achievements():
         return data
     finally:
         conn.close()
+
+
+# ---------- Резервная копия данных ----------
+
+@app.get("/api/export")
+def export_db():
+    """Скачать консистентный снимок всего прогресса одним SQLite-файлом."""
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db.backup_to(tmp)
+    name = f"michi-backup-{datetime.now().date().isoformat()}.db"
+    return FileResponse(tmp, media_type="application/octet-stream", filename=name,
+                        background=BackgroundTask(os.remove, tmp))
+
+
+@app.post("/api/import")
+async def import_db(request: Request):
+    """Восстановить прогресс из ранее скачанной копии (перезаписывает текущий).
+    Файл шлётся сырым телом запроса — поэтому python-multipart не нужен."""
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "Пустой файл")
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        if not db.is_michi_db(tmp):
+            raise HTTPException(400, "Это не резервная копия MICHI")
+        try:
+            cards, reviews = db.restore_from(tmp)
+        except sqlite3.OperationalError:
+            raise HTTPException(409, "База занята — закройте другие вкладки и повторите")
+    finally:
+        os.remove(tmp)
+    return {"ok": True, "cards": cards, "reviews": reviews}
 
 
 # Статика — в самом конце, чтобы не перехватывать /api/*

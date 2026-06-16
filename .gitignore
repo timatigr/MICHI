@@ -11,6 +11,7 @@ __pycache__/
 michi.db
 michi.db-wal
 michi.db-shm
+michi.db.bak
 tts_cache/
 
 # IDE / OS
