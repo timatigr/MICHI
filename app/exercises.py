@@ -10,9 +10,15 @@ import json
 import random
 from pathlib import Path
 
+from .content.grammar import PARTICLE_POOL
+from .content.verbs import (
+    FORM_LABEL as VERB_FORM_LABEL, VERBS, conjugate as conjugate_verb,
+    distractors as verb_distractors,
+)
 from .content.registry import (
-    KANA, KANA_BY_CHAR, KANJI, KANJI_BY_CHAR, LESSON_BY_ID, VOCAB, VOCAB_BY_ID,
-    WORDS, kana_known_by, tokenize_kana, traps_for_lesson,
+    GRAMMAR_BY_ID, KANA, KANA_BY_CHAR, KANJI, KANJI_BY_CHAR, LESSON_BY_ID, LESSONS,
+    VOCAB, VOCAB_BY_ID, WORDS, gate_items, kana_known_by, tokenize_kana,
+    traps_for_lesson,
 )
 
 # Не годятся в дистракторы сборки слова: служебные знаки
@@ -226,6 +232,43 @@ def vocab_build(word):
             "speak_after": True}
 
 
+def vocab_match(words):
+    """Тип 11: сопоставить слова и переводы (до 5 пар на доске). Быстрое
+    связывание формы и смысла; используется в уроках как консолидация."""
+    pairs = [{"id": w["id"], "jp": w["kana"], "ru": w["ru"], "tts": w["kana"]}
+             for w in words]
+    return {"type": "vocab_match",
+            "item_id": "match:" + "+".join(w["id"] for w in words),
+            "question": "Сопоставьте слова и переводы", "pairs": pairs}
+
+
+def _input_accept(word):
+    """Что принимаем при свободном вводе: кана и ромадзи (без японской IME).
+    Нормализация совпадает с клиентской (нижний регистр, без пробелов)."""
+    return sorted({word["kana"], word["romaji"].lower().replace(" ", "")})
+
+
+def vocab_input(word):
+    """Тип 10: перевод -> свободный ввод слова (каной или ромадзи).
+    Активное воспроизведение; озвучка после ответа (speak_after выдала бы его)."""
+    return {"type": "vocab_input", "item_id": word["id"],
+            "prompt": {"text": word["ru"], "tts": word["kana"]},
+            "question": "Введите слово по-японски",
+            "answer": word["kana"], "accept": _input_accept(word),
+            "answer_tts": word["kana"], "speak_after": True}
+
+
+def dictation(word):
+    """Тип 37: аудио -> запись услышанного (каной или ромадзи). Первое
+    упражнение на аудирование (5.5). Без сети — деградирует к показу перевода."""
+    return {"type": "dictation", "item_id": word["id"],
+            "prompt": {"text": "", "tts": word["kana"], "style": "audio",
+                       "fallback_text": word["ru"]},
+            "question": "Запишите, что услышали",
+            "answer": word["kana"], "accept": _input_accept(word),
+            "answer_tts": word["kana"]}
+
+
 # ---------- Кандзи (раздел 5.3, три навыка-карточки) ----------
 
 def _kanji_meaning_distractors(char, n=3):
@@ -271,6 +314,52 @@ def kanji_reading(k):
             "answer_tts": word["r"]}
 
 
+def _is_kanji(c):
+    return c in KANJI_BY_CHAR
+
+
+def _kanji_count(w):
+    return sum(1 for c in w if _is_kanji(c))
+
+
+# Слова-примеры из кандзи-курса с ≥2 кандзи — пул для дистракторов «запиши кандзи»
+_KANJI_WORDS = []
+_seen_kw = set()
+for _k in KANJI:
+    for _ex in _k.get("examples", []):
+        if _kanji_count(_ex["w"]) >= 2 and _ex["w"] not in _seen_kw:
+            _seen_kw.add(_ex["w"])
+            _KANJI_WORDS.append(_ex)
+
+
+def _kanji_introduced_through(lesson_id):
+    """Все кандзи, введённые в курсе к концу данного урока (для i+1-связи)."""
+    known = set()
+    for l in LESSONS:
+        if l.get("type") == "kanji":
+            known.update(l.get("kanji", []))
+        if l["id"] == lesson_id:
+            break
+    return known
+
+
+def word_kanji(example):
+    """Связь кандзи↔слово N5 (USP «единый граф знаний», 6.5): по чтению и
+    значению выбрать запись слова кандзи. Дистракторы — другие слова курса."""
+    answer = example["w"]
+    pool = [e["w"] for e in _KANJI_WORDS if e["w"] != answer]
+    same_len = [w for w in pool if len(w) == len(answer)]
+    random.shuffle(same_len)
+    random.shuffle(pool)
+    distractors = (same_len + [w for w in pool if w not in same_len])[:3]
+    options, idx = _with_options(answer, distractors)
+    return {"type": "word_kanji", "item_id": answer,
+            "prompt": {"text": example["r"], "tts": None, "style": "jp-sentence"},
+            "question": f"«{example['ru']}» — запишите кандзи",
+            "options": options, "answer": idx,
+            "options_are_kana": True, "answer_tts": example["r"]}
+
+
 def kanji_writing(char, mode="memory"):
     """Тип 21: написание кандзи. Тот же пайплайн проверки черт, что у каны (6.7)."""
     strokes = STROKES.get(char)
@@ -284,6 +373,105 @@ def kanji_writing(char, mode="memory"):
             "char": char, "strokes": strokes}
 
 
+# ---------- Грамматика (раздел 5.4) ----------
+
+def _sentence_reading(example):
+    """Озвучка предложения: явное чтение или склейка токенов (всё каной)."""
+    return example.get("reading") or "".join(example["tokens"])
+
+
+def _cloze_prompt(tokens, key):
+    """Предложение с пропуском на месте проверяемого элемента."""
+    return "".join("＿＿" if i == key else t for i, t in enumerate(tokens))
+
+
+def particle_choice(point, example):
+    """Тип 27: предложение с пропуском частицы -> выбор из 4."""
+    tokens, key = example["tokens"], example["key"]
+    correct = tokens[key]
+    distractors = [p for p in PARTICLE_POOL if p != correct]
+    random.shuffle(distractors)
+    options, answer = _with_options(correct, distractors[:3])
+    return {"type": "particle_choice", "item_id": point["id"],
+            "prompt": {"text": _cloze_prompt(tokens, key), "tts": None, "style": "jp-sentence"},
+            "question": "Какая частица подходит?",
+            "options": options, "answer": answer, "options_are_kana": True,
+            "answer_tts": _sentence_reading(example)}
+
+
+def grammar_choice(point, example):
+    """Тип 30: выбор верной формы/конструкции в пропуске."""
+    tokens, key = example["tokens"], example["key"]
+    correct = tokens[key]
+    distractors = [d for d in example.get("distractors", []) if d != correct]
+    options, answer = _with_options(correct, distractors[:3])
+    return {"type": "grammar_choice", "item_id": point["id"],
+            "prompt": {"text": _cloze_prompt(tokens, key), "tts": None, "style": "jp-sentence"},
+            "question": "Выберите верную форму",
+            "options": options, "answer": answer, "options_are_kana": True,
+            "answer_tts": _sentence_reading(example)}
+
+
+def sentence_scramble(point, example):
+    """Тип 28: собрать предложение из перемешанных слов.
+
+    Принимается один каноничный порядок (для базовых N5-фраз он однозначен)."""
+    tokens = example["tokens"]
+    tiles = list(tokens)
+    for _ in range(8):  # перемешать так, чтобы не совпасть с верным порядком
+        random.shuffle(tiles)
+        if tiles != tokens or len(tokens) < 2:
+            break
+    return {"type": "sentence_scramble", "item_id": point["id"],
+            "prompt": {"text": example["ru"], "tts": _sentence_reading(example)},
+            "question": "Соберите предложение",
+            "tiles": tiles, "answer_tokens": tokens, "speak_after": True}
+
+
+def _grammar_cloze(point, example):
+    """Cloze по типу точки: частица -> particle_choice, иначе grammar_choice."""
+    if point["skill"] == "particle":
+        return particle_choice(point, example)
+    return grammar_choice(point, example)
+
+
+def grammar_cloze(points, max_rows=4):
+    """Тип 34: несколько предложений с пропусками частиц и общий банк ответов.
+    Частичный зачёт — каждый пропуск проверяется отдельно (на клиенте). Берём
+    только точки-частицы, чтобы банк был однородным."""
+    parts = [p for p in points if p["skill"] == "particle"]
+    random.shuffle(parts)
+    rows, answers = [], set()
+    for p in parts[:max_rows]:
+        e = random.choice(p["examples"])
+        ans = e["tokens"][e["key"]]
+        rows.append({"id": p["id"], "tokens": e["tokens"], "key": e["key"],
+                     "answer": ans, "ru": e["ru"], "tts": _sentence_reading(e)})
+        answers.add(ans)
+    extras = [x for x in PARTICLE_POOL if x not in answers]
+    random.shuffle(extras)
+    bank = sorted(answers | set(extras[:2]))
+    return {"type": "grammar_cloze",
+            "item_id": "gcloze:" + "+".join(r["id"] for r in rows),
+            "question": "Заполните пропуски частицами", "rows": rows, "bank": bank}
+
+
+# Грамматические точки вежливых форм -> какую форму глагола дриллить (тип 29)
+VERB_FORM_OF = {"masu": "masu", "mashita": "mashita", "masen": "masen"}
+
+
+def verb_conjugation(verb, form):
+    """Тип 29: поставить глагол из словарной формы в целевую (ます/ました/
+    ません/て). Выбор из 4 — дистракторы это типичные ошибки спряжения."""
+    answer = conjugate_verb(verb, form)
+    options, idx = _with_options(answer, verb_distractors(verb, form, answer))
+    return {"type": "verb_conjugation", "item_id": verb["dict"],
+            "prompt": {"text": verb["dict"], "tts": None, "style": "jp"},
+            "question": f"«{verb['ru']}» → {VERB_FORM_LABEL[form]}",
+            "options": options, "answer": idx,
+            "options_are_kana": True, "answer_tts": answer}
+
+
 def item_info(item_type, item_id):
     """Карточка-справка для фидбека в SRS-сессии и статистики."""
     if item_type == "kana":
@@ -295,6 +483,11 @@ def item_info(item_type, item_id):
         if k:
             return {"title": k["char"], "sub": k["meaning"],
                     "hint": f"{k['char']} — {k['meaning']} ({k['reading']}). {k.get('mnemonic', '')}".strip()}
+    elif item_type == "grammar":
+        p = GRAMMAR_BY_ID.get(item_id)
+        if p:
+            return {"title": p["title"], "sub": p["meaning"],
+                    "hint": f"{p['structure']} — {p['meaning']}. {p.get('caution', '')}".strip()}
     else:
         w = VOCAB_BY_ID.get(item_id)
         if w:
@@ -328,13 +521,25 @@ def review_exercise(item_type, item_id, reps=0):
             return kanji_writing(item_id, mode="memory")
         return None
 
+    if item_type == "grammar":
+        p = GRAMMAR_BY_ID.get(item_id)
+        if p is None:
+            return None
+        # Точки вежливых форм глагола подкрепляем дриллом спряжения (тип 29)
+        if item_id in VERB_FORM_OF and reps % 3 == 1:
+            return verb_conjugation(random.choice(VERBS), VERB_FORM_OF[item_id])
+        example = random.choice(p["examples"])
+        # ротация: cloze (узнавание) <-> сборка предложения (продукция), 5.4
+        return (_grammar_cloze(p, example) if reps % 2 == 0
+                else sentence_scramble(p, example))
+
     word = VOCAB_BY_ID.get(item_id)
     if word is None:
         return None
-    if item_type == "vocab_jp_ru":      # распознавание
-        types = [vocab_choice, vocab_audio]
-    elif item_type == "vocab_ru_jp":    # воспроизведение
-        types = [vocab_reverse_choice, vocab_build]
+    if item_type == "vocab_jp_ru":      # распознавание (+ диктант на слух)
+        types = [vocab_choice, vocab_audio, dictation]
+    elif item_type == "vocab_ru_jp":    # воспроизведение (+ свободный ввод)
+        types = [vocab_reverse_choice, vocab_build, vocab_input]
     else:
         return None
     return types[reps % len(types)](word)
@@ -380,15 +585,22 @@ def _vocab_lesson_steps(lesson):
         random.shuffle(quiz)
         steps.extend({"type": "exercise", "exercise": e} for e in quiz)
 
+    # Быстрое связывание: доска сопоставления (до 5 пар)
+    if len(words) >= 3:
+        steps.append({"type": "exercise",
+                      "exercise": vocab_match(random.sample(words, min(5, len(words))))})
+
     # Смешанная проверка: на слух и в обратную сторону
     mixed = [vocab_audio(w) if i % 2 else vocab_reverse_choice(w)
              for i, w in enumerate(words)]
     random.shuffle(mixed)
     steps.extend({"type": "exercise", "exercise": e} for e in mixed)
 
-    # Воспроизведение: собрать слово по переводу
-    for w in random.sample(words, min(4, len(words))):
-        steps.append({"type": "exercise", "exercise": vocab_build(w)})
+    # Воспроизведение: часть слов собрать из плиток, часть — ввести свободно
+    produce = random.sample(words, min(4, len(words)))
+    for i, w in enumerate(produce):
+        steps.append({"type": "exercise",
+                      "exercise": vocab_input(w) if i % 2 else vocab_build(w)})
 
     return steps
 
@@ -435,6 +647,85 @@ def _kanji_lesson_steps(lesson):
         if k["char"] in STROKES:
             steps.append({"type": "exercise",
                           "exercise": kanji_writing(k["char"], mode="memory")})
+
+    # Связь со словами N5 (6.5): записать слово этого юнита кандзи — но только
+    # из уже введённых знаков (i+1), и слово должно быть ≥2 кандзи
+    known = _kanji_introduced_through(lesson["id"])
+    spellable, seen = [], set()
+    for k in kanji:
+        for ex in k.get("examples", []):
+            w = ex["w"]
+            if (w not in seen and _kanji_count(w) >= 2
+                    and all(not _is_kanji(c) or c in known for c in w)):
+                seen.add(w)
+                spellable.append(ex)
+    for ex in spellable[:4]:
+        steps.append({"type": "exercise", "exercise": word_kanji(ex)})
+    return steps
+
+
+def _intro_grammar_step(p):
+    return {"type": "intro_grammar", "title": p["title"],
+            "structure": p["structure"], "meaning": p["meaning"],
+            "register": p.get("register"), "explanation": p.get("explanation", []),
+            "caution": p.get("caution"),
+            "examples": [{"jp": "".join(e["tokens"]), "ru": e["ru"],
+                          "tts": _sentence_reading(e)} for e in p["examples"]]}
+
+
+def _grammar_lesson_steps(lesson):
+    """Урок грамматики (2.4): объяснение точки -> узнавание (cloze) ->
+    продукция (сборка предложения). Каждая точка закрепляется сразу."""
+    steps = [{"type": "intro_text", "title": lesson["title"],
+              "subtitle": lesson.get("subtitle", ""), "text": lesson["intro"],
+              "icon": lesson.get("icon", "")}]
+    points = [GRAMMAR_BY_ID[pid] for pid in lesson["points"]]
+
+    for p in points:
+        steps.append(_intro_grammar_step(p))
+        steps.append({"type": "exercise",
+                      "exercise": _grammar_cloze(p, p["examples"][0])})
+
+    # Смешанная проверка узнавания по остальным примерам
+    mixed = []
+    for p in points:
+        for e in (p["examples"][1:] or p["examples"]):
+            mixed.append(_grammar_cloze(p, e))
+    random.shuffle(mixed)
+    steps.extend({"type": "exercise", "exercise": e} for e in mixed)
+
+    # Мульти-пропуск частиц (тип 34), если в уроке набирается ≥3 точки-частицы
+    if sum(1 for p in points if p["skill"] == "particle") >= 3:
+        steps.append({"type": "exercise", "exercise": grammar_cloze(points)})
+
+    # Дрилл спряжения для точек вежливых форм (тип 29): словарная -> целевая
+    for p in points:
+        if p["id"] in VERB_FORM_OF:
+            for v in random.sample(VERBS, 3):
+                steps.append({"type": "exercise",
+                              "exercise": verb_conjugation(v, VERB_FORM_OF[p["id"]])})
+
+    # Продукция: собрать предложение с конструкцией
+    for p in points:
+        steps.append({"type": "exercise",
+                      "exercise": sentence_scramble(p, random.choice(p["examples"]))})
+    return steps
+
+
+def _gate_lesson_steps(lesson, n=12):
+    """Тест-ворота юнита (раздел 3): только упражнения, без знакомств и
+    подсказок — смешанная выборка по всем элементам юнита."""
+    items = gate_items(lesson)
+    random.shuffle(items)
+    steps = [{"type": "intro_text", "title": lesson["title"],
+              "subtitle": lesson.get("subtitle", ""),
+              "text": "Тест-ворота юнита. Чтобы открыть следующий юнит, ответьте "
+                      "верно минимум на 80%. Знакомств и подсказок здесь нет.",
+              "icon": lesson.get("icon", "⛩")}]
+    for item_type, item_id in items[:n]:
+        ex = review_exercise(item_type, item_id, reps=random.randint(0, 3))
+        if ex:
+            steps.append({"type": "exercise", "exercise": ex})
     return steps
 
 
@@ -446,6 +737,10 @@ def make_lesson_steps(lesson_id):
         return _vocab_lesson_steps(lesson)
     if lesson.get("type") == "kanji":
         return _kanji_lesson_steps(lesson)
+    if lesson.get("type") == "grammar":
+        return _grammar_lesson_steps(lesson)
+    if lesson.get("type") == "gate_test":
+        return _gate_lesson_steps(lesson)
     kana_all = lesson["kana"]
     steps = [{"type": "intro_text", "title": lesson["title"],
               "subtitle": lesson.get("subtitle", ""), "text": lesson["intro"],

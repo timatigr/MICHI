@@ -139,6 +139,110 @@ function ttsButton(text) {
   return `<button class="tts-btn" data-tts="${text}">🔊 послушать</button>`;
 }
 
+/* ---------- Тактильный отклик интерфейса: звук нажатия + вибрация ----------
+   Короткие сэмплы из набора Kenney «Interface Sounds» (CC0) через Web Audio —
+   низкая задержка, мгновенный отклик. Звук нажатия выбирается в настройках,
+   вердикт ответа — confirmation/error. Тумблер общий, по умолчанию включён;
+   громкость не зависит от озвучки слов, вибрация уважает reduced-motion.
+   Атрибуция — static/sounds/ui/CREDITS.txt. */
+const Haptics = {
+  prefs: {
+    enabled: true,
+    tapSound: "drop_003",
+    ...JSON.parse(localStorage.getItem("michi_haptics") || "{}"),
+  },
+  // имя файла -> подпись для селектора (порядок = порядок в списке)
+  TAPS: {
+    drop_003: "Капля",
+    tick_002: "Тик",
+    select_002: "Мягкий",
+    click_002: "Клик",
+    pluck_002: "Струна",
+    glass_002: "Стекло",
+    switch_002: "Щелчок",
+  },
+  ctx: null,
+  raw: {},        // name -> Promise<ArrayBuffer|null> (скачанный файл)
+  buffers: {},    // name -> AudioBuffer (декодированный)
+  // заранее качаем все нужные файлы (декодируем позже — для decode нужен жест)
+  prefetch() {
+    const need = [...Object.keys(this.TAPS), "confirmation_001", "error_002"];
+    for (const n of need) {
+      if (!this.raw[n]) this.raw[n] = fetch(`/sounds/ui/${n}.wav`)
+        .then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+    }
+  },
+  ensureCtx() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) this.ctx = new AC();
+    }
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+    return this.ctx;
+  },
+  async buffer(name) {
+    if (this.buffers[name]) return this.buffers[name];
+    const ctx = this.ensureCtx();
+    if (!ctx) return null;
+    if (!this.raw[name]) this.raw[name] = fetch(`/sounds/ui/${name}.wav`)
+      .then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+    const ab = await this.raw[name];
+    if (!ab) return null;
+    try {
+      this.buffers[name] = await ctx.decodeAudioData(ab.slice(0));
+      return this.buffers[name];
+    } catch { return null; }
+  },
+  play(name, gain = 0.5) {
+    this.buffer(name).then(buf => {
+      const ctx = this.ctx;
+      if (!buf || !ctx) return;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = gain;
+      src.connect(g).connect(ctx.destination);
+      src.start();
+    });
+  },
+  vibrate(pattern) {
+    if (navigator.vibrate &&
+        !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      try { navigator.vibrate(pattern); } catch { /* не поддерживается */ }
+    }
+  },
+  tap() {
+    if (!this.prefs.enabled) return;
+    if (this.prefs.tapSound && this.prefs.tapSound !== "off")
+      this.play(this.prefs.tapSound, 0.4);
+    this.vibrate(8);
+  },
+  good() {                       // мягкий «подтверждающий» звук на верный ответ
+    if (!this.prefs.enabled) return;
+    this.play("confirmation_001", 0.45);
+    this.vibrate(12);
+  },
+  bad() {                        // короткий звук ошибки
+    if (!this.prefs.enabled) return;
+    this.play("error_002", 0.4);
+    this.vibrate([10, 50, 10]);
+  },
+  save() {
+    localStorage.setItem("michi_haptics", JSON.stringify(this.prefs));
+  },
+};
+Haptics.prefetch();
+
+/* «Пик» в момент нажатия (pointerdown — мгновенно, не на отпускании) для всех
+   кликабельных элементов; disabled-кнопки и заблокированные уроки молчат. */
+document.addEventListener("pointerdown", e => {
+  const el = e.target.closest(
+    "button, .lesson-card:not(.locked), .course-tab, .kanji-ex, " +
+    ".kanji-parts .part:not(.whole), .lookalikes span, .hardest-list .chip, " +
+    ".build-slots span");
+  if (el && !el.disabled) Haptics.tap();
+}, { passive: true });
+
 /* ---------- Настройки озвучки ---------- */
 const settingsModal = $("#settings");
 
@@ -180,7 +284,18 @@ function openSettings() {
   $("#val-volume").textContent = `${Math.round(TTS.prefs.volume * 100)}%`;
   $("#val-rate").textContent = `${Math.round(TTS.prefs.rate * 100)}%`;
   $("#set-romaji").value = Romaji.pref;
+  $("#set-goal").value = localStorage.getItem("michi_daily_goal") || "20";
+  $("#set-haptics").checked = Haptics.prefs.enabled;
+  fillTapSounds();
+  $("#set-tap-sound").disabled = !Haptics.prefs.enabled;
   settingsModal.classList.add("open");
+}
+
+function fillTapSounds() {
+  $("#set-tap-sound").innerHTML =
+    Object.entries(Haptics.TAPS).map(([k, v]) =>
+      `<option value="${k}" ${k === Haptics.prefs.tapSound ? "selected" : ""}>${v}</option>`).join("") +
+    `<option value="off" ${Haptics.prefs.tapSound === "off" ? "selected" : ""}>Без звука</option>`;
 }
 $("#btn-settings").addEventListener("click", openSettings);
 $("#set-close").addEventListener("click", () => settingsModal.classList.remove("open"));
@@ -210,6 +325,22 @@ $("#set-rate").addEventListener("input", e => {
 });
 $("#set-test").addEventListener("click", () => speak("こんにちは。ミチへようこそ。"));
 $("#set-romaji").addEventListener("change", e => Romaji.set(e.target.value));
+$("#set-goal").addEventListener("change", e => {
+  localStorage.setItem("michi_daily_goal", e.target.value);
+  if (document.querySelector("nav.tabs button.active")?.dataset.view === "today")
+    renderToday();
+});
+$("#set-haptics").addEventListener("change", e => {
+  Haptics.prefs.enabled = e.target.checked;
+  Haptics.save();
+  $("#set-tap-sound").disabled = !e.target.checked;
+  if (e.target.checked) Haptics.tap();   // сразу дать услышать/почувствовать
+});
+$("#set-tap-sound").addEventListener("change", e => {
+  Haptics.prefs.tapSound = e.target.value;
+  Haptics.save();
+  if (e.target.value !== "off") Haptics.play(e.target.value, 0.4);  // прослушать
+});
 
 /* ---------- Тема оформления ---------- */
 const Theme = {
@@ -420,6 +551,11 @@ async function renderToday() {
   const queueTotal = o.srs.due + o.srs.new_available;
   const [jp, ru] = greeting();
   const estMin = Math.max(1, Math.round(queueTotal * 0.15));
+  // Геймификация: уровень аккаунта + дневная цель (цель — клиентская настройка)
+  const goal = +(localStorage.getItem("michi_daily_goal") || 20);
+  const todayXp = o.xp.today;
+  const goalPct = Math.min(100, Math.round(todayXp / goal * 100));
+  const goalMet = todayXp >= goal;
   // Одноразовое пояснение в момент авто-скрытия ромадзи после хираганы
   const romajiNote = (Romaji.pref === "auto" && Romaji.hiraganaDone &&
     !localStorage.getItem("michi_romaji_note"))
@@ -439,6 +575,23 @@ async function renderToday() {
       <div class="hero-stats">
         <div class="hs"><b>${o.today.reviews}</b><span>повторено сегодня</span></div>
         <div class="hs"><b>${o.today.accuracy !== null ? o.today.accuracy + "%" : "—"}</b><span>точность сегодня</span></div>
+      </div>
+    </div>
+
+    <div class="card gami">
+      <div class="level-badge">
+        <div class="lvl-num">${o.xp.level}</div>
+        <div class="lvl-meta">
+          <div class="lvl-title">Уровень ${o.xp.level}</div>
+          <div class="lvl-bar"><div style="width:${o.xp.percent}%"></div></div>
+          <div class="lvl-xp">${o.xp.into_level} / ${o.xp.level_span} XP · всего ${o.xp.total}</div>
+        </div>
+      </div>
+      <div class="goal-ring ${goalMet ? "met" : ""}" style="--p:${goalPct}">
+        <div class="goal-inner">
+          <b>${goalMet ? "✓" : todayXp}</b>
+          <span>${goalMet ? "цель!" : "/ " + goal + " XP"}</span>
+        </div>
       </div>
     </div>
 
@@ -479,13 +632,19 @@ async function renderToday() {
       <p class="note">Катакану можно учить параллельно с хираганой, слова N5 откроются после хираганы.</p>
     </div>
     ${romajiNote}`;
+  // Цель дня достигнута впервые сегодня — поздравляем (раз в день)
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (goalMet && localStorage.getItem("michi_goal_day") !== todayKey) {
+    localStorage.setItem("michi_goal_day", todayKey);
+    confetti();
+  }
   $("#btn-review")?.addEventListener("click", startReview);
   $("#btn-lesson")?.addEventListener("click", () => startLesson(next.id));
 }
 
 /* ---------- Путь: регионы и сетка уроков ---------- */
-const COURSE_OF = { l: "hiragana", k: "katakana", v: "n5", j: "kanji" };
-const COURSE_LABEL = { all: "Все", hiragana: "Хирагана", katakana: "Катакана", n5: "Слова N5", kanji: "Кандзи" };
+const COURSE_OF = { l: "hiragana", k: "katakana", v: "n5", j: "kanji", g: "grammar" };
+const COURSE_LABEL = { all: "Все", hiragana: "Хирагана", katakana: "Катакана", n5: "Первые слова", kanji: "Кандзи", grammar: "Грамматика" };
 let lessonFilter = localStorage.getItem("michi_lesson_filter") || "all";
 
 async function renderLessons() {
@@ -533,7 +692,7 @@ async function renderLessons() {
       </div>
       <div class="lesson-grid">
         ${g.lessons.map(l => `
-          <div class="lesson-card ${l.status}" data-id="${l.id}" data-status="${l.status}">
+          <div class="lesson-card ${l.status} ${l.type === "gate_test" ? "gate" : ""}" data-id="${l.id}" data-status="${l.status}">
             <div class="circle jp c${lessons.indexOf(l) % 6}">${l.icon}</div>
             ${l.status === "completed"
               ? `<span class="state done">✓ ${l.score != null ? Math.round(l.score * 100) + "%" : ""}</span>`
@@ -733,6 +892,28 @@ async function showIntroKanji(step) {
   await waitClick($("#next", playerBody));
 }
 
+async function showIntroGrammar(step) {
+  const reg = { neutral: "нейтр.", polite: "вежл.", casual: "разг.", formal: "формальн." };
+  const explanation = (step.explanation || []).map(b =>
+    `<p class="g-block">${b}</p>`).join("");
+  const examples = (step.examples || []).map(e =>
+    `<button class="kanji-ex" data-tts="${e.tts}">
+       <span class="ex-w jp">${e.jp}</span>
+       <span class="ex-ru">${e.ru}</span></button>`).join("");
+  playerBody.innerHTML = `
+    <div class="big-kana jp" data-tts="${step.tts || step.title}">${step.title}</div>
+    <div class="grammar-structure jp">${step.structure}</div>
+    <div class="kanji-meaning">${step.meaning}${step.register
+      ? ` <span class="g-register">${reg[step.register] || step.register}</span>` : ""}</div>
+    ${explanation}
+    ${step.caution ? `<div class="mnemonic">⚠ ${step.caution}</div>` : ""}
+    ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
+    <div class="spacer"></div>
+    <button class="primary" id="next">Понятно</button>`;
+  animateIn(playerBody);
+  await waitClick($("#next", playerBody));
+}
+
 /* ---------- Упражнения ----------
    Каждый рендерер возвращает {correct, durationMs, usedHint}.
    afterAnswer — async-колбэк: вызывается после ответа, возвращает
@@ -744,12 +925,160 @@ function verdict(ok, html) {
 }
 
 async function runExercise(ex, afterAnswer) {
-  if (ex.type === "kana_word_build" || ex.type === "vocab_build")
+  playerBody.classList.remove("center-step");   // упражнение — верхнее выравнивание
+  if (ex.type === "kana_word_build" || ex.type === "vocab_build"
+      || ex.type === "sentence_scramble")
     return runWordBuild(ex, afterAnswer);
   if (ex.type === "kana_twins") return runTwins(ex, afterAnswer);
   if (ex.type === "kana_tracing" || ex.type === "kanji_tracing")
     return runTracing(ex, afterAnswer);
+  if (ex.type === "vocab_input" || ex.type === "dictation")
+    return runInput(ex, afterAnswer);
+  if (ex.type === "vocab_match") return runMatch(ex, afterAnswer);
+  if (ex.type === "grammar_cloze") return runGrammarCloze(ex, afterAnswer);
   return runChoice(ex, afterAnswer);
+}
+
+// Мульти-пропуск с общим банком (тип 34 grammar_cloze).
+async function runGrammarCloze(ex, afterAnswer) {
+  const rowHtml = (r, i) => {
+    const sent = r.tokens.map((t, j) => j === r.key
+      ? `<button class="cloze-blank" data-row="${i}"></button>`
+      : `<span>${t}</span>`).join("");
+    return `<div class="cloze-row"><div class="cloze-jp">${sent}</div>` +
+           `<div class="cloze-ru">${r.ru}</div></div>`;
+  };
+  playerBody.innerHTML = `
+    <p class="question">${ex.question}</p>
+    <div class="cloze-list">${ex.rows.map(rowHtml).join("")}</div>
+    <div class="cloze-bank">${ex.bank.map(t =>
+      `<button class="bank-tile" data-t="${t}">${t}</button>`).join("")}</div>
+    <div class="feedback" id="fb"></div>
+    <div class="spacer"></div>
+    <button class="primary" id="check" disabled>Проверить</button>`;
+  animateIn(playerBody);
+
+  const blanks = [...playerBody.querySelectorAll(".cloze-blank")];
+  const fills = new Array(ex.rows.length).fill(null);
+  const checkBtn = $("#check", playerBody);
+  let selRow = 0;
+  const selectRow = i => { selRow = i; blanks.forEach((b, j) => b.classList.toggle("sel", j === i)); };
+  const refresh = () => { checkBtn.disabled = fills.includes(null); };
+  selectRow(0);
+  const t0 = performance.now();
+
+  playerBody.querySelector(".cloze-list").addEventListener("click", e => {
+    const b = e.target.closest(".cloze-blank");
+    if (!b) return;
+    const i = +b.dataset.row;
+    if (fills[i]) { fills[i] = null; b.textContent = ""; b.classList.remove("filled"); }
+    selectRow(i); refresh();
+  });
+  playerBody.querySelector(".cloze-bank").addEventListener("click", e => {
+    const t = e.target.closest(".bank-tile");
+    if (!t) return;
+    let i = (selRow != null && !fills[selRow]) ? selRow : fills.indexOf(null);
+    if (i < 0) return;
+    fills[i] = t.dataset.t;
+    blanks[i].textContent = t.dataset.t; blanks[i].classList.add("filled");
+    const next = fills.indexOf(null);
+    selectRow(next < 0 ? i : next);
+    refresh();
+  });
+
+  await waitClick(checkBtn);
+  const durationMs = Math.round(performance.now() - t0);
+  playerBody.querySelector(".cloze-bank").style.pointerEvents = "none";
+  blanks.forEach(b => (b.disabled = true));
+  let ok = 0;
+  ex.rows.forEach((r, i) => {
+    const good = fills[i] === r.answer;
+    if (good) ok++;
+    blanks[i].classList.remove("sel");
+    blanks[i].classList.add(good ? "right" : "bad-fill");
+    if (!good) blanks[i].textContent = r.answer;
+  });
+  const allRight = ok === ex.rows.length;
+  const fb = $("#fb", playerBody);
+  fb.className = `feedback ${allRight ? "ok" : "bad"}`;
+  Haptics[allRight ? "good" : "bad"]();
+  fb.innerHTML = verdict(allRight, allRight ? "Все пропуски верны!" : `Верно ${ok} из ${ex.rows.length}`);
+  if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(allRight, durationMs, false)}</div>`;
+
+  checkBtn.remove();
+  if (allRight) {
+    await new Promise(r => setTimeout(r, 1100));
+  } else {
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
+    await waitClick($("#next", playerBody));
+  }
+  return { correct: allRight, durationMs, usedHint: false };
+}
+
+// Сопоставление пар (тип 11): две колонки, тап слева + тап справа.
+async function runMatch(ex, afterAnswer) {
+  const shuffle = a => {
+    a = a.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  const tile = (p, label, cls) =>
+    `<button class="match-tile ${cls}" data-id="${p.id}">${label}</button>`;
+  playerBody.innerHTML = `
+    <p class="question">${ex.question}</p>
+    <div class="match-board">
+      <div class="match-col">${shuffle(ex.pairs).map(p => tile(p, p.jp, "jp")).join("")}</div>
+      <div class="match-col">${shuffle(ex.pairs).map(p => tile(p, p.ru, "")).join("")}</div>
+    </div>
+    <div class="feedback" id="fb"></div>
+    <div class="spacer"></div>`;
+  animateIn(playerBody);
+
+  const total = ex.pairs.length;
+  const ttsOf = id => (ex.pairs.find(p => p.id === id) || {}).tts;
+  let matched = 0, mistakes = 0, sel = null, busy = false;
+  const t0 = performance.now();
+
+  await new Promise(resolve => {
+    playerBody.querySelector(".match-board").addEventListener("click", e => {
+      const b = e.target.closest(".match-tile");
+      if (!b || busy || b.classList.contains("matched")) return;
+      const col = b.parentElement;
+      if (b === sel) { b.classList.remove("sel"); sel = null; return; }
+      if (!sel || sel.parentElement === col) {        // выбор/перевыбор в колонке
+        if (sel) sel.classList.remove("sel");
+        sel = b; b.classList.add("sel"); return;
+      }
+      const a = sel; sel = null; a.classList.remove("sel");   // пара из двух колонок
+      if (a.dataset.id === b.dataset.id) {
+        a.classList.add("matched"); b.classList.add("matched");
+        Haptics.good(); speak(ttsOf(b.dataset.id));
+        if (++matched === total) {
+          const fb = $("#fb", playerBody);
+          fb.className = "feedback ok";
+          fb.innerHTML = verdict(mistakes === 0,
+            mistakes === 0 ? "Все пары верны!" : "Доска собрана");
+          setTimeout(resolve, 750);
+        }
+      } else {
+        mistakes++; Haptics.bad(); busy = true;
+        a.classList.add("bad"); b.classList.add("bad");
+        setTimeout(() => {
+          a.classList.remove("bad"); b.classList.remove("bad"); busy = false;
+        }, 480);
+      }
+    });
+  });
+
+  const durationMs = Math.round(performance.now() - t0);
+  const correct = mistakes === 0;
+  if (afterAnswer)
+    $("#fb", playerBody).innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
+  await new Promise(r => setTimeout(r, 600));
+  return { correct, durationMs, usedHint: false };
 }
 
 async function runChoice(ex, afterAnswer) {
@@ -764,10 +1093,13 @@ async function runChoice(ex, afterAnswer) {
   }
   // Звук подсказал бы ответ: у распознавания знака — молчим до ответа
   const speakOnStart = ex.type !== "kana_recognition" && ex.prompt.tts;
+  // jp — крупный одиночный глиф; jp-sentence — целое предложение (мельче)
+  const jpish = style === "jp" || style === "jp-sentence";
+  const jpClass = style === "jp" ? "jp" : style === "jp-sentence" ? "jp jp-sentence" : "";
   const promptHtml = style === "audio"
     ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="Прослушать ещё раз">🔊</button>`
-    : `<div class="prompt-text ${style === "jp" ? "jp" : ""}" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${ex.prompt.text}</div>` +
-      (style !== "jp" && ex.prompt.tts ? ttsButton(ex.prompt.tts) : "");
+    : `<div class="prompt-text ${jpClass}" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${ex.prompt.text}</div>` +
+      (!jpish && ex.prompt.tts ? ttsButton(ex.prompt.tts) : "");
   playerBody.innerHTML = `
     <p class="question">${question}</p>
     ${promptHtml}
@@ -791,6 +1123,7 @@ async function runChoice(ex, afterAnswer) {
 
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
+  Haptics[correct ? "good" : "bad"]();
   fb.innerHTML = verdict(correct, correct ? "Верно" :
     `Правильно: <span class="jp">${ex.options[ex.answer]}</span>`);
   speak(ex.prompt.tts || ex.answer_tts);
@@ -862,6 +1195,7 @@ async function runWordBuild(ex, afterAnswer) {
 
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
+  Haptics[correct ? "good" : "bad"]();
   fb.innerHTML = verdict(correct, correct
     ? `<span class="jp">${word}</span>`
     : `Правильно: <span class="jp">${ex.answer_tokens.join("")}</span>`);
@@ -872,6 +1206,64 @@ async function runWordBuild(ex, afterAnswer) {
     await new Promise(r => setTimeout(r, 1100));
   } else {
     $("#check", playerBody).remove();
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
+    await waitClick($("#next", playerBody));
+  }
+  return { correct, durationMs, usedHint: false };
+}
+
+// Свободный ввод ответа (тип 10 vocab_input, тип 37 dictation).
+// Принимаем кану и ромадзи: нормализация должна совпадать с серверной (accept).
+const normInput = s => s.trim().toLowerCase().replace(/\s+/g, "");
+
+async function runInput(ex, afterAnswer) {
+  const isAudio = ex.prompt.style === "audio";
+  // Диктант без озвучки (офлайн) деградирует к показу перевода — иначе никак
+  const audioMode = isAudio && TTS.available;
+  const top = audioMode
+    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="Прослушать ещё раз">🔊</button>`
+    : `<div class="prompt-text">${isAudio ? ex.prompt.fallback_text : ex.prompt.text}</div>`;
+  const question = (isAudio && !audioMode) ? "Введите слово по-японски" : ex.question;
+  playerBody.innerHTML = `
+    <p class="question">${question}</p>
+    ${top}
+    <input class="text-answer" id="ans" type="text" inputmode="text"
+      autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+      placeholder="каной или ромадзи">
+    <div class="feedback" id="fb"></div>
+    <div class="spacer"></div>
+    <button class="primary" id="check" disabled>Проверить</button>`;
+  animateIn(playerBody);
+  if (audioMode) speak(ex.prompt.tts);
+
+  const input = $("#ans", playerBody);
+  const checkBtn = $("#check", playerBody);
+  input.focus();
+  input.addEventListener("input", () => { checkBtn.disabled = !input.value.trim(); });
+  const t0 = performance.now();
+  await new Promise(res => {
+    const submit = () => { if (input.value.trim()) res(); };
+    checkBtn.addEventListener("click", submit);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+  });
+
+  const durationMs = Math.round(performance.now() - t0);
+  const correct = ex.accept.includes(normInput(input.value));
+  input.disabled = true;
+  checkBtn.remove();
+
+  const fb = $("#fb", playerBody);
+  fb.className = `feedback ${correct ? "ok" : "bad"}`;
+  Haptics[correct ? "good" : "bad"]();
+  fb.innerHTML = verdict(correct, correct
+    ? `<span class="jp">${ex.answer}</span>`
+    : `Правильно: <span class="jp">${ex.answer}</span>`);
+  speak(ex.answer_tts);
+  if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
+
+  if (correct) {
+    await new Promise(r => setTimeout(r, 1100));
+  } else {
     playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
     await waitClick($("#next", playerBody));
   }
@@ -902,6 +1294,7 @@ async function runTracing(ex, afterAnswer) {
 
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
+  Haptics[correct ? "good" : "bad"]();
   fb.innerHTML = verdict(correct, correct
     ? (result.errors === 0 ? "Написано чисто" : "Зачтено, была помарка")
     : `Помарок: ${result.errors} — посмотрите анимацию черт ещё раз`);
@@ -938,6 +1331,7 @@ async function runTwins(ex, afterAnswer) {
   }
   const durationMs = Math.round(performance.now() - t0);
   const correct = errors === 0;
+  Haptics[correct ? "good" : "bad"]();
   if (afterAnswer) await afterAnswer(correct, durationMs, false);
   playerBody.insertAdjacentHTML("beforeend",
     `<div class="feedback ${correct ? "ok" : "bad"}">${correct ? "Серия без ошибок" : `Ошибок: ${errors} из ${ex.series.length}`}</div>`);
@@ -973,10 +1367,13 @@ async function startLesson(lessonId) {
     setProgress(i / steps.length);
     $("#player-counter").textContent = `${i + 1} / ${steps.length}`;
     const step = steps[i];
+    // Вступления центрируем, упражнения — верхнее выравнивание (без «прыжка»)
+    playerBody.classList.toggle("center-step", step.type !== "exercise");
     if (step.type === "intro_text") await showIntroText(step);
     else if (step.type === "intro_kana") await showIntroKana(step);
     else if (step.type === "intro_word") await showIntroWord(step);
     else if (step.type === "intro_kanji") await showIntroKanji(step);
+    else if (step.type === "intro_grammar") await showIntroGrammar(step);
     else if (step.type === "exercise") {
       const res = await runExercise(step.exercise);
       if (token !== sessionToken) return;
@@ -993,12 +1390,38 @@ async function startLesson(lessonId) {
 
   const score = total ? correct / total : 1;
   const done = await api.post(`/api/lessons/${lessonId}/complete`, { score });
+  playerBody.classList.add("center-step");   // итог — по центру
+
+  // Ворота юнита провалены: следующий юнит не открывается, предлагаем пересдать
+  if (done.is_gate && !done.passed) {
+    const need = Math.round((done.pass_mark || 0.8) * 100);
+    playerBody.innerHTML = `
+      <div class="result gate-fail">
+        <div class="mark">⛩</div>
+        <h2>Ворота не пройдены</h2>
+        <p>Ваш результат ${Math.round(score * 100)}% · нужно ${need}%<br>
+        Следующий юнит откроется после пересдачи.</p>
+        <button class="primary" id="retry">Пересдать</button>
+        <button class="ghost" id="finish">Выйти</button>
+      </div>`;
+    animateIn(playerBody);
+    const choice = await Promise.race([
+      waitClick($("#retry", playerBody)).then(() => "retry"),
+      waitClick($("#finish", playerBody)).then(() => "finish"),
+    ]);
+    closePlayer();
+    if (choice === "retry") startLesson(lessonId);
+    return;
+  }
+
+  const isGate = done.is_gate;
   playerBody.innerHTML = `
     <div class="result">
-      <div class="mark">完</div>
-      <h2>${lesson.title} — пройден</h2>
-      <p>Точность ${Math.round(score * 100)}% · ${correct} из ${total}<br>
-      ${done.cards_created ? `В SRS добавлено карточек: ${done.cards_created}` : "Карточки уже в SRS"}</p>
+      <div class="mark">${isGate ? "⛩" : "完"}</div>
+      <h2>${isGate ? "Ворота пройдены!" : lesson.title + " — пройден"}</h2>
+      <p>Точность ${Math.round(score * 100)}% · ${correct} из ${total}${
+        isGate ? "" : "<br>" + (done.cards_created
+          ? `В SRS добавлено карточек: ${done.cards_created}` : "Карточки уже в SRS")}</p>
       <button class="primary" id="finish">Дальше</button>
     </div>`;
   animateIn(playerBody);
@@ -1047,6 +1470,7 @@ async function startReview() {
   if (token !== sessionToken) return;
 
   setProgress(1);
+  playerBody.classList.add("center-step");   // итог — по центру
   playerBody.innerHTML = `
     <div class="result">
       <div class="mark">${done ? "完" : "休"}</div>
@@ -1099,7 +1523,8 @@ function barChart(data, valueKey, dateKey, cls = "", titleFn = null) {
 
 async function renderStats() {
   view.innerHTML = `<div class="empty">Загрузка…</div>`;
-  const s = await api.get("/api/stats");
+  const [s, ach] = await Promise.all([
+    api.get("/api/stats"), api.get("/api/achievements")]);
   const c = s.cards;
   const hasActivity = s.activity.some(d => d.reviews > 0);
   view.innerHTML = `
@@ -1112,6 +1537,17 @@ async function renderStats() {
       </div>
       <p class="note mt">«В долгой памяти» — карточки с интервалом от нескольких дней.
       Последняя цифра — доля верных ответов на повторениях за неделю (цель — ${Math.round(s.settings.desired_retention * 100)}%).</p>
+    </div>
+
+    <div class="card">
+      <h2>Достижения · ${ach.unlocked}/${ach.total}</h2>
+      <div class="ach-grid">
+        ${ach.items.map(a => `
+          <div class="ach ${a.unlocked ? "on " + a.tier : "off"}" title="${a.desc}">
+            <div class="ach-ico">${a.unlocked ? a.icon : "🔒"}</div>
+            <div class="ach-t">${a.title}</div>
+          </div>`).join("")}
+      </div>
     </div>
     <div class="card">
       <h2>Сколько я повторял · 14 дней</h2>
@@ -1141,6 +1577,15 @@ async function renderStats() {
       <p class="note">${s.settings.new_per_day} новых карточек и ${s.settings.reviews_per_day} повторений в день,
       целевое удержание ${Math.round(s.settings.desired_retention * 100)}%.</p>
     </div>`;
+  // Поздравляем с новыми достижениями (диф против ранее показанных)
+  const seen = new Set(JSON.parse(localStorage.getItem("michi_ach_seen") || "[]"));
+  const nowUnlocked = ach.items.filter(a => a.unlocked).map(a => a.id);
+  const fresh = nowUnlocked.filter(id => !seen.has(id));
+  localStorage.setItem("michi_ach_seen", JSON.stringify(nowUnlocked));
+  if (fresh.length && seen.size) {  // не салютуем при самом первом заходе
+    confetti();
+    Haptics.good();
+  }
 }
 
 /* ---------- Старт ---------- */

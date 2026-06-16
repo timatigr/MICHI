@@ -2,7 +2,7 @@
 """Реестр курсов: кана (хирагана + катакана) и лексика N5 в одном
 учебном порядке. Единая точка импорта для движка упражнений и API."""
 
-from . import hiragana, katakana, kanji, vocab_n5
+from . import grammar, hiragana, katakana, kanji, vocab_n5
 
 for _k in hiragana.KANA:
     _k.setdefault("script", "h")
@@ -18,8 +18,47 @@ for _l in vocab_n5.LESSONS:
     _l.setdefault("type", "vocab")
 for _l in kanji.LESSONS:
     _l.setdefault("type", "kanji")
+for _l in grammar.LESSONS:
+    _l.setdefault("type", "grammar")
 
-LESSONS = hiragana.LESSONS + katakana.LESSONS + vocab_n5.LESSONS + kanji.LESSONS
+# Тесты-«ворота» юнита (раздел 3): каждый тематический юнит закрывается
+# тестом с порогом 80%. Генерируем по границам поля `unit` и вставляем в
+# учебный порядок курса — обычная последовательная разблокировка тогда сама
+# не пускает в следующий юнит, пока ворота не пройдены (порог — в main.py).
+GATE_PASS = 0.8
+
+
+def _make_gate(prefix, course_id, unit, unit_lessons, unit_titles):
+    src = [l["id"] for l in unit_lessons]
+    title = unit_titles.get(unit, f"Юнит {unit}")
+    return {"id": f"{prefix}-g{unit}", "type": "gate_test",
+            "course": course_id, "unit": unit, "title": f"Ворота: {title}",
+            "subtitle": "тест юнита · нужно 80%", "icon": "⛩",
+            "src_lessons": src, "requires": [src[-1]]}
+
+
+def _with_gates(lessons, prefix, course_id, unit_titles):
+    """Вставляет gate_test после последнего урока каждого юнита."""
+    out, bucket, cur = [], [], None
+    for l in lessons:
+        u = l.get("unit")
+        if cur is not None and u != cur and bucket:
+            out.append(_make_gate(prefix, course_id, cur, bucket, unit_titles))
+            bucket = []
+        out.append(l)
+        bucket.append(l)
+        cur = u
+    if bucket:
+        out.append(_make_gate(prefix, course_id, cur, bucket, unit_titles))
+    return out
+
+
+_vocab_seq = _with_gates(vocab_n5.LESSONS, "v", "n5", vocab_n5.UNITS)
+_kanji_seq = _with_gates(kanji.LESSONS, "j", "kanji", kanji.UNITS)
+_grammar_seq = _with_gates(grammar.LESSONS, "g", "grammar", grammar.UNITS)
+
+LESSONS = (hiragana.LESSONS + katakana.LESSONS + _vocab_seq
+           + _kanji_seq + _grammar_seq)
 LESSON_BY_ID = {l["id"]: l for l in LESSONS}
 LESSON_ORDER = [l["id"] for l in LESSONS]
 
@@ -33,6 +72,10 @@ VOCAB_UNITS = vocab_n5.UNITS
 KANJI = kanji.KANJI
 KANJI_BY_CHAR = kanji.KANJI_BY_CHAR
 KANJI_UNITS = kanji.UNITS
+
+GRAMMAR = grammar.POINTS
+GRAMMAR_BY_ID = grammar.POINT_BY_ID
+GRAMMAR_UNITS = grammar.UNITS
 
 SMALL_YOON = {"ゃ", "ゅ", "ょ", "ャ", "ュ", "ョ"}
 
@@ -73,8 +116,9 @@ if kanji.LESSONS and hiragana.LESSONS:
 COURSES = [
     {"id": "hiragana", "title": "Хирагана", "lesson_ids": [l["id"] for l in hiragana.LESSONS]},
     {"id": "katakana", "title": "Катакана", "lesson_ids": [l["id"] for l in katakana.LESSONS]},
-    {"id": "n5", "title": "Слова N5", "lesson_ids": [l["id"] for l in vocab_n5.LESSONS]},
-    {"id": "kanji", "title": "Кандзи", "lesson_ids": [l["id"] for l in kanji.LESSONS]},
+    {"id": "n5", "title": "Первые слова", "lesson_ids": [l["id"] for l in _vocab_seq]},
+    {"id": "kanji", "title": "Кандзи", "lesson_ids": [l["id"] for l in _kanji_seq]},
+    {"id": "grammar", "title": "Грамматика N5", "lesson_ids": [l["id"] for l in _grammar_seq]},
 ]
 
 
@@ -88,7 +132,19 @@ def srs_items_for_lesson(lesson):
         return ([("kanji_meaning", c) for c in lesson["kanji"]] +
                 [("kanji_reading", c) for c in lesson["kanji"]] +
                 [("kanji_writing", c) for c in lesson["kanji"]])
+    if lesson.get("type") == "grammar":
+        return [("grammar", pid) for pid in lesson["points"]]
+    if lesson.get("type") == "gate_test":
+        return []  # ворота лишь проверяют — карточек не создают
     return [("kana", c) for c in lesson["kana"]]
+
+
+def gate_items(lesson):
+    """SRS-элементы всех уроков юнита, которые проверяет тест-ворота."""
+    items = []
+    for lid in lesson["src_lessons"]:
+        items.extend(srs_items_for_lesson(LESSON_BY_ID[lid]))
+    return items
 
 
 def kana_known_by(lesson_id):

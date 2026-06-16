@@ -1,0 +1,15 @@
+Звуки интерфейса (нажатия, вердикт ответа)
+===========================================
+
+Источник:  Kenney — «Interface Sounds»
+           https://kenney.nl/assets/interface-sounds
+Лицензия:  Creative Commons Zero (CC0 1.0) — общественное достояние.
+           Атрибуция не требуется; указана из вежливости.
+           https://creativecommons.org/publicdomain/zero/1.0/
+
+Зеркало, из которого скачаны файлы (тоже CC0):
+           https://github.com/Calinou/kenney-interface-sounds
+
+Используемые файлы: click_002, tick_002, select_002, drop_003, pluck_002,
+switch_002, glass_002 (звук нажатия — выбор в настройках),
+confirmation_001 (верный ответ), error_002 (ошибка).

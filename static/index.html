@@ -101,6 +101,26 @@
           <option value="off">Никогда не показывать</option>
         </select>
       </div>
+      <div class="setting setting-divider">
+        <label for="set-goal">Дневная цель</label>
+        <select id="set-goal">
+          <option value="10">Лёгкая — 10 XP</option>
+          <option value="20">Обычная — 20 XP</option>
+          <option value="40">Серьёзная — 40 XP</option>
+        </select>
+        <p class="setting-hint">День засчитан в серию, когда набрана цель. XP: повторение +2, урок +20.</p>
+      </div>
+      <div class="setting setting-divider">
+        <label class="setting-toggle">
+          <span>Звук и вибрация при нажатиях</span>
+          <input type="checkbox" id="set-haptics">
+        </label>
+        <div class="setting tap-sound-row">
+          <label for="set-tap-sound">Звук нажатия</label>
+          <select id="set-tap-sound"></select>
+        </div>
+        <p class="setting-hint">Выберите звук — он сразу проиграется. Звуки Kenney (CC0), не зависят от громкости озвучки слов.</p>
+      </div>
       <div class="settings-actions">
         <button class="ghost" id="set-test">Прослушать</button>
         <button class="primary" id="set-close">Готово</button>

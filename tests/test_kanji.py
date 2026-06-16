@@ -78,7 +78,8 @@ def test_kanji_components_introduced_earlier():
     order = {}
     kanji_course = next(c for c in COURSES if c["id"] == "kanji")
     for pos, lid in enumerate(kanji_course["lesson_ids"]):
-        for ch in LESSON_BY_ID[lid]["kanji"]:
+        # в курс вставлены тесты-ворота юнита (gate_test) — у них нет "kanji"
+        for ch in LESSON_BY_ID[lid].get("kanji", []):
             order.setdefault(ch, pos)
     for k in KANJI:
         kp = order[k["char"]]

@@ -13,10 +13,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import db, srs_engine, tts
+from . import db, gamification, srs_engine, tts
 from .content.registry import (
-    COURSES, KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_UNITS,
-    srs_items_for_lesson,
+    COURSES, GATE_PASS, GRAMMAR_UNITS, KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER,
+    LESSONS, VOCAB_UNITS, srs_items_for_lesson,
 )
 from .exercises import item_info, make_lesson_steps, review_exercise
 
@@ -111,6 +111,7 @@ def overview():
         return {
             "srs": c,
             "streak": _streak(conn),
+            "xp": gamification.xp_summary(conn),
             "today": {
                 "reviews": today_row["total"],
                 "accuracy": round(today_row["correct"] / today_row["total"] * 100)
@@ -131,6 +132,22 @@ def overview():
 
 # «Регионы» курса — группировка уроков в духе карты Японии (раздел 8.1)
 def _lesson_group(lesson_id):
+    lesson = LESSON_BY_ID[lesson_id]
+    # Ворота юнита (id вида «v-g1») не парсятся как «буква+число» — у них свой
+    # id курса и unit; кладём их в тот же регион, что и уроки этого юнита,
+    # чтобы плитка ворот встала в конце своего блока.
+    if lesson.get("type") == "gate_test":
+        unit = lesson.get("unit", 1)
+        course = lesson.get("course")
+        if course == "n5":
+            return {"id": f"n5-u{unit}", "jp": "単語",
+                    "title": f"Первые слова · Юнит {unit} — {VOCAB_UNITS.get(unit, '')}"}
+        if course == "kanji":
+            return {"id": f"kanji-u{unit}", "jp": "漢字",
+                    "title": f"Кандзи · {KANJI_UNITS.get(unit, '')}"}
+        if course == "grammar":
+            return {"id": f"grammar-u{unit}", "jp": "文法",
+                    "title": f"Грамматика · {GRAMMAR_UNITS.get(unit, '')}"}
     course, n = lesson_id[0], int(lesson_id[1:])
     if course == "l":  # хирагана
         if n <= 10:
@@ -143,11 +160,15 @@ def _lesson_group(lesson_id):
     if course == "v":  # лексика N5 — регион на каждый тематический юнит
         unit = LESSON_BY_ID[lesson_id].get("unit", 1)
         return {"id": f"n5-u{unit}", "jp": "単語",
-                "title": f"Слова N5 · Юнит {unit} — {VOCAB_UNITS.get(unit, '')}"}
+                "title": f"Первые слова · Юнит {unit} — {VOCAB_UNITS.get(unit, '')}"}
     if course == "j":  # кандзи — регион на тематический юнит
         unit = LESSON_BY_ID[lesson_id].get("unit", 1)
         return {"id": f"kanji-u{unit}", "jp": "漢字",
                 "title": f"Кандзи · {KANJI_UNITS.get(unit, '')}"}
+    if course == "g":  # грамматика — регион на тематический юнит
+        unit = LESSON_BY_ID[lesson_id].get("unit", 1)
+        return {"id": f"grammar-u{unit}", "jp": "文法",
+                "title": f"Грамматика · {GRAMMAR_UNITS.get(unit, '')}"}
     # катакана
     if n <= 10:
         return {"id": "k-gojuon", "jp": "カタカナ", "title": "Катакана: годзюон"}
@@ -168,10 +189,13 @@ def list_lessons():
         out = []
         for l in LESSONS:
             kana = l.get("kana", [])
+            is_gate = l.get("type") == "gate_test"
             out.append(
                 {"id": l["id"], "title": l["title"], "subtitle": l.get("subtitle", ""),
                  "kana_count": len(kana),
                  "icon": l.get("icon") or (kana[0] if kana else "っ"),
+                 "type": l.get("type"),
+                 "pass_mark": GATE_PASS if is_gate else None,
                  "group": _lesson_group(l["id"]),
                  **statuses[l["id"]]})
         return out
@@ -208,6 +232,21 @@ def complete_lesson(lesson_id: str, result: LessonResult):
     try:
         if _lesson_statuses(conn)[lesson_id]["status"] == "locked":
             raise HTTPException(403, "Сначала завершите предыдущий урок")
+        # Тест-ворота юнита (раздел 3): засчитывается только при ≥ 80%. Ниже
+        # порога — попытка записывается (лучший балл, счётчик), но ворота не
+        # «completed», поэтому следующий юнит не открывается и можно пересдать.
+        if lesson.get("type") == "gate_test" and result.score < GATE_PASS:
+            with conn:
+                conn.execute(
+                    "INSERT INTO lesson_progress(lesson_id, status, score, attempts) "
+                    "VALUES (?, 'available', ?, 1) "
+                    "ON CONFLICT(lesson_id) DO UPDATE SET "
+                    "score=MAX(COALESCE(lesson_progress.score, 0), excluded.score), "
+                    "attempts=lesson_progress.attempts+1",
+                    (lesson_id, result.score),
+                )
+            return {"ok": True, "is_gate": True, "passed": False,
+                    "score": result.score, "pass_mark": GATE_PASS, "cards_created": 0}
         now = datetime.now(timezone.utc).isoformat()
         with conn:
             conn.execute(
@@ -225,7 +264,8 @@ def complete_lesson(lesson_id: str, result: LessonResult):
         created = 0
         for item_type, ids in by_type.items():
             created += len(srs_engine.create_cards(conn, item_type, ids))
-        return {"ok": True, "cards_created": created}
+        return {"ok": True, "cards_created": created,
+                "is_gate": lesson.get("type") == "gate_test", "passed": True}
     finally:
         conn.close()
 
@@ -365,6 +405,17 @@ def stats():
             ],
             "settings": settings,
         }
+    finally:
+        conn.close()
+
+
+@app.get("/api/achievements")
+def achievements():
+    conn = db.connect()
+    try:
+        data = gamification.achievements(conn, _streak(conn))
+        data["xp"] = gamification.xp_summary(conn)
+        return data
     finally:
         conn.close()
 
