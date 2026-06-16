@@ -133,6 +133,59 @@ if ("speechSynthesis" in window) {
 }
 TTS.init();
 
+/* ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ---------- */
+const AI = {
+  available: false,
+  status: {},
+  CAT: {
+    particle: "Частица", conjugation: "Спряжение", vocabulary: "Лексика",
+    word_order: "Порядок слов", kana_orthography: "Орфография каны",
+    kanji: "Кандзи", other: "Разбор",
+  },
+  async init() {
+    try {
+      this.status = await api.get("/api/ai/status");
+      this.available = !!this.status.available;
+    } catch { this.status = {}; this.available = false; }
+  },
+};
+AI.init();
+
+// Кнопка «Разобрать ошибку» с ленивым запросом к Claude (только по клику).
+// ctx: {exercise_type, item_id, prompt, correct_answer, given_answer, choices}
+function mountExplain(host, ctx) {
+  if (!AI.available || !host) return;
+  const wrap = document.createElement("div");
+  wrap.className = "ai-explain";
+  wrap.innerHTML = `<button class="ghost ai-ask">🧠 Разобрать ошибку</button>
+    <div class="ai-body" hidden></div>`;
+  host.appendChild(wrap);
+  const btn = $(".ai-ask", wrap);
+  const body = $(".ai-body", wrap);
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Думаю…";
+    try {
+      const r = await api.post("/api/ai/explain", ctx);
+      const cat = AI.CAT[r.category] || AI.CAT.other;
+      body.innerHTML = `<span class="ai-cat">${cat}</span>
+        <p class="ai-text">${escapeHtml(r.explanation)}</p>
+        <p class="ai-rule"><b>Правило:</b> ${escapeHtml(r.rule)}</p>
+        <p class="ai-ex"><b>Пример:</b> ${escapeHtml(r.counterexample)}</p>`;
+      body.hidden = false;
+      btn.remove();
+    } catch {
+      btn.disabled = false;
+      btn.textContent = "🧠 Разобрать ошибку";
+      body.innerHTML = `<p class="ai-text">Не получилось получить разбор. Попробуйте ещё раз.</p>`;
+      body.hidden = false;
+    }
+  });
+}
+
+const escapeHtml = s => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 const speak = text => TTS.speak(text);
 function ttsButton(text) {
   if (!TTS.available) return "";
@@ -288,7 +341,30 @@ function openSettings() {
   $("#set-haptics").checked = Haptics.prefs.enabled;
   fillTapSounds();
   $("#set-tap-sound").disabled = !Haptics.prefs.enabled;
+  AI.init().then(refreshAiStatus);   // перепроверить (вдруг ключ задали после старта)
+  refreshAiStatus();
   settingsModal.classList.add("open");
+}
+
+function refreshAiStatus() {
+  const pill = $("#ai-pill"), hint = $("#ai-status-hint");
+  if (!pill || !hint) return;
+  if (AI.available) {
+    pill.textContent = AI.status.provider || "включён";
+    pill.className = "ai-pill on";
+    const q = AI.status.limit != null
+      ? ` Сегодня осталось ${AI.status.remaining} из ${AI.status.limit} запросов (кэш-разборы не тратят квоту).`
+      : "";
+    hint.textContent = "После неверного ответа жмите «🧠 Разобрать ошибку» — модель " +
+      "объяснит промах. Разборы кэшируются, чтобы не платить дважды." + q;
+  } else {
+    pill.textContent = "нет ключа";
+    pill.className = "ai-pill off";
+    hint.textContent = "Чтобы включить, задайте ключ перед запуском и перезапустите " +
+      "сервер. Бесплатно: GEMINI_API_KEY (ключ на aistudio.google.com/apikey) — " +
+      "set GEMINI_API_KEY=… затем run.bat. Либо ANTHROPIC_API_KEY (Claude). " +
+      "Без ключа курс работает как обычно.";
+  }
 }
 
 function fillTapSounds() {
@@ -1133,6 +1209,12 @@ async function runChoice(ex, afterAnswer) {
   if (correct) {
     await new Promise(r => setTimeout(r, 900));
   } else {
+    mountExplain(playerBody, {
+      exercise_type: ex.type, item_id: ex.item_id || "",
+      prompt: ex.prompt.text || question || "",
+      correct_answer: ex.options[ex.answer], given_answer: ex.options[choice],
+      choices: ex.options,
+    });
     playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
     await waitClick($("#next", playerBody));
   }
@@ -1206,6 +1288,11 @@ async function runWordBuild(ex, afterAnswer) {
     await new Promise(r => setTimeout(r, 1100));
   } else {
     $("#check", playerBody).remove();
+    mountExplain(playerBody, {
+      exercise_type: ex.type, item_id: ex.item_id || "",
+      prompt: ex.question || (ex.prompt && ex.prompt.text) || "",
+      correct_answer: ex.answer_tokens.join(""), given_answer: word, choices: [],
+    });
     playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
     await waitClick($("#next", playerBody));
   }
@@ -1264,6 +1351,11 @@ async function runInput(ex, afterAnswer) {
   if (correct) {
     await new Promise(r => setTimeout(r, 1100));
   } else {
+    mountExplain(playerBody, {
+      exercise_type: ex.type, item_id: ex.item_id || "",
+      prompt: (isAudio ? ex.prompt.fallback_text : ex.prompt.text) || ex.question || "",
+      correct_answer: ex.answer, given_answer: input.value, choices: [],
+    });
     playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
     await waitClick($("#next", playerBody));
   }

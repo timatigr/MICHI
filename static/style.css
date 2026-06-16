@@ -862,6 +862,32 @@ button.ghost:active { transform: scale(0.94); }
 .kanji-parts .part:not(.whole):active { transform: scale(0.92); }
 .lookalikes span:active, .hardest-list .chip:active { transform: scale(0.92); }
 
+/* ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) */
+.ai-explain { width: 100%; margin-top: 14px; }
+.ai-ask {
+  width: 100%; padding: 12px; border-radius: 14px; font-size: 14px;
+  border: 1.5px dashed var(--indigo); color: var(--indigo); background: transparent;
+}
+.ai-ask:not(:disabled):active { transform: scale(0.97); }
+.ai-body {
+  text-align: left; background: var(--bad-bg); border: 1px solid var(--bad-border);
+  border-radius: 14px; padding: 14px 16px; animation: pop .35s ease;
+}
+.ai-cat {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .4px;
+  text-transform: uppercase; color: #fff; background: var(--indigo);
+  padding: 3px 9px; border-radius: 999px; margin-bottom: 8px;
+}
+.ai-body p { margin: 6px 0; font-size: 14px; line-height: 1.5; color: var(--text); }
+.ai-text { color: var(--title); }
+.ai-rule b, .ai-ex b { color: var(--indigo); }
+.ai-pill {
+  font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  vertical-align: middle; margin-left: 4px;
+}
+.ai-pill.on { color: #fff; background: var(--success); }
+.ai-pill.off { color: var(--muted); background: var(--line); }
+
 /* Уважение к prefers-reduced-motion (SRS.md 11.3) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

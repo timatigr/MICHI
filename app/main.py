@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from . import db, gamification, srs_engine, tts
+from . import ai_tutor, db, gamification, srs_engine, tts
 from .content.registry import (
     COURSES, GATE_PASS, GRAMMAR_UNITS, KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER,
     LESSONS, VOCAB_UNITS, srs_items_for_lesson,
@@ -323,6 +323,69 @@ def srs_answer(answer: Answer):
         )
     finally:
         conn.close()
+
+
+# ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ----------
+
+class ExplainRequest(BaseModel):
+    item_type: str = ""
+    item_id: str = ""
+    exercise_type: str = ""
+    prompt: str = ""
+    correct_answer: str = ""
+    given_answer: str = ""
+    choices: list[str] = Field(default_factory=list)
+
+
+@app.get("/api/ai/status")
+def ai_status():
+    """Доступен ли ИИ-разбор (флаг/ключ/библиотека) + дневная квота — для UI."""
+    avail = ai_tutor.available()
+    out = {"available": avail}
+    if avail:
+        out.update(ai_tutor.usage())
+        out["provider"] = ai_tutor.provider_label()
+    return out
+
+
+def _item_type_for(exercise_type: str, explicit: str) -> str:
+    """item_type для справки item_info: явный приоритетнее, иначе по типу упражнения."""
+    if explicit:
+        return explicit
+    if exercise_type.startswith("kana"):
+        return "kana"
+    if exercise_type.startswith("kanji") or exercise_type == "word_kanji":
+        return "kanji"
+    if exercise_type.startswith("vocab") or exercise_type == "dictation":
+        return "vocab"
+    if exercise_type in ("particle_choice", "grammar_choice", "sentence_scramble",
+                         "grammar_cloze", "verb_conjugation"):
+        return "grammar"
+    return ""
+
+
+@app.post("/api/ai/explain")
+def ai_explain(req: ExplainRequest):
+    if not ai_tutor.available():
+        raise HTTPException(503, "ИИ-разбор недоступен")
+    item_type = _item_type_for(req.exercise_type, req.item_type)
+    info = item_info(item_type, req.item_id) if req.item_id else {}
+    context = {
+        "item_type": item_type,
+        "item_id": req.item_id,
+        "exercise_type": req.exercise_type,
+        "prompt": req.prompt,
+        "correct_answer": req.correct_answer,
+        "given_answer": req.given_answer,
+        "choices": req.choices,
+        "title": info.get("title"),
+        "sub": info.get("sub"),
+        "hint": info.get("hint"),
+    }
+    result = ai_tutor.explain(context)
+    if not result.get("available"):
+        raise HTTPException(503, "ИИ-разбор временно недоступен")
+    return result
 
 
 # ---------- Озвучка (Edge TTS, нейроголоса) ----------

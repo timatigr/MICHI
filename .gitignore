@@ -13,6 +13,10 @@ michi.db-wal
 michi.db-shm
 michi.db.bak
 tts_cache/
+ai_cache/
+
+# Локальный запуск с секретами (ключ ИИ) — не коммитить
+run-local.bat
 
 # IDE / OS
 .vscode/
