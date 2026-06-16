@@ -6,14 +6,21 @@
 
 ## Запуск
 
+Первый раз — установка окружения (создаёт `.venv` и ставит зависимости):
+
+```
+setup.bat
+```
+
+Дальше — запуск (сам откроет браузер на **http://127.0.0.1:8000**):
+
 ```
 run.bat
 ```
 
-и открыть **http://127.0.0.1:8000** в браузере.
-
-(Сервер: FastAPI + uvicorn из локального окружения `.venv`.
-Пересоздать окружение: `python -m venv .venv && .venv\Scripts\pip install -r requirements.txt`.)
+Нужен Python 3.10+ ([python.org](https://www.python.org/downloads/); при
+установке отметьте «Add Python to PATH»). Сервер — FastAPI + uvicorn из
+локального `.venv`. Для разработки с автоперезагрузкой — `run-dev.bat`.
 
 ## Что реализовано (ссылки на разделы SRS.md)
 
