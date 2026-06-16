@@ -409,6 +409,41 @@ def stats():
         conn.close()
 
 
+# ---------- Настройки SRS ----------
+
+class SrsSettingsPatch(BaseModel):
+    # Дневная нагрузка (4.4) и целевое удержание FSRS (4.1). Каждое поле
+    # опционально — UI шлёт только изменившееся. Границы оберегают очередь и
+    # планировщик от значений, которые их ломают (retention — проверенный
+    # рабочий диапазон py-fsrs).
+    new_per_day: int | None = Field(default=None, ge=0, le=100)
+    reviews_per_day: int | None = Field(default=None, ge=0, le=2000)
+    desired_retention: float | None = Field(default=None, ge=0.75, le=0.97)
+
+
+@app.get("/api/settings")
+def settings_get():
+    conn = db.connect()
+    try:
+        return db.get_settings(conn)
+    finally:
+        conn.close()
+
+
+@app.post("/api/settings")
+def settings_update(patch: SrsSettingsPatch):
+    changes = patch.model_dump(exclude_none=True)
+    conn = db.connect()
+    try:
+        for key, value in changes.items():
+            db.set_setting(conn, key, value)
+        return db.get_settings(conn)
+    finally:
+        conn.close()
+
+
+# ---------- Достижения ----------
+
 @app.get("/api/achievements")
 def achievements():
     conn = db.connect()

@@ -251,6 +251,26 @@ async def main():
             print(f"tap-sound options: {opts}")
             await cdp.shot("m_settings")
 
+            # --- Статистика: лимиты SRS должны быть редактируемыми ---
+            await cdp.send("Page.navigate", url=ORIGIN + "/")
+            await settle(900)
+            await cdp.js("document.querySelector('nav.tabs button[data-view=stats]').click()")
+            await settle(1500)
+            await cdp.js("const e=document.querySelector('#srs-new'); "
+                         "e&&e.scrollIntoView({block:'center'});")
+            await settle(500)
+            await cdp.shot("m_stats")
+            srs_ok = await cdp.js(
+                "!!(document.querySelector('#srs-new')&&document.querySelector('#srs-rev')"
+                "&&document.querySelector('#srs-ret'))")
+            print(f"stats SRS-limits selects: {'present' if srs_ok else 'MISSING'}")
+            if not srs_ok:
+                problems.append("на вкладке статистики нет селекторов лимитов SRS")
+            errs_stats = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
+            if errs_stats:
+                problems.append(f"JS errors (stats): {errs_stats}")
+            print(f"JS errors (stats): {errs_stats if errs_stats else '(none)'}")
+
             # --- Десктоп today ---
             await cdp.metrics(1100, 860, dpr=1, mobile=False)
             await cdp.send("Page.navigate", url=ORIGIN + "/")

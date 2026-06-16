@@ -1521,6 +1521,14 @@ function barChart(data, valueKey, dateKey, cls = "", titleFn = null) {
     </div>`).join("")}</div>`;
 }
 
+/* Список <option> с выбранным текущим значением; если текущего нет среди
+   пресетов — добавляем его, чтобы нестандартное значение не пропало. */
+function optionList(values, current, label) {
+  const set = values.includes(current) ? values : [current, ...values].sort((a, b) => a - b);
+  return set.map(v =>
+    `<option value="${v}" ${v === current ? "selected" : ""}>${label(v)}</option>`).join("");
+}
+
 async function renderStats() {
   view.innerHTML = `<div class="empty">Загрузка…</div>`;
   const [s, ach] = await Promise.all([
@@ -1574,9 +1582,38 @@ async function renderStats() {
     </div>` : ""}
     <div class="card">
       <h2>Лимиты SRS</h2>
-      <p class="note">${s.settings.new_per_day} новых карточек и ${s.settings.reviews_per_day} повторений в день,
-      целевое удержание ${Math.round(s.settings.desired_retention * 100)}%.</p>
+      <div class="srs-limits">
+        <label>Новых карточек в день
+          <select id="srs-new">${optionList([0, 4, 8, 12, 16, 20, 25, 30], s.settings.new_per_day, v => v)}</select>
+        </label>
+        <label>Повторений в день (макс.)
+          <select id="srs-rev">${optionList([50, 100, 150, 250, 400, 600], s.settings.reviews_per_day, v => v)}</select>
+        </label>
+        <label>Целевое удержание
+          <select id="srs-ret">${optionList([0.85, 0.9, 0.92, 0.95], s.settings.desired_retention, v => Math.round(v * 100) + "%")}</select>
+        </label>
+      </div>
+      <p class="note mt">Выше удержание — крепче помните, но больше повторений в день.
+      Меньше новых — спокойнее темп. Применяется со следующей сессии.</p>
+      <p class="note" id="srs-saved" style="display:none">Сохранено ✓</p>
     </div>`;
+  // Лимиты SRS — серверные настройки: меняем по месту, сохраняем сразу
+  const srsHint = (msg, ok) => {
+    const h = $("#srs-saved");
+    h.textContent = msg;
+    h.classList.toggle("err", !ok);
+    h.style.display = "block";
+    clearTimeout(srsHint._t);
+    if (ok) srsHint._t = setTimeout(() => { h.style.display = "none"; }, 1600);
+  };
+  const saveSrs = async patch => {
+    try { await api.post("/api/settings", patch); srsHint("Сохранено ✓", true); }
+    catch (e) { srsHint("Не удалось сохранить: " + e.message, false); }
+  };
+  $("#srs-new").addEventListener("change", e => saveSrs({ new_per_day: +e.target.value }));
+  $("#srs-rev").addEventListener("change", e => saveSrs({ reviews_per_day: +e.target.value }));
+  $("#srs-ret").addEventListener("change", e => saveSrs({ desired_retention: +e.target.value }));
+
   // Поздравляем с новыми достижениями (диф против ранее показанных)
   const seen = new Set(JSON.parse(localStorage.getItem("michi_ach_seen") || "[]"));
   const nowUnlocked = ach.items.filter(a => a.unlocked).map(a => a.id);

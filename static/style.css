@@ -497,6 +497,14 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .kanji-ex .ex-r  { font-size: 14px; color: var(--indigo); }
 .kanji-ex .ex-ru { font-size: 13.5px; color: var(--muted); }
 .note { color: var(--muted); font-size: 13.5px; margin: 10px 0 0; line-height: 1.5; }
+.srs-limits { display: grid; gap: 12px; margin-top: 2px; }
+.srs-limits label { display: block; font-size: 13px; color: var(--muted); }
+.srs-limits select {
+  display: block; width: 100%; margin-top: 6px;
+  padding: 10px 11px; border: 1px solid var(--line); border-radius: 12px;
+  font-size: 14px; background: var(--card); color: var(--title);
+}
+#srs-saved.err { color: var(--error); }
 
 /* ---- Знакомство с грамматикой (2.4) ---- */
 .grammar-structure {
