@@ -48,10 +48,10 @@
   </div>
 
   <nav class="tabs">
-    <button data-view="today"><span class="ico">今</span>Сегодня</button>
-    <button data-view="lessons"><span class="ico">道</span>Путь</button>
-    <button data-view="review"><span class="ico">復</span>Повторение</button>
-    <button data-view="stats"><span class="ico">計</span>Статистика</button>
+    <button data-view="today"><span class="ico">今</span><span data-i18n="Сегодня">Сегодня</span></button>
+    <button data-view="lessons"><span class="ico">道</span><span data-i18n="Путь">Путь</span></button>
+    <button data-view="review"><span class="ico">復</span><span data-i18n="Повторение">Повторение</span></button>
+    <button data-view="stats"><span class="ico">計</span><span data-i18n="Статистика">Статистика</span></button>
   </nav>
 
   <!-- Полноэкранный плеер урока / SRS-сессии -->
@@ -67,67 +67,77 @@
   <!-- Настройки озвучки -->
   <div id="settings">
     <div class="settings-card">
-      <h2>Озвучка</h2>
+      <div class="settings-scroll">
+      <h2 data-i18n="Настройки">Настройки</h2>
+      <div class="setting">
+        <label for="set-lang" data-i18n="Язык">Язык</label>
+        <select id="set-lang"></select>
+        <p class="setting-hint" data-i18n="Язык интерфейса. Контент уроков переводится постепенно; непереведённое показывается по-русски.">Язык интерфейса. Контент уроков переводится постепенно; непереведённое показывается по-русски.</p>
+      </div>
+      <h2 class="setting-divider" data-i18n="Озвучка">Озвучка</h2>
       <div id="tts-warn" class="tts-warn" style="display:none"></div>
       <div class="setting">
-        <label for="set-source">Источник</label>
+        <label for="set-source" data-i18n="Источник">Источник</label>
         <select id="set-source">
-          <option value="neural">Нейроголос Microsoft (онлайн, лучший звук)</option>
-          <option value="browser">Голос браузера / системы</option>
+          <option value="neural" data-i18n="Нейроголос Microsoft (онлайн, лучший звук)">Нейроголос Microsoft (онлайн, лучший звук)</option>
+          <option value="browser" data-i18n="Голос браузера / системы">Голос браузера / системы</option>
         </select>
       </div>
       <div class="setting">
-        <label for="set-voice">Голос</label>
+        <label for="set-voice" data-i18n="Голос">Голос</label>
         <select id="set-voice"></select>
-        <p class="vv-hint" id="vv-hint" style="display:none">
+        <p class="vv-hint" id="vv-hint" style="display:none" data-i18n-html='Хотите аниме-голоса (Дзундамон, Сикоку Мэтан)? Установите бесплатный
+          <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener">VOICEVOX</a>
+          и запустите его — голоса появятся в этом списке автоматически.'>
           Хотите аниме-голоса (Дзундамон, Сикоку Мэтан)? Установите бесплатный
           <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener">VOICEVOX</a>
           и запустите его — голоса появятся в этом списке автоматически.
         </p>
       </div>
       <div class="setting">
-        <label for="set-volume">Громкость <span class="val" id="val-volume"></span></label>
+        <label for="set-volume"><span data-i18n="Громкость">Громкость</span> <span class="val" id="val-volume"></span></label>
         <input type="range" id="set-volume" min="0" max="100" step="5">
       </div>
       <div class="setting">
-        <label for="set-rate">Скорость речи <span class="val" id="val-rate"></span></label>
+        <label for="set-rate"><span data-i18n="Скорость речи">Скорость речи</span> <span class="val" id="val-rate"></span></label>
         <input type="range" id="set-rate" min="60" max="120" step="5">
       </div>
       <div class="setting setting-divider">
-        <label for="set-romaji">Ромадзи (латинская транскрипция)</label>
+        <label for="set-romaji" data-i18n="Ромадзи (латинская транскрипция)">Ромадзи (латинская транскрипция)</label>
         <select id="set-romaji">
-          <option value="auto">Авто — скрыть после хираганы</option>
-          <option value="on">Всегда показывать</option>
-          <option value="off">Никогда не показывать</option>
+          <option value="auto" data-i18n="Авто — скрыть после хираганы">Авто — скрыть после хираганы</option>
+          <option value="on" data-i18n="Всегда показывать">Всегда показывать</option>
+          <option value="off" data-i18n="Никогда не показывать">Никогда не показывать</option>
         </select>
       </div>
       <div class="setting setting-divider">
-        <label for="set-goal">Дневная цель</label>
+        <label for="set-goal" data-i18n="Дневная цель">Дневная цель</label>
         <select id="set-goal">
-          <option value="10">Лёгкая — 10 XP</option>
-          <option value="20">Обычная — 20 XP</option>
-          <option value="40">Серьёзная — 40 XP</option>
+          <option value="10" data-i18n="Лёгкая — 10 XP">Лёгкая — 10 XP</option>
+          <option value="20" data-i18n="Обычная — 20 XP">Обычная — 20 XP</option>
+          <option value="40" data-i18n="Серьёзная — 40 XP">Серьёзная — 40 XP</option>
         </select>
-        <p class="setting-hint">День засчитан в серию, когда набрана цель. XP: повторение +2, урок +20.</p>
+        <p class="setting-hint" data-i18n="День засчитан в серию, когда набрана цель. XP: повторение +2, урок +20.">День засчитан в серию, когда набрана цель. XP: повторение +2, урок +20.</p>
       </div>
       <div class="setting setting-divider">
         <label class="setting-toggle">
-          <span>Звук и вибрация при нажатиях</span>
+          <span data-i18n="Звук и вибрация при нажатиях">Звук и вибрация при нажатиях</span>
           <input type="checkbox" id="set-haptics">
         </label>
         <div class="setting tap-sound-row">
-          <label for="set-tap-sound">Звук нажатия</label>
+          <label for="set-tap-sound" data-i18n="Звук нажатия">Звук нажатия</label>
           <select id="set-tap-sound"></select>
         </div>
-        <p class="setting-hint">Выберите звук — он сразу проиграется. Звуки Kenney (CC0), не зависят от громкости озвучки слов.</p>
+        <p class="setting-hint" data-i18n="Выберите звук — он сразу проиграется. Звуки Kenney (CC0), не зависят от громкости озвучки слов.">Выберите звук — он сразу проиграется. Звуки Kenney (CC0), не зависят от громкости озвучки слов.</p>
       </div>
       <div class="setting setting-divider">
-        <label>ИИ-разбор ошибок «Сэнсэй» <span class="ai-pill" id="ai-pill">—</span></label>
+        <label><span data-i18n="ИИ-разбор ошибок «Сэнсэй»">ИИ-разбор ошибок «Сэнсэй»</span> <span class="ai-pill" id="ai-pill">—</span></label>
         <p class="setting-hint" id="ai-status-hint"></p>
       </div>
+      </div>
       <div class="settings-actions">
-        <button class="ghost" id="set-test">Прослушать</button>
-        <button class="primary" id="set-close">Готово</button>
+        <button class="ghost" id="set-test" data-i18n="Прослушать">Прослушать</button>
+        <button class="primary" id="set-close" data-i18n="Готово">Готово</button>
       </div>
     </div>
   </div>
@@ -137,13 +147,15 @@
     <div class="settings-card confirm-card">
       <p id="confirm-text"></p>
       <div class="settings-actions">
-        <button class="ghost" id="confirm-no">Остаться</button>
-        <button class="primary" id="confirm-yes">Выйти</button>
+        <button class="ghost" id="confirm-no" data-i18n="Остаться">Остаться</button>
+        <button class="primary" id="confirm-yes" data-i18n="Выйти">Выйти</button>
       </div>
     </div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="tracing.js"></script>
+  <script src="art.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

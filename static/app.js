@@ -340,6 +340,7 @@ function openSettings() {
   $("#set-goal").value = localStorage.getItem("michi_daily_goal") || "20";
   $("#set-haptics").checked = Haptics.prefs.enabled;
   fillTapSounds();
+  fillLangSelect();
   $("#set-tap-sound").disabled = !Haptics.prefs.enabled;
   AI.init().then(refreshAiStatus);   // перепроверить (вдруг ключ задали после старта)
   refreshAiStatus();
@@ -350,29 +351,40 @@ function refreshAiStatus() {
   const pill = $("#ai-pill"), hint = $("#ai-status-hint");
   if (!pill || !hint) return;
   if (AI.available) {
-    pill.textContent = AI.status.provider || "включён";
+    pill.textContent = AI.status.provider || tr("включён");
     pill.className = "ai-pill on";
     const q = AI.status.limit != null
-      ? ` Сегодня осталось ${AI.status.remaining} из ${AI.status.limit} запросов (кэш-разборы не тратят квоту).`
+      ? " " + tr("Сегодня осталось {r} из {l} запросов (кэш-разборы не тратят квоту).",
+          { r: AI.status.remaining, l: AI.status.limit })
       : "";
-    hint.textContent = "После неверного ответа жмите «🧠 Разобрать ошибку» — модель " +
-      "объяснит промах. Разборы кэшируются, чтобы не платить дважды." + q;
+    hint.textContent = tr("После неверного ответа жмите «🧠 Разобрать ошибку» — модель " +
+      "объяснит промах. Разборы кэшируются, чтобы не платить дважды.") + q;
   } else {
-    pill.textContent = "нет ключа";
+    pill.textContent = tr("нет ключа");
     pill.className = "ai-pill off";
-    hint.textContent = "Чтобы включить, задайте ключ перед запуском и перезапустите " +
+    hint.textContent = tr("Чтобы включить, задайте ключ перед запуском и перезапустите " +
       "сервер. Бесплатно: GEMINI_API_KEY (ключ на aistudio.google.com/apikey) — " +
       "set GEMINI_API_KEY=… затем run.bat. Либо ANTHROPIC_API_KEY (Claude). " +
-      "Без ключа курс работает как обычно.";
+      "Без ключа курс работает как обычно.");
   }
 }
 
 function fillTapSounds() {
   $("#set-tap-sound").innerHTML =
     Object.entries(Haptics.TAPS).map(([k, v]) =>
-      `<option value="${k}" ${k === Haptics.prefs.tapSound ? "selected" : ""}>${v}</option>`).join("") +
-    `<option value="off" ${Haptics.prefs.tapSound === "off" ? "selected" : ""}>Без звука</option>`;
+      `<option value="${k}" ${k === Haptics.prefs.tapSound ? "selected" : ""}>${tr(v)}</option>`).join("") +
+    `<option value="off" ${Haptics.prefs.tapSound === "off" ? "selected" : ""}>${tr("Без звука")}</option>`;
 }
+
+// Переключатель языка интерфейса: смена → reload (всё перерисуется на новом языке)
+function fillLangSelect() {
+  $("#set-lang").innerHTML = Object.entries(LANGS).map(([code, name]) =>
+    `<option value="${code}" ${code === LANG ? "selected" : ""}>${name}</option>`).join("");
+}
+$("#set-lang").addEventListener("change", e => {
+  setLang(e.target.value);
+  location.reload();
+});
 $("#btn-settings").addEventListener("click", openSettings);
 $("#set-close").addEventListener("click", () => settingsModal.classList.remove("open"));
 settingsModal.addEventListener("click", e => {
@@ -519,6 +531,60 @@ function confetti() {
   })(t0);
 }
 
+/* ---------- Достижения: тихая сверка + оверлей «получено» ----------
+   Источник правды — /api/achievements (вычисляется из журналов на сервере).
+   michi_ach_seen хранит то, что игрок уже видел; диф = свежие. На старте сверяем
+   молча (celebrate=false), чтобы засеять базу и не салютовать импортированную
+   историю; после урока/сессии и в Статистике — с оверлеем. */
+const TIER_LABEL = { bronze: "Бронза", silver: "Серебро", gold: "Золото", legend: "Легенда" };
+
+async function checkAchievements(celebrate, ach) {
+  if (!ach) {
+    try { ach = await api.get("/api/achievements"); }
+    catch { return null; }   // ИИ/сеть недоступны — курс работает как раньше
+  }
+  const prev = localStorage.getItem("michi_ach_seen");   // null => база ещё не засеяна
+  const seen = new Set(JSON.parse(prev || "[]"));
+  const unlocked = ach.items.filter(a => a.unlocked);
+  const fresh = unlocked.filter(a => !seen.has(a.id));
+  localStorage.setItem("michi_ach_seen", JSON.stringify(unlocked.map(a => a.id)));
+  if (celebrate && prev !== null && fresh.length) await celebrateAchievements(fresh);
+  return ach;
+}
+
+async function celebrateAchievements(list) {   // несколько сразу — показываем в очередь
+  for (const a of list) await celebrateOne(a);
+}
+
+function celebrateOne(a) {
+  return new Promise(resolve => {
+    const el = document.createElement("div");
+    el.className = `ach-pop ${a.tier}`;
+    el.innerHTML = `
+      <div class="ach-pop-card">
+        <div class="ach-pop-art">
+          <div class="ach-pop-rays"></div>
+          <div class="ach-pop-disc">${Art.tile(a, true)}</div>
+        </div>
+        <div class="ach-pop-tier">${TIER_LABEL[a.tier] || ""}</div>
+        <div class="ach-pop-kicker">Достижение получено</div>
+        <h3 class="ach-pop-title">${a.title}</h3>
+        <p class="ach-pop-desc">${a.desc}</p>
+        <button class="primary ach-pop-ok">Круто!</button>
+      </div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("show"));
+    confetti();
+    Haptics.good();
+    const close = () => {
+      el.classList.remove("show");
+      setTimeout(() => { el.remove(); resolve(); }, 280);
+    };
+    el.querySelector(".ach-pop-ok").addEventListener("click", close, { once: true });
+    el.addEventListener("click", e => { if (e.target === el) close(); });  // клик по фону
+  });
+}
+
 /* ---------- Лепестки сакуры на фоне (тихая анимация, ~12 шт.) ----------
    Уважает prefers-reduced-motion; останавливается на скрытой вкладке. */
 (function petals() {
@@ -605,7 +671,10 @@ document.querySelectorAll("nav.tabs button").forEach(b =>
 function setStreakPill(streak) {
   const pill = $("#streak-pill");
   // Единственное место для серии — пилюля в шапке (видна на всех вкладках)
-  pill.textContent = `🔥 ${streak} ${plural(streak, ["день", "дня", "дней"])}`;
+  const dayWord = LANG === "en"
+    ? (streak === 1 ? "day" : "days")
+    : plural(streak, ["день", "дня", "дней"]);
+  pill.textContent = `🔥 ${streak} ${dayWord}`;
   pill.style.display = streak > 0 ? "" : "none";
 }
 
@@ -619,7 +688,7 @@ function greeting() {
 }
 
 async function renderToday() {
-  view.innerHTML = `<div class="empty">Загрузка…</div>`;
+  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
   const o = await api.get("/api/overview");
   setStreakPill(o.streak);
   Romaji.syncProgress(o.courses);
@@ -635,22 +704,23 @@ async function renderToday() {
   // Одноразовое пояснение в момент авто-скрытия ромадзи после хираганы
   const romajiNote = (Romaji.pref === "auto" && Romaji.hiraganaDone &&
     !localStorage.getItem("michi_romaji_note"))
-    ? `<p class="note">Хирагана пройдена — ромадзи скрыт, чтобы вы читали каной.
-       Вернуть можно в ⚙ настройках.</p>`
+    ? `<p class="note">${tr("Хирагана пройдена — ромадзи скрыт, чтобы вы читали каной.\n       Вернуть можно в ⚙ настройках.")}</p>`
     : "";
   if (romajiNote) localStorage.setItem("michi_romaji_note", "1");
 
   view.innerHTML = `
+    <div class="today">
     <div class="hero">
       <div class="hero-top">
         <div>
           <div class="hero-jp jp" data-tts="${jp}">${jp}！</div>
-          <div class="hero-ru">${ru}</div>
+          <div class="hero-ru">${tr(ru)}</div>
         </div>
+        <div class="hero-mascot">${Art.mascotTile("wave")}</div>
       </div>
       <div class="hero-stats">
-        <div class="hs"><b>${o.today.reviews}</b><span>повторено сегодня</span></div>
-        <div class="hs"><b>${o.today.accuracy !== null ? o.today.accuracy + "%" : "—"}</b><span>точность сегодня</span></div>
+        <div class="hs"><b>${o.today.reviews}</b><span>${tr("повторено сегодня")}</span></div>
+        <div class="hs"><b>${o.today.accuracy !== null ? o.today.accuracy + "%" : "—"}</b><span>${tr("точность сегодня")}</span></div>
       </div>
     </div>
 
@@ -658,56 +728,57 @@ async function renderToday() {
       <div class="level-badge">
         <div class="lvl-num">${o.xp.level}</div>
         <div class="lvl-meta">
-          <div class="lvl-title">Уровень ${o.xp.level}</div>
+          <div class="lvl-title">${tr("Уровень {n}", { n: o.xp.level })}</div>
           <div class="lvl-bar"><div style="width:${o.xp.percent}%"></div></div>
-          <div class="lvl-xp">${o.xp.into_level} / ${o.xp.level_span} XP · всего ${o.xp.total}</div>
+          <div class="lvl-xp">${tr("{a} / {b} XP · всего {c}", { a: o.xp.into_level, b: o.xp.level_span, c: o.xp.total })}</div>
         </div>
       </div>
       <div class="goal-ring ${goalMet ? "met" : ""}" style="--p:${goalPct}">
         <div class="goal-inner">
           <b>${goalMet ? "✓" : todayXp}</b>
-          <span>${goalMet ? "цель!" : "/ " + goal + " XP"}</span>
+          <span>${goalMet ? tr("цель!") : tr("/ {g} XP", { g: goal })}</span>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h2>План на сегодня</h2>
+      <h2>${tr("План на сегодня")}</h2>
       <div class="plan-item ${queueTotal ? "" : "done"}">
         <div class="pi-ico jp c3">復</div>
         <div class="pi-info">
-          <div class="t">Повторение</div>
+          <div class="t">${tr("Повторение")}</div>
           <div class="s">${queueTotal
-            ? `${o.srs.due ? `по расписанию: ${o.srs.due}` : ""}${o.srs.due && o.srs.new_available ? " · " : ""}${o.srs.new_available ? `новых: ${o.srs.new_available}` : ""} · ≈${estMin} мин`
-            : "Очередь пуста — всё повторено"}</div>
+            ? `${o.srs.due ? tr("по расписанию: {n}", { n: o.srs.due }) : ""}${o.srs.due && o.srs.new_available ? " · " : ""}${o.srs.new_available ? tr("новых: {n}", { n: o.srs.new_available }) : ""} · ${tr("≈{m} мин", { m: estMin })}`
+            : tr("Очередь пуста — всё повторено")}</div>
         </div>
         ${queueTotal
-          ? `<button class="mini-btn" id="btn-review">Начать</button>`
+          ? `<button class="mini-btn" id="btn-review">${tr("Начать")}</button>`
           : `<span class="pi-done">✓</span>`}
       </div>
       <div class="plan-item ${next ? "" : "done"}">
         <div class="pi-ico jp c0">道</div>
         <div class="pi-info">
-          <div class="t">Новый урок</div>
-          <div class="s">${next ? `${next.title} · ${next.subtitle}` : "Все доступные уроки пройдены"}</div>
+          <div class="t">${tr("Новый урок")}</div>
+          <div class="s">${next ? `${next.title} · ${next.subtitle}` : tr("Все доступные уроки пройдены")}</div>
         </div>
         ${next
-          ? `<button class="mini-btn indigo" id="btn-lesson">Учить</button>`
+          ? `<button class="mini-btn indigo" id="btn-lesson">${tr("Учить")}</button>`
           : `<span class="pi-done">✓</span>`}
       </div>
     </div>
 
     <div class="card">
-      <h2>Прогресс курсов</h2>
+      <h2>${tr("Прогресс курсов")}</h2>
       ${o.courses.map(c => `
       <div class="course-row">
         <span class="cr-title">${c.title}</span>
         <div class="progress"><div style="width:${Math.round(c.lessons_completed / c.lessons_total * 100)}%"></div></div>
         <span class="cr-num">${c.lessons_completed}/${c.lessons_total}</span>
       </div>`).join("")}
-      <p class="note">Катакану можно учить параллельно с хираганой, слова N5 откроются после хираганы.</p>
+      <p class="note">${tr("Катакану можно учить параллельно с хираганой, слова N5 откроются после хираганы.")}</p>
     </div>
-    ${romajiNote}`;
+    ${romajiNote}
+    </div>`;
   // Цель дня достигнута впервые сегодня — поздравляем (раз в день)
   const todayKey = new Date().toISOString().slice(0, 10);
   if (goalMet && localStorage.getItem("michi_goal_day") !== todayKey) {
@@ -724,7 +795,7 @@ const COURSE_LABEL = { all: "Все", hiragana: "Хирагана", katakana: "�
 let lessonFilter = localStorage.getItem("michi_lesson_filter") || "all";
 
 async function renderLessons() {
-  view.innerHTML = `<div class="empty">Загрузка…</div>`;
+  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
   const lessons = await api.get("/api/lessons");
 
   // Курсы в порядке появления — для переключателя
@@ -753,7 +824,7 @@ async function renderLessons() {
     }
 
     const tabs = `<div class="course-tabs">${filters.map(f =>
-      `<button class="course-tab ${f === lessonFilter ? "active" : ""}" data-f="${f}">${COURSE_LABEL[f] || f}</button>`
+      `<button class="course-tab ${f === lessonFilter ? "active" : ""}" data-f="${f}">${tr(COURSE_LABEL[f] || f)}</button>`
     ).join("")}</div>`;
 
     view.innerHTML = tabs + groups.map(g => {
@@ -764,7 +835,7 @@ async function renderLessons() {
         <span class="jp">${g.jp}</span>
         <span class="spacer"></span>
         <span class="region-progress ${doneCount === g.lessons.length ? "done" : ""}">
-          ${doneCount === g.lessons.length ? "✓ " : ""}${doneCount} из ${g.lessons.length}</span>
+          ${doneCount === g.lessons.length ? "✓ " : ""}${tr("{a} из {b}", { a: doneCount, b: g.lessons.length })}</span>
       </div>
       <div class="lesson-grid">
         ${g.lessons.map(l => `
@@ -774,7 +845,7 @@ async function renderLessons() {
               ? `<span class="state done">✓ ${l.score != null ? Math.round(l.score * 100) + "%" : ""}</span>`
               : l.status === "locked" ? `<span class="state lock">🔒</span>` : ""}
             <h3>${l.title}</h3>
-            <div class="tag">${l.subtitle}${l.kana_count ? ` · ${l.kana_count} знаков` : ""}${l.locked_hint ? `<br>${l.locked_hint}` : ""}</div>
+            <div class="tag">${l.subtitle}${l.kana_count ? ` · ${tr("{n} знаков", { n: l.kana_count })}` : ""}${l.locked_hint ? `<br>${l.locked_hint}` : ""}</div>
           </div>`).join("")}
       </div>`;
     }).join("");
@@ -796,7 +867,7 @@ async function renderLessons() {
 }
 
 /* ---------- Стилизованный диалог подтверждения (вместо confirm()) ---------- */
-function confirmDialog(text, yesLabel = "Выйти") {
+function confirmDialog(text, yesLabel = tr("Выйти")) {
   return new Promise(res => {
     const m = $("#confirm");
     $("#confirm-text").textContent = text;
@@ -835,8 +906,8 @@ function closePlayer() {
 }
 async function askClosePlayer() {
   const msg = playerMode === "review"
-    ? "Прервать повторение? Все ответы уже сохранены."
-    : "Выйти из урока? Потом продолжите с этого же места.";
+    ? tr("Прервать повторение? Все ответы уже сохранены.")
+    : tr("Выйти из урока? Потом продолжите с этого же места.");
   if (await confirmDialog(msg)) closePlayer();
 }
 $("#player-close").addEventListener("click", askClosePlayer);
@@ -1200,8 +1271,8 @@ async function runChoice(ex, afterAnswer) {
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
   Haptics[correct ? "good" : "bad"]();
-  fb.innerHTML = verdict(correct, correct ? "Верно" :
-    `Правильно: <span class="jp">${ex.options[ex.answer]}</span>`);
+  fb.innerHTML = verdict(correct, correct ? tr("Верно") :
+    tr("Правильно: {x}", { x: `<span class="jp">${ex.options[ex.answer]}</span>` }));
   speak(ex.prompt.tts || ex.answer_tts);
 
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
@@ -1280,7 +1351,7 @@ async function runWordBuild(ex, afterAnswer) {
   Haptics[correct ? "good" : "bad"]();
   fb.innerHTML = verdict(correct, correct
     ? `<span class="jp">${word}</span>`
-    : `Правильно: <span class="jp">${ex.answer_tokens.join("")}</span>`);
+    : tr("Правильно: {x}", { x: `<span class="jp">${ex.answer_tokens.join("")}</span>` }));
   speak(ex.prompt.tts);
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
 
@@ -1344,7 +1415,7 @@ async function runInput(ex, afterAnswer) {
   Haptics[correct ? "good" : "bad"]();
   fb.innerHTML = verdict(correct, correct
     ? `<span class="jp">${ex.answer}</span>`
-    : `Правильно: <span class="jp">${ex.answer}</span>`);
+    : tr("Правильно: {x}", { x: `<span class="jp">${ex.answer}</span>` }));
   speak(ex.answer_tts);
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
 
@@ -1490,11 +1561,11 @@ async function startLesson(lessonId) {
     playerBody.innerHTML = `
       <div class="result gate-fail">
         <div class="mark">⛩</div>
-        <h2>Ворота не пройдены</h2>
-        <p>Ваш результат ${Math.round(score * 100)}% · нужно ${need}%<br>
-        Следующий юнит откроется после пересдачи.</p>
-        <button class="primary" id="retry">Пересдать</button>
-        <button class="ghost" id="finish">Выйти</button>
+        <h2>${tr("Ворота не пройдены")}</h2>
+        <p>${tr("Ваш результат {p}% · нужно {need}%", { p: Math.round(score * 100), need })}<br>
+        ${tr("Следующий юнит откроется после пересдачи.")}</p>
+        <button class="primary" id="retry">${tr("Пересдать")}</button>
+        <button class="ghost" id="finish">${tr("Выйти")}</button>
       </div>`;
     animateIn(playerBody);
     const choice = await Promise.race([
@@ -1509,17 +1580,18 @@ async function startLesson(lessonId) {
   const isGate = done.is_gate;
   playerBody.innerHTML = `
     <div class="result">
-      <div class="mark">${isGate ? "⛩" : "完"}</div>
-      <h2>${isGate ? "Ворота пройдены!" : lesson.title + " — пройден"}</h2>
-      <p>Точность ${Math.round(score * 100)}% · ${correct} из ${total}${
+      <div class="result-mascot">${Art.mascotTile("cheer")}</div>
+      <h2>${isGate ? tr("Ворота пройдены!") : tr("{title} — пройден", { title: lesson.title })}</h2>
+      <p>${tr("Точность {p}% · {a} из {b}", { p: Math.round(score * 100), a: correct, b: total })}${
         isGate ? "" : "<br>" + (done.cards_created
-          ? `В SRS добавлено карточек: ${done.cards_created}` : "Карточки уже в SRS")}</p>
-      <button class="primary" id="finish">Дальше</button>
+          ? tr("В SRS добавлено карточек: {n}", { n: done.cards_created }) : tr("Карточки уже в SRS"))}</p>
+      <button class="primary" id="finish">${tr("Дальше")}</button>
     </div>`;
   animateIn(playerBody);
   confetti();
   await waitClick($("#finish", playerBody));
   closePlayer();
+  await checkAchievements(true);   // мог открыться кандзи/ворота/веха — салютуем
 }
 
 /* ---------- SRS-сессия ---------- */
@@ -1537,7 +1609,7 @@ async function startReview() {
       if (token !== sessionToken) return;
       const item = data.items[i];
       setProgress(done / Math.max(done + remaining, 1));
-      $("#player-counter").textContent = `${done} · осталось ~${Math.max(remaining - i, 1)}`;
+      $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(remaining - i, 1) });
 
       const res = await runExercise(item.exercise, async (correct, durationMs, usedHint) => {
         const verdict = await api.post("/api/srs/answer", {
@@ -1565,38 +1637,41 @@ async function startReview() {
   playerBody.classList.add("center-step");   // итог — по центру
   playerBody.innerHTML = `
     <div class="result">
-      <div class="mark">${done ? "完" : "休"}</div>
-      <h2>${done ? "Очередь разобрана" : "Повторять пока нечего"}</h2>
-      <p>${done ? `Карточек: ${done} · точность ${Math.round(okCount / done * 100)}%` :
-        "Пройдите урок, чтобы добавить карточки в SRS."}</p>
-      <button class="primary" id="finish">Готово</button>
+      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>`
+             : `<div class="mark">休</div>`}
+      <h2>${done ? tr("Очередь разобрана") : tr("Повторять пока нечего")}</h2>
+      <p>${done ? tr("Карточек: {n} · точность {p}%", { n: done, p: Math.round(okCount / done * 100) }) :
+        tr("Пройдите урок, чтобы добавить карточки в SRS.")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);
   if (done >= 10) confetti();
   await waitClick($("#finish", playerBody));
   closePlayer();
+  await checkAchievements(true);   // повторения могли открыть веху памяти/серии
 }
 
 /* ---------- Вкладка «Повторение» ---------- */
 async function renderReviewTab() {
-  view.innerHTML = `<div class="empty">Загрузка…</div>`;
+  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
   const o = await api.get("/api/overview");
   setStreakPill(o.streak);
   Romaji.syncProgress(o.courses);
   const total = o.srs.due + o.srs.new_available;
   const estMin = Math.max(1, Math.round(total * 0.15));
   view.innerHTML = `
+    <div class="review-wrap">
     <div class="card">
-      <h2>Очередь на сегодня</h2>
+      <h2>${tr("Очередь на сегодня")}</h2>
       <div class="stat-trio">
-        <div><b>${o.srs.due}</b><span>по расписанию</span></div>
-        <div><b>${o.srs.new_available}</b><span>${plural(o.srs.new_available, ["новая", "новые", "новых"])}</span></div>
-        <div><b>${o.srs.reviews_done_today}</b><span>повторено сегодня</span></div>
+        <div><b>${o.srs.due}</b><span>${tr("по расписанию")}</span></div>
+        <div><b>${o.srs.new_available}</b><span>${tr(plural(o.srs.new_available, ["новая", "новые", "новых"]))}</span></div>
+        <div><b>${o.srs.reviews_done_today}</b><span>${tr("повторено сегодня")}</span></div>
       </div>
       ${total
-        ? `<button class="primary mt" id="btn-start">Начать сессию · ${total} · ≈${estMin} мин</button>`
-        : `<p class="note center mt">Очередь пуста — всё повторено! Новые карточки появятся
-           после уроков, повторения — по расписанию FSRS.</p>`}
+        ? `<button class="primary mt" id="btn-start">${tr("Начать сессию · {n} · ≈{m} мин", { n: total, m: estMin })}</button>`
+        : `<p class="note center mt">${tr("Очередь пуста — всё повторено! Новые карточки появятся\n           после уроков, повторения — по расписанию FSRS.")}</p>`}
+    </div>
     </div>`;
   $("#btn-start")?.addEventListener("click", startReview);
 }
@@ -1622,84 +1697,80 @@ function optionList(values, current, label) {
 }
 
 async function renderStats() {
-  view.innerHTML = `<div class="empty">Загрузка…</div>`;
+  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
   const [s, ach] = await Promise.all([
     api.get("/api/stats"), api.get("/api/achievements")]);
   const c = s.cards;
   const hasActivity = s.activity.some(d => d.reviews > 0);
   view.innerHTML = `
+    <div class="stats-wrap">
     <div class="card">
-      <h2>Мои карточки</h2>
+      <h2>${tr("Мои карточки")}</h2>
       <div class="stat-trio">
-        <div><b>${c.review}</b><span>в долгой памяти</span></div>
-        <div><b>${c.learning + c.relearning}</b><span>ещё учатся</span></div>
-        <div><b>${s.retention.week ?? "—"}${s.retention.week != null ? "%" : ""}</b><span>помню при повторении</span></div>
+        <div><b>${c.review}</b><span>${tr("в долгой памяти")}</span></div>
+        <div><b>${c.learning + c.relearning}</b><span>${tr("ещё учатся")}</span></div>
+        <div><b>${s.retention.week ?? "—"}${s.retention.week != null ? "%" : ""}</b><span>${tr("помню при повторении")}</span></div>
       </div>
-      <p class="note mt">«В долгой памяти» — карточки с интервалом от нескольких дней.
-      Последняя цифра — доля верных ответов на повторениях за неделю (цель — ${Math.round(s.settings.desired_retention * 100)}%).</p>
+      <p class="note mt">${tr("«В долгой памяти» — карточки с интервалом от нескольких дней.\n      Последняя цифра — доля верных ответов на повторениях за неделю (цель — {p}%).", { p: Math.round(s.settings.desired_retention * 100) })}</p>
     </div>
 
     <div class="card">
-      <h2>Достижения · ${ach.unlocked}/${ach.total}</h2>
+      <h2>${tr("Достижения · {a}/{b}", { a: ach.unlocked, b: ach.total })}</h2>
       <div class="ach-grid">
         ${ach.items.map(a => `
           <div class="ach ${a.unlocked ? "on " + a.tier : "off"}" title="${a.desc}">
-            <div class="ach-ico">${a.unlocked ? a.icon : "🔒"}</div>
+            <div class="ach-ico">${Art.tile(a)}</div>
             <div class="ach-t">${a.title}</div>
           </div>`).join("")}
       </div>
     </div>
     <div class="card">
-      <h2>Сколько я повторял · 14 дней</h2>
+      <h2>${tr("Сколько я повторял · 14 дней")}</h2>
       ${hasActivity
         ? barChart(s.activity, "reviews", "date", "", d =>
-            `${fmtDay(d.date)}: ${d.reviews}${d.accuracy != null ? ` · точность ${d.accuracy}%` : ""}`)
-        : `<p class="note">Пока нет данных — пройдите первую SRS-сессию.</p>`}
+            `${fmtDay(d.date)}: ${d.reviews}${d.accuracy != null ? ` · ${tr("точность {p}%", { p: d.accuracy })}` : ""}`)
+        : `<p class="note">${tr("Пока нет данных — пройдите первую SRS-сессию.")}</p>`}
     </div>
     <div class="card">
-      <h2>Что меня ждёт · 14 дней</h2>
+      <h2>${tr("Что меня ждёт · 14 дней")}</h2>
       ${barChart(s.forecast, "count", "date", "fc", (d, i) =>
-        `${i === 0 ? "сегодня" : fmtDay(d.date)}: ${d.count}`)}
-      <p class="note">Сколько карточек придёт на повторение в каждый день —
-      если заниматься ежедневно, горка не вырастет.</p>
+        `${i === 0 ? tr("сегодня") : fmtDay(d.date)}: ${d.count}`)}
+      <p class="note">${tr("Сколько карточек придёт на повторение в каждый день —\n      если заниматься ежедневно, горка не вырастет.")}</p>
     </div>
     ${s.hardest.length ? `
     <div class="card">
-      <h2>Трудные знаки</h2>
+      <h2>${tr("Трудные знаки")}</h2>
       <div class="hardest-list">
         ${s.hardest.map(h => `<span class="chip ${h.is_leech ? "leech" : ""}">${h.char}<small>${h.romaji} · ${h.lapses}</small></span>`).join("")}
       </div>
-      <p class="note mt">Цифра — сколько раз знак забывался. Обведённые — «пиявки»:
-      им в сессии показывается мнемоника.</p>
+      <p class="note mt">${tr("Цифра — сколько раз знак забывался. Обведённые — «пиявки»:\n      им в сессии показывается мнемоника.")}</p>
     </div>` : ""}
     <div class="card">
-      <h2>Лимиты SRS</h2>
+      <h2>${tr("Лимиты SRS")}</h2>
       <div class="srs-limits">
-        <label>Новых карточек в день
+        <label>${tr("Новых карточек в день")}
           <select id="srs-new">${optionList([0, 4, 8, 12, 16, 20, 25, 30], s.settings.new_per_day, v => v)}</select>
         </label>
-        <label>Повторений в день (макс.)
+        <label>${tr("Повторений в день (макс.)")}
           <select id="srs-rev">${optionList([50, 100, 150, 250, 400, 600], s.settings.reviews_per_day, v => v)}</select>
         </label>
-        <label>Целевое удержание
+        <label>${tr("Целевое удержание")}
           <select id="srs-ret">${optionList([0.85, 0.9, 0.92, 0.95], s.settings.desired_retention, v => Math.round(v * 100) + "%")}</select>
         </label>
       </div>
-      <p class="note mt">Выше удержание — крепче помните, но больше повторений в день.
-      Меньше новых — спокойнее темп. Применяется со следующей сессии.</p>
-      <p class="note" id="srs-saved" style="display:none">Сохранено ✓</p>
+      <p class="note mt">${tr("Выше удержание — крепче помните, но больше повторений в день.\n      Меньше новых — спокойнее темп. Применяется со следующей сессии.")}</p>
+      <p class="note" id="srs-saved" style="display:none">${tr("Сохранено ✓")}</p>
     </div>
     <div class="card">
-      <h2>Резервная копия</h2>
-      <p class="note" style="margin-top:0">Весь прогресс — карточки, журнал ответов,
-      пройденные уроки и настройки — хранится локально в одном файле. Скачайте копию,
-      чтобы перенести его на другой компьютер или вернуть после переустановки.</p>
+      <h2>${tr("Резервная копия")}</h2>
+      <p class="note" style="margin-top:0">${tr("Весь прогресс — карточки, журнал ответов,\n      пройденные уроки и настройки — хранится локально в одном файле. Скачайте копию,\n      чтобы перенести его на другой компьютер или вернуть после переустановки.")}</p>
       <div class="data-actions">
-        <button class="ghost" id="data-export">Скачать копию</button>
-        <button class="ghost" id="data-import">Восстановить из копии…</button>
+        <button class="ghost" id="data-export">${tr("Скачать копию")}</button>
+        <button class="ghost" id="data-import">${tr("Восстановить из копии…")}</button>
       </div>
       <input type="file" id="data-file" accept=".db,application/octet-stream" hidden>
       <p class="note" id="data-msg" style="display:none"></p>
+    </div>
     </div>`;
   // Лимиты SRS — серверные настройки: меняем по месту, сохраняем сразу
   const srsHint = (msg, ok) => {
@@ -1711,8 +1782,8 @@ async function renderStats() {
     if (ok) srsHint._t = setTimeout(() => { h.style.display = "none"; }, 1600);
   };
   const saveSrs = async patch => {
-    try { await api.post("/api/settings", patch); srsHint("Сохранено ✓", true); }
-    catch (e) { srsHint("Не удалось сохранить: " + e.message, false); }
+    try { await api.post("/api/settings", patch); srsHint(tr("Сохранено ✓"), true); }
+    catch (e) { srsHint(tr("Не удалось сохранить: {e}", { e: e.message }), false); }
   };
   $("#srs-new").addEventListener("change", e => saveSrs({ new_per_day: +e.target.value }));
   $("#srs-rev").addEventListener("change", e => saveSrs({ reviews_per_day: +e.target.value }));
@@ -1727,36 +1798,31 @@ async function renderStats() {
     dataFile.value = "";                       // позволить повторный выбор того же файла
     if (!file) return;
     const ok = await confirmDialog(
-      "Восстановление заменит весь текущий прогресс данными из копии. " +
-      "Перед заменой рядом сохраняется страховочный michi.db.bak. Продолжить?",
-      "Восстановить");
+      tr("Восстановление заменит весь текущий прогресс данными из копии. " +
+      "Перед заменой рядом сохраняется страховочный michi.db.bak. Продолжить?"),
+      tr("Восстановить"));
     if (!ok) return;
     const msg = $("#data-msg");
     msg.classList.remove("err");
     msg.style.display = "block";
-    msg.textContent = "Восстановление…";
+    msg.textContent = tr("Восстановление…");
     try {
       const res = await fetch("/api/import", { method: "POST", body: file });
       if (!res.ok) throw await apiError(res);
       const r = await res.json();
-      msg.textContent = `Готово: ${r.cards} карточек, ${r.reviews} ответов. Перезагрузка…`;
+      msg.textContent = tr("Готово: {c} карточек, {r} ответов. Перезагрузка…", { c: r.cards, r: r.reviews });
       setTimeout(() => location.reload(), 1000);
     } catch (e) {
       msg.classList.add("err");
-      msg.textContent = "Не удалось восстановить: " + e.message;
+      msg.textContent = tr("Не удалось восстановить: {e}", { e: e.message });
     }
   });
 
-  // Поздравляем с новыми достижениями (диф против ранее показанных)
-  const seen = new Set(JSON.parse(localStorage.getItem("michi_ach_seen") || "[]"));
-  const nowUnlocked = ach.items.filter(a => a.unlocked).map(a => a.id);
-  const fresh = nowUnlocked.filter(id => !seen.has(id));
-  localStorage.setItem("michi_ach_seen", JSON.stringify(nowUnlocked));
-  if (fresh.length && seen.size) {  // не салютуем при самом первом заходе
-    confetti();
-    Haptics.good();
-  }
+  // Поздравляем с новыми достижениями оверлеем (общий путь — checkAchievements)
+  checkAchievements(true, ach);
 }
 
 /* ---------- Старт ---------- */
+applyI18n();                // перевод статической разметки (навигация, настройки)
+checkAchievements(false);   // тихо засеять базу «увиденных» — без салюта на старте
 show("today");
