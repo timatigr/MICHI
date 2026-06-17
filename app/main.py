@@ -510,6 +510,32 @@ def settings_update(patch: SrsSettingsPatch):
         conn.close()
 
 
+# ---------- UI-настройки клиента (тема/язык/озвучка/цель/…) ----------
+# Зеркало localStorage в БД: настройки переносятся на другое устройство и
+# попадают в резервную копию (раньше бэкап покрывал только SRS). Источник истины
+# на клиенте — localStorage; сюда он пишет сквозным зеркалированием при изменении
+# и подтягивает на старте (после импорта/на новом устройстве).
+
+@app.get("/api/prefs")
+def prefs_get():
+    conn = db.connect()
+    try:
+        return db.get_ui_prefs(conn)
+    finally:
+        conn.close()
+
+
+@app.post("/api/prefs")
+def prefs_set(patch: dict[str, str | None]):
+    conn = db.connect()
+    try:
+        for key, value in patch.items():
+            db.set_ui_pref(conn, key, value)   # неизвестные ключи отбрасываются
+        return db.get_ui_prefs(conn)
+    finally:
+        conn.close()
+
+
 # ---------- Достижения ----------
 
 @app.get("/api/achievements")

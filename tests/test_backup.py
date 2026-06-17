@@ -70,6 +70,52 @@ def test_restore_writes_safety_backup(temp_db, tmp_path):
     assert bak.exists() and db.is_michi_db(str(bak))
 
 
+def test_ui_prefs_survive_backup_roundtrip(temp_db, tmp_path):
+    """UI-настройки лежат в той же БД → бэкап их переносит (раньше — только SRS)."""
+    c = temp_db()
+    with c:
+        c.execute("INSERT INTO ui_prefs(key, value) VALUES ('michi_theme', 'dark')")
+        c.execute("INSERT INTO ui_prefs(key, value) VALUES ('michi_lang', 'en')")
+    c.close()
+    snap = str(tmp_path / "snap.db")
+    db.backup_to(snap)
+
+    c = temp_db()                              # стираем живые настройки
+    with c:
+        c.execute("DELETE FROM ui_prefs")
+    c.close()
+
+    db.restore_from(snap)
+    c = temp_db()
+    prefs = {r["key"]: r["value"] for r in c.execute("SELECT key, value FROM ui_prefs")}
+    c.close()
+    assert prefs == {"michi_theme": "dark", "michi_lang": "en"}
+
+
+def test_restore_old_backup_recreates_ui_prefs(temp_db, tmp_path):
+    """Старая копия (без ui_prefs) восстанавливается, а таблица доукомплектовывается
+    схемой — иначе /api/prefs упёрся бы в её отсутствие до перезапуска сервера."""
+    old = str(tmp_path / "old.db")
+    oc = sqlite3.connect(old)
+    with oc:
+        oc.execute("CREATE TABLE srs_cards (id INTEGER PRIMARY KEY, item_type TEXT, "
+                   "item_id TEXT, fsrs TEXT, state INTEGER, reps INTEGER DEFAULT 0)")
+        oc.execute("CREATE TABLE reviews (id INTEGER PRIMARY KEY, card_id INTEGER, "
+                   "reviewed_at TEXT, rating INTEGER)")
+        oc.execute("CREATE TABLE lesson_progress (lesson_id TEXT PRIMARY KEY)")
+        oc.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")
+    oc.close()
+    assert db.is_michi_db(old)                 # старый бэкап остаётся валидным
+
+    db.restore_from(old)
+
+    raw = sqlite3.connect(db.DB_PATH)          # без SCHEMA — проверяем сам файл
+    tables = {r[0] for r in raw.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    raw.close()
+    assert "ui_prefs" in tables
+
+
 def test_is_michi_db_rejects_non_sqlite(tmp_path):
     junk = tmp_path / "x.db"
     junk.write_bytes(b"definitely not a database")

@@ -50,6 +50,13 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- UI-настройки клиента (тема/язык/озвучка/цель/…). Зеркало localStorage,
+-- чтобы настройки переносились между устройствами и попадали в бэкап.
+CREATE TABLE IF NOT EXISTS ui_prefs (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 DEFAULT_SETTINGS = {
@@ -94,6 +101,35 @@ def set_setting(conn, key, value):
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, json.dumps(value)),
         )
+
+
+# ---------- UI-настройки клиента (зеркало localStorage) ----------
+# Значения хранятся как есть (строки localStorage; michi_tts/haptics — JSON-строки).
+# Аллой-лист защищает таблицу от мусора и фиксирует, что именно синхронизируется.
+UI_PREF_KEYS = {
+    "michi_theme", "michi_lang", "michi_tts", "michi_haptics",
+    "michi_daily_goal", "michi_romaji", "michi_onboarded",
+}
+
+
+def get_ui_prefs(conn):
+    return {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM ui_prefs")}
+
+
+def set_ui_pref(conn, key, value):
+    """value: строка (записать/обновить) или None (удалить). Неизвестные ключи
+    игнорируются — это не общий key-value стор."""
+    if key not in UI_PREF_KEYS:
+        return
+    with conn:
+        if value is None:
+            conn.execute("DELETE FROM ui_prefs WHERE key = ?", (key,))
+        else:
+            conn.execute(
+                "INSERT INTO ui_prefs(key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(value)),
+            )
 
 
 # ---------- Резервная копия (бэкап/восстановление прогресса) ----------
@@ -142,6 +178,13 @@ def restore_from(src_path):
             incoming.backup(live)          # перезаписываем живую базу копией
         finally:
             incoming.close()
+        # Копия может быть старее текущей схемы (напр. без ui_prefs) — точечно
+        # доукомплектовываем таблицы, добавленные после появления бэкапов (только
+        # CREATE TABLE: re-run всей SCHEMA пересоздавал бы и индексы, а индекс на
+        # колонку, которой нет в древней копии, упал бы). Иначе /api/prefs упёрся
+        # бы в отсутствующую таблицу до перезапуска сервера.
+        live.execute("CREATE TABLE IF NOT EXISTS ui_prefs ("
+                     "key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         cards = live.execute("SELECT COUNT(*) FROM srs_cards").fetchone()[0]
         reviews = live.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
     finally:
