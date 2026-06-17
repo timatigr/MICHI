@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 
 from fsrs import Card, Rating, Scheduler, State
 
+from .content.registry import item_exists
+
 LEECH_LAPSES = 6
 # Дефолтные пороги авто-оценки, пока мало собственной статистики (мс).
 # У письма свой темп — пороги считаются раздельно по типам упражнений.
@@ -54,6 +56,22 @@ def create_cards(conn, item_type, item_ids):
             if cur.rowcount:
                 created.append(item_id)
     return created
+
+
+def remove_orphans(conn):
+    """Удалить «осиротевшие» карточки (item_id больше не резолвится в контент)
+    вместе с их записями в журнале. Возвращает число удалённых карточек.
+
+    НЕ вызывается автоматически: потеря прогресса необратима, а в обычной работе
+    движок такие карточки и так игнорирует (counts/get_queue/forecast их не
+    считают). Это ручная очистка — когда контент удалён осознанно и насовсем."""
+    rows = conn.execute("SELECT id, item_type, item_id FROM srs_cards").fetchall()
+    orphans = [(r["id"],) for r in rows if not item_exists(r["item_type"], r["item_id"])]
+    if orphans:
+        with conn:
+            conn.executemany("DELETE FROM reviews WHERE card_id = ?", orphans)
+            conn.executemany("DELETE FROM srs_cards WHERE id = ?", orphans)
+    return len(orphans)
 
 
 def _auto_thresholds(conn, exercise_type):
@@ -171,6 +189,9 @@ def get_queue(conn, settings, limit=30):
         "ORDER BY due_at LIMIT 500",
         (horizon,),
     ).fetchall()
+    # Осиротевшие карточки (item_id больше не резолвится) пропускаем — не подаём
+    # их в сессию (review_exercise вернул бы None) и не даём перекосить счётчики.
+    due = [r for r in due if item_exists(r["item_type"], r["item_id"])]
     # Просроченные — по возрастанию вероятности вспоминания (риск забывания)
     due = sorted(due, key=lambda r: _retrievability(scheduler, r))
 
@@ -180,11 +201,12 @@ def get_queue(conn, settings, limit=30):
     # Новые карточки в пределах дневного лимита
     new_left = max(int(settings["new_per_day"]) - new_introduced_today(conn), 0)
     slots = max(limit - len(queue), 0)
-    if new_left and slots:
+    need = min(new_left, slots)
+    if need:
         fresh = conn.execute(
-            "SELECT * FROM srs_cards WHERE reps = 0 ORDER BY id LIMIT ?",
-            (min(new_left, slots),),
+            "SELECT * FROM srs_cards WHERE reps = 0 ORDER BY id LIMIT 500"
         ).fetchall()
+        fresh = [r for r in fresh if item_exists(r["item_type"], r["item_id"])][:need]
         queue.extend(fresh)
 
     # Перемешивание подачи (4.4), родственные знаки не идут подряд
@@ -201,13 +223,17 @@ def counts(conn, settings):
     # лимите повторений сессия не отдаст просроченные карточки, а счётчик их
     # показывал бы.
     horizon = (_now() + LEARNING_LOOKAHEAD).isoformat()
-    due_count = conn.execute(
-        "SELECT COUNT(*) AS c FROM srs_cards WHERE reps > 0 AND due_at <= ?",
+    # Считаем только резолвимые карточки — иначе «due»/«новые» на кнопке обещали
+    # бы осиротевшие карточки, которых сессия не покажет (см. get_queue).
+    due_rows = conn.execute(
+        "SELECT item_type, item_id FROM srs_cards WHERE reps > 0 AND due_at <= ?",
         (horizon,),
-    ).fetchone()["c"]
-    new_total = conn.execute(
-        "SELECT COUNT(*) AS c FROM srs_cards WHERE reps = 0"
-    ).fetchone()["c"]
+    ).fetchall()
+    due_count = sum(1 for r in due_rows if item_exists(r["item_type"], r["item_id"]))
+    new_rows = conn.execute(
+        "SELECT item_type, item_id FROM srs_cards WHERE reps = 0"
+    ).fetchall()
+    new_total = sum(1 for r in new_rows if item_exists(r["item_type"], r["item_id"]))
     done_today = reviews_done_today(conn)
     reviews_left = max(int(settings["reviews_per_day"]) - done_today, 0)
     new_left_today = max(int(settings["new_per_day"]) - new_introduced_today(conn), 0)
@@ -222,10 +248,13 @@ def counts(conn, settings):
 def forecast(conn, days=14):
     """Сколько карточек станет due в каждый из ближайших дней."""
     rows = conn.execute(
-        "SELECT date(due_at, 'localtime') AS d, COUNT(*) AS c FROM srs_cards "
-        "WHERE reps > 0 GROUP BY date(due_at, 'localtime')"
+        "SELECT item_type, item_id, date(due_at, 'localtime') AS d FROM srs_cards "
+        "WHERE reps > 0"
     ).fetchall()
-    by_date = {r["d"]: r["c"] for r in rows}
+    by_date = {}
+    for r in rows:                              # осиротевшие карточки не учитываем
+        if item_exists(r["item_type"], r["item_id"]):
+            by_date[r["d"]] = by_date.get(r["d"], 0) + 1
     today = _local_today()
     out = []
     backlog = sum(c for d, c in by_date.items() if d and d < today.isoformat())

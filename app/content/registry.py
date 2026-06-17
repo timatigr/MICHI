@@ -139,6 +139,26 @@ def srs_items_for_lesson(lesson):
     return [("kana", c) for c in lesson["kana"]]
 
 
+def item_exists(item_type, item_id):
+    """Резолвится ли SRS-карточка (item_type, item_id) в существующий контент.
+
+    Защита от «осиротевших» карточек: если знак/слово/кандзи/точку переименовали
+    или убрали в новой версии, старые карточки в БД пользователя больше не
+    резолвятся. Движок по этому предикату не считает их просроченными и не подаёт
+    в сессию (иначе очередь обещала бы больше, чем способна показать, а сама
+    карточка никогда бы не повторилась). item_type карточек письма/чтения кандзи —
+    kanji_meaning/kanji_reading/kanji_writing; слова — vocab_jp_ru/vocab_ru_jp."""
+    if item_type == "kana":
+        return item_id in KANA_BY_CHAR
+    if item_type.startswith("kanji"):
+        return item_id in KANJI_BY_CHAR
+    if item_type.startswith("vocab"):
+        return item_id in VOCAB_BY_ID
+    if item_type == "grammar":
+        return item_id in GRAMMAR_BY_ID
+    return False
+
+
 def gate_items(lesson):
     """SRS-элементы всех уроков юнита, которые проверяет тест-ворота."""
     items = []
