@@ -4,8 +4,8 @@ from app.content.registry import (
     COURSES, GRAMMAR, KANA, KANJI_BY_CHAR, LESSON_BY_ID, VOCAB,
 )
 from app.exercises import (
-    dictation, grammar_cloze, make_lesson_steps, review_exercise, vocab_input,
-    vocab_match, word_kanji,
+    dictation, grammar_cloze, make_lesson_steps, review_exercise, vocab_choice,
+    vocab_input, vocab_match, vocab_reverse_choice, word_kanji,
 )
 
 
@@ -48,6 +48,21 @@ def test_input_exercises_accept_kana_and_romaji():
         norm = w["romaji"].lower().replace(" ", "")
         assert w["kana"] in ex["accept"]
         assert norm in ex["accept"]
+
+
+def test_choice_options_never_duplicate_the_answer():
+    """Варианты выбора уникальны и верный вариант — это перевод/запись слова.
+    Ловит коллизию у слов-дублей (いい заведено как существ. и как い-прил.):
+    дистрактор не должен совпасть с ответом, иначе две одинаковые кнопки и
+    «неверный» правильный вариант. Генерация рандомная — гоняем несколько раз."""
+    for w in VOCAB:
+        for _ in range(8):
+            c = vocab_choice(w)
+            assert len(c["options"]) == len(set(c["options"])), f"{w['id']}: {c['options']}"
+            assert c["options"][c["answer"]] == w["ru"]
+            r = vocab_reverse_choice(w)
+            assert len(r["options"]) == len(set(r["options"])), f"{w['id']}: {r['options']}"
+            assert r["options"][r["answer"]] == w["kana"]
 
 
 def test_dictation_has_offline_fallback():

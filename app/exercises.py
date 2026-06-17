@@ -79,7 +79,17 @@ def _kana_distractors(char, n=3):
 
 
 def _with_options(correct, distractors):
-    options = [correct] + distractors
+    # Дистракторы, совпадающие с верным ответом по значению, дали бы две
+    # одинаковые кнопки (а «неверный» правильный вариант засчитался бы ошибкой).
+    # Это случается, когда два разных элемента делят перевод/запись — напр.
+    # いい заведено и как существ., и как い-прил. Отсекаем такие и дубли между собой.
+    seen = {correct}
+    uniq = []
+    for d in distractors:
+        if d not in seen:
+            seen.add(d)
+            uniq.append(d)
+    options = [correct] + uniq
     random.shuffle(options)
     return options, options.index(correct)
 
@@ -187,9 +197,18 @@ def kana_twins(group, rounds=8):
 # ---------- Лексика (раздел 5.2) ----------
 
 def _word_options(word, key, n=3):
-    pool = [w[key] for w in VOCAB if w["id"] != word["id"]]
+    # Исключаем не только само слово, но и любые с тем же значением/записью:
+    # иначе у слов-дублей (напр. いい) дистрактор совпал бы с верным ответом.
+    target = word[key]
+    pool = [w[key] for w in VOCAB if w["id"] != word["id"] and w[key] != target]
     random.shuffle(pool)
-    return pool[:n]
+    out = []
+    for v in pool:
+        if v not in out:
+            out.append(v)
+        if len(out) == n:
+            break
+    return out
 
 
 def vocab_choice(word):
@@ -356,6 +375,7 @@ def word_kanji(example):
     return {"type": "word_kanji", "item_id": answer,
             "prompt": {"text": example["r"], "tts": None, "style": "jp-sentence"},
             "question": f"«{example['ru']}» — запишите кандзи",
+            "question_i18n": {"key": "«{x}» — запишите кандзи", "vars": {"x": example["ru"]}},
             "options": options, "answer": idx,
             "options_are_kana": True, "answer_tts": example["r"]}
 
@@ -468,6 +488,8 @@ def verb_conjugation(verb, form):
     return {"type": "verb_conjugation", "item_id": verb["dict"],
             "prompt": {"text": verb["dict"], "tts": None, "style": "jp"},
             "question": f"«{verb['ru']}» → {VERB_FORM_LABEL[form]}",
+            "question_i18n": {"key": "«{v}» → {f}",
+                              "vars": {"v": verb["ru"], "f": VERB_FORM_LABEL[form]}},
             "options": options, "answer": idx,
             "options_are_kana": True, "answer_tts": answer}
 

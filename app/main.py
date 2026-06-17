@@ -19,8 +19,9 @@ from starlette.background import BackgroundTask
 
 from . import ai_tutor, db, gamification, srs_engine, tts
 from .content.registry import (
-    COURSES, GATE_PASS, GRAMMAR_UNITS, KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER,
-    LESSONS, VOCAB_UNITS, srs_items_for_lesson,
+    COURSES, GATE_PASS, GRAMMAR_BY_ID, GRAMMAR_UNITS, KANA_BY_CHAR, KANJI_BY_CHAR,
+    KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_BY_ID, VOCAB_UNITS,
+    srs_items_for_lesson,
 )
 from .exercises import item_info, make_lesson_steps, review_exercise
 
@@ -520,6 +521,86 @@ def achievements():
         return data
     finally:
         conn.close()
+
+
+# ---------- Справочник изученного («Словарь») ----------
+# Все элементы, попавшие в SRS (т.е. введённые на уроках), свёрнутые из карточек
+# в логические элементы (слово = 2 карточки, кандзи = 3) и сгруппированные по
+# курсам. Экран для повторения по запросу — в отличие от очереди SRS по графику.
+_LEARNED_TITLES = {"hiragana": "Хирагана", "katakana": "Катакана", "n5": "Слова N5",
+                   "kanji": "Кандзи", "grammar": "Грамматика"}
+_LEARNED_ORDER = ("hiragana", "katakana", "n5", "kanji", "grammar")
+
+
+def _learned_display(item_type, item_id):
+    """(course, {title, sub, tts, extra}) для элемента — или None, если незнаком."""
+    if item_type == "kana":
+        info = KANA_BY_CHAR.get(item_id)
+        if info:
+            course = "hiragana" if info.get("script") == "h" else "katakana"
+            return course, {"title": item_id, "sub": info["romaji"], "tts": item_id}
+    elif item_type.startswith("kanji"):
+        k = KANJI_BY_CHAR.get(item_id)
+        if k:
+            return "kanji", {"title": k["char"], "sub": k["meaning"],
+                             "tts": k["reading"], "extra": k["reading"]}
+    elif item_type.startswith("vocab"):
+        w = VOCAB_BY_ID.get(item_id)
+        if w:
+            return "n5", {"title": w["kana"], "sub": w["ru"],
+                          "tts": w["kana"], "extra": w["romaji"]}
+    elif item_type == "grammar":
+        p = GRAMMAR_BY_ID.get(item_id)
+        if p:
+            return "grammar", {"title": p["title"], "sub": p["meaning"],
+                               "tts": None, "extra": p.get("structure")}
+    return None
+
+
+@app.get("/api/learned")
+def learned():
+    conn = db.connect()
+    try:
+        rows = conn.execute(
+            "SELECT item_type, item_id, state, reps, is_leech FROM srs_cards ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    groups, order = {}, {}     # course -> {item_id: agg}; course -> [item_id, ...]
+    for r in rows:
+        disp = _learned_display(r["item_type"], r["item_id"])
+        if disp is None:
+            continue
+        course, fields = disp
+        bucket = groups.setdefault(course, {})
+        a = bucket.get(r["item_id"])
+        if a is None:
+            a = bucket[r["item_id"]] = {"disp": fields, "total": 0,
+                                        "reviewed": 0, "reps": 0, "leech": False}
+            order.setdefault(course, []).append(r["item_id"])
+        a["total"] += 1
+        a["reps"] += r["reps"]
+        if r["reps"] > 0 and r["state"] == 2:   # state 2 = review (в долгой памяти)
+            a["reviewed"] += 1
+        if r["is_leech"]:
+            a["leech"] = True
+
+    def state_of(a):
+        if a["reps"] == 0:
+            return "new"
+        return "review" if a["reviewed"] >= a["total"] else "learning"
+
+    out = []
+    for cid in _LEARNED_ORDER:
+        ids = order.get(cid)
+        if not ids:
+            continue
+        items = [{**groups[cid][iid]["disp"], "state": state_of(groups[cid][iid]),
+                  "leech": groups[cid][iid]["leech"]} for iid in ids]
+        out.append({"id": cid, "title": _LEARNED_TITLES[cid],
+                    "count": len(items), "items": items})
+    return {"courses": out}
 
 
 # ---------- Резервная копия данных ----------

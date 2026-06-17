@@ -186,10 +186,28 @@ function mountExplain(host, ctx) {
 const escapeHtml = s => String(s == null ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/* Локализация составного вопроса: шаблон и каждая подстановка переводятся
+   отдельно (word_kanji / verb_conjugation). В RU вернёт исходную фразу. */
+function qtr(qi) {
+  const vars = {};
+  for (const [k, v] of Object.entries(qi.vars || {})) vars[k] = tr(v);
+  return tr(qi.key, vars);
+}
+
+/* Интервал до следующего показа — считаем на клиенте из next_due (зеркало
+   srs_engine._humanize), чтобы число и единицы переводились через tr. */
+function humanizeInterval(secs) {
+  secs = Math.max(secs, 0);
+  if (secs < 90) return tr("через минуту");
+  if (secs < 3600) return tr("через {n} мин", { n: Math.round(secs / 60) });
+  if (secs < 86400 * 1.5) return tr("через {n} ч", { n: Math.round(secs / 3600) });
+  return tr("через {n} дн", { n: Math.round(secs / 86400) });
+}
+
 const speak = text => TTS.speak(text);
 function ttsButton(text) {
   if (!TTS.available) return "";
-  return `<button class="tts-btn" data-tts="${text}">🔊 послушать</button>`;
+  return `<button class="tts-btn" data-tts="${text}">🔊 ${tr("послушать")}</button>`;
 }
 
 /* ---------- Тактильный отклик интерфейса: звук нажатия + вибрация ----------
@@ -307,7 +325,7 @@ function fillVoiceSelect() {
   vvHint.style.display = "none";
   if ($("#set-source").value === "neural") {
     if (!TTS.neuralVoices.length) {
-      warn.textContent = "Нейроголос недоступен (нужен интернет). Используйте голос браузера.";
+      warn.textContent = tr("Нейроголос недоступен (нужен интернет). Используйте голос браузера.");
       warn.style.display = "block";
     } else if (!TTS.neuralVoices.some(v => v.id.startsWith("vv:"))) {
       vvHint.style.display = "block";
@@ -318,7 +336,7 @@ function fillVoiceSelect() {
   } else {
     TTS.refreshBrowser();
     if (!TTS.browserVoices.length) {
-      warn.textContent = "В браузере нет японских голосов. Установите: Параметры Windows → Время и язык → Речь → Добавить голоса → «Японский».";
+      warn.textContent = tr("В браузере нет японских голосов. Установите: Параметры Windows → Время и язык → Речь → Добавить голоса → «Японский».");
       warn.style.display = "block";
     }
     sel.innerHTML = TTS.browserVoices.map(v =>
@@ -566,11 +584,11 @@ function celebrateOne(a) {
           <div class="ach-pop-rays"></div>
           <div class="ach-pop-disc">${Art.tile(a, true)}</div>
         </div>
-        <div class="ach-pop-tier">${TIER_LABEL[a.tier] || ""}</div>
-        <div class="ach-pop-kicker">Достижение получено</div>
-        <h3 class="ach-pop-title">${a.title}</h3>
-        <p class="ach-pop-desc">${a.desc}</p>
-        <button class="primary ach-pop-ok">Круто!</button>
+        <div class="ach-pop-tier">${tr(TIER_LABEL[a.tier] || "")}</div>
+        <div class="ach-pop-kicker">${tr("Достижение получено")}</div>
+        <h3 class="ach-pop-title">${tr(a.title)}</h3>
+        <p class="ach-pop-desc">${tr(a.desc)}</p>
+        <button class="primary ach-pop-ok">${tr("Круто!")}</button>
       </div>`;
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add("show"));
@@ -658,7 +676,7 @@ document.addEventListener("keydown", e => {
 
 /* ---------- Роутер вкладок ---------- */
 const view = $("#view");
-const renderers = { today: renderToday, lessons: renderLessons, review: renderReviewTab, stats: renderStats };
+const renderers = { today: renderToday, lessons: renderLessons, review: renderReviewTab, stats: renderStats, dict: renderDict };
 
 function show(name) {
   document.querySelectorAll("nav.tabs button").forEach(b =>
@@ -759,7 +777,7 @@ async function renderToday() {
         <div class="pi-ico jp c0">道</div>
         <div class="pi-info">
           <div class="t">${tr("Новый урок")}</div>
-          <div class="s">${next ? `${next.title} · ${next.subtitle}` : tr("Все доступные уроки пройдены")}</div>
+          <div class="s">${next ? `${tr(next.title)} · ${tr(next.subtitle)}` : tr("Все доступные уроки пройдены")}</div>
         </div>
         ${next
           ? `<button class="mini-btn indigo" id="btn-lesson">${tr("Учить")}</button>`
@@ -831,7 +849,7 @@ async function renderLessons() {
       const doneCount = g.lessons.filter(l => l.status === "completed").length;
       return `
       <div class="region-h">
-        <span class="t">${g.title}</span>
+        <span class="t">${tr(g.title)}</span>
         <span class="jp">${g.jp}</span>
         <span class="spacer"></span>
         <span class="region-progress ${doneCount === g.lessons.length ? "done" : ""}">
@@ -844,8 +862,8 @@ async function renderLessons() {
             ${l.status === "completed"
               ? `<span class="state done">✓ ${l.score != null ? Math.round(l.score * 100) + "%" : ""}</span>`
               : l.status === "locked" ? `<span class="state lock">🔒</span>` : ""}
-            <h3>${l.title}</h3>
-            <div class="tag">${l.subtitle}${l.kana_count ? ` · ${tr("{n} знаков", { n: l.kana_count })}` : ""}${l.locked_hint ? `<br>${l.locked_hint}` : ""}</div>
+            <h3>${tr(l.title)}</h3>
+            <div class="tag">${tr(l.subtitle)}${l.kana_count ? ` · ${tr("{n} знаков", { n: l.kana_count })}` : ""}${l.locked_hint ? `<br>${tr(l.locked_hint)}` : ""}</div>
           </div>`).join("")}
       </div>`;
     }).join("");
@@ -953,12 +971,12 @@ async function showIntroText(step) {
   playerBody.innerHTML = `
     <div class="intro-screen">
       ${step.icon ? `<div class="intro-ico jp c4">${step.icon}</div>` : ""}
-      <h2 class="intro-title">${step.title}</h2>
-      ${step.subtitle ? `<div class="intro-sub">${step.subtitle}</div>` : ""}
-      <p class="intro-text">${step.text}</p>
+      <h2 class="intro-title">${tr(step.title)}</h2>
+      ${step.subtitle ? `<div class="intro-sub">${tr(step.subtitle)}</div>` : ""}
+      <p class="intro-text">${tr(step.text)}</p>
     </div>
     <div class="spacer"></div>
-    <button class="primary" id="next">Начать</button>`;
+    <button class="primary" id="next">${tr("Начать")}</button>`;
   animateIn(playerBody);
   await waitClick($("#next", playerBody));
 }
@@ -968,18 +986,18 @@ async function showIntroKana(step) {
     `<span class="jp">${l.char}<small>${l.romaji}</small></span>`).join("");
   // Со штрихами — живая анимация порядка черт (2.1), иначе крупный знак
   const glyph = step.strokes
-    ? `<div class="kana-anim" id="kana-anim" data-tts="${step.char}" title="Анимация порядка черт"></div>`
+    ? `<div class="kana-anim" id="kana-anim" data-tts="${step.char}" title="${tr("Анимация порядка черт")}"></div>`
     : `<div class="big-kana ${step.char.length > 1 ? "small" : ""}" data-tts="${step.char}">${step.char}</div>`;
   playerBody.innerHTML = `
     ${glyph}
     <div class="romaji-big">${step.romaji}</div>
     ${ttsButton(step.tts)}
     ${step.derivation ? `<div class="derivation">${step.derivation}</div>` : ""}
-    ${step.mnemonic ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
-    ${step.note ? `<p class="note">${step.note}</p>` : ""}
-    ${lookalikes ? `<p class="note center">не путайте с</p><div class="lookalikes">${lookalikes}</div>` : ""}
+    ${step.mnemonic && LANG === "ru" ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
+    ${step.note ? `<p class="note">${tr(step.note)}</p>` : ""}
+    ${lookalikes ? `<p class="note center">${tr("не путайте с")}</p><div class="lookalikes">${lookalikes}</div>` : ""}
     <div class="spacer"></div>
-    <button class="primary" id="next">Запомнил</button>`;
+    <button class="primary" id="next">${tr("Запомнил")}</button>`;
   if (step.strokes) Tracing.preview($("#kana-anim", playerBody), step.strokes, 176);
   animateIn(playerBody);
   speak(step.tts);
@@ -990,11 +1008,11 @@ async function showIntroWord(step) {
   playerBody.innerHTML = `
     <div class="big-kana small" data-tts="${step.tts}">${step.kana}</div>
     <div class="romaji-big">${step.romaji}</div>
-    <div class="word-ru">${step.ru}</div>
+    <div class="word-ru">${tr(step.ru)}</div>
     ${ttsButton(step.tts)}
     ${step.note ? `<p class="note center">${step.note}</p>` : ""}
     <div class="spacer"></div>
-    <button class="primary" id="next">Запомнил</button>`;
+    <button class="primary" id="next">${tr("Запомнил")}</button>`;
   animateIn(playerBody);
   speak(step.tts);
   await waitClick($("#next", playerBody));
@@ -1003,36 +1021,36 @@ async function showIntroWord(step) {
 /* Знакомство с кандзи (6.2): порядок черт, значение, чтения он/кун, примеры */
 async function showIntroKanji(step) {
   const glyph = step.strokes
-    ? `<div class="kana-anim" id="kana-anim" data-tts="${step.tts}" title="Анимация порядка черт"></div>`
+    ? `<div class="kana-anim" id="kana-anim" data-tts="${step.tts}" title="${tr("Анимация порядка черт")}"></div>`
     : `<div class="big-kana" data-tts="${step.tts}">${step.char}</div>`;
   const on = (step.on || []).join("、");
   const kun = (step.kun || []).join("、");
   // Цветовое кодирование чтений (6.4): онъёми и кунъёми разными цветами
   const readings = `
-    ${on ? `<span class="rd on"><small>он</small>${on}</span>` : ""}
-    ${kun ? `<span class="rd kun"><small>кун</small>${kun}</span>` : ""}`;
+    ${on ? `<span class="rd on"><small>${tr("он")}</small>${on}</span>` : ""}
+    ${kun ? `<span class="rd kun"><small>${tr("кун")}</small>${kun}</span>` : ""}`;
   const examples = (step.examples || []).map(e =>
     `<button class="kanji-ex" data-tts="${e.r}">
        <span class="ex-w jp">${e.w}</span>
        <span class="ex-r jp">${e.r}</span>
-       <span class="ex-ru">${e.ru}</span></button>`).join("");
+       <span class="ex-ru">${tr(e.ru)}</span></button>`).join("");
   // Разбор на изученные компоненты (6.3): 木 + 木 = 林
   const parts = (step.components || []).map(c =>
-    `<span class="part jp" data-tts="${c.char}">${c.char}<small>${c.meaning || ""}</small></span>`
+    `<span class="part jp" data-tts="${c.char}">${c.char}<small>${c.meaning ? tr(c.meaning) : ""}</small></span>`
   ).join(`<i class="op">+</i>`);
   const components = parts
     ? `<div class="kanji-parts">${parts}<i class="op">=</i><span class="part whole jp">${step.char}</span></div>`
     : "";
   playerBody.innerHTML = `
     ${glyph}
-    <div class="kanji-meaning">${step.meaning}</div>
+    <div class="kanji-meaning">${tr(step.meaning)}</div>
     <div class="kanji-readings">${readings}</div>
     ${components}
     ${ttsButton(step.tts)}
-    ${step.mnemonic ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
+    ${step.mnemonic && LANG === "ru" ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
     ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
     <div class="spacer"></div>
-    <button class="primary" id="next">Запомнил</button>`;
+    <button class="primary" id="next">${tr("Запомнил")}</button>`;
   if (step.strokes) Tracing.preview($("#kana-anim", playerBody), step.strokes, 176);
   animateIn(playerBody);
   speak(step.tts);
@@ -1042,21 +1060,21 @@ async function showIntroKanji(step) {
 async function showIntroGrammar(step) {
   const reg = { neutral: "нейтр.", polite: "вежл.", casual: "разг.", formal: "формальн." };
   const explanation = (step.explanation || []).map(b =>
-    `<p class="g-block">${b}</p>`).join("");
+    `<p class="g-block">${tr(b)}</p>`).join("");
   const examples = (step.examples || []).map(e =>
     `<button class="kanji-ex" data-tts="${e.tts}">
        <span class="ex-w jp">${e.jp}</span>
-       <span class="ex-ru">${e.ru}</span></button>`).join("");
+       <span class="ex-ru">${tr(e.ru)}</span></button>`).join("");
   playerBody.innerHTML = `
-    <div class="big-kana jp" data-tts="${step.tts || step.title}">${step.title}</div>
+    <div class="big-kana jp" data-tts="${step.tts || step.title}">${tr(step.title)}</div>
     <div class="grammar-structure jp">${step.structure}</div>
-    <div class="kanji-meaning">${step.meaning}${step.register
-      ? ` <span class="g-register">${reg[step.register] || step.register}</span>` : ""}</div>
+    <div class="kanji-meaning">${tr(step.meaning)}${step.register
+      ? ` <span class="g-register">${tr(reg[step.register] || step.register)}</span>` : ""}</div>
     ${explanation}
-    ${step.caution ? `<div class="mnemonic">⚠ ${step.caution}</div>` : ""}
+    ${step.caution ? `<div class="mnemonic">⚠ ${tr(step.caution)}</div>` : ""}
     ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
     <div class="spacer"></div>
-    <button class="primary" id="next">Понятно</button>`;
+    <button class="primary" id="next">${tr("Понятно")}</button>`;
   animateIn(playerBody);
   await waitClick($("#next", playerBody));
 }
@@ -1096,13 +1114,13 @@ async function runGrammarCloze(ex, afterAnswer) {
            `<div class="cloze-ru">${r.ru}</div></div>`;
   };
   playerBody.innerHTML = `
-    <p class="question">${ex.question}</p>
+    <p class="question">${tr(ex.question)}</p>
     <div class="cloze-list">${ex.rows.map(rowHtml).join("")}</div>
     <div class="cloze-bank">${ex.bank.map(t =>
       `<button class="bank-tile" data-t="${t}">${t}</button>`).join("")}</div>
     <div class="feedback" id="fb"></div>
     <div class="spacer"></div>
-    <button class="primary" id="check" disabled>Проверить</button>`;
+    <button class="primary" id="check" disabled>${tr("Проверить")}</button>`;
   animateIn(playerBody);
 
   const blanks = [...playerBody.querySelectorAll(".cloze-blank")];
@@ -1149,14 +1167,14 @@ async function runGrammarCloze(ex, afterAnswer) {
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${allRight ? "ok" : "bad"}`;
   Haptics[allRight ? "good" : "bad"]();
-  fb.innerHTML = verdict(allRight, allRight ? "Все пропуски верны!" : `Верно ${ok} из ${ex.rows.length}`);
+  fb.innerHTML = verdict(allRight, allRight ? tr("Все пропуски верны!") : tr("Верно {ok} из {n}", { ok, n: ex.rows.length }));
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(allRight, durationMs, false)}</div>`;
 
   checkBtn.remove();
   if (allRight) {
     await new Promise(r => setTimeout(r, 1100));
   } else {
-    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
     await waitClick($("#next", playerBody));
   }
   return { correct: allRight, durationMs, usedHint: false };
@@ -1175,7 +1193,7 @@ async function runMatch(ex, afterAnswer) {
   const tile = (p, label, cls) =>
     `<button class="match-tile ${cls}" data-id="${p.id}">${label}</button>`;
   playerBody.innerHTML = `
-    <p class="question">${ex.question}</p>
+    <p class="question">${tr(ex.question)}</p>
     <div class="match-board">
       <div class="match-col">${shuffle(ex.pairs).map(p => tile(p, p.jp, "jp")).join("")}</div>
       <div class="match-col">${shuffle(ex.pairs).map(p => tile(p, p.ru, "")).join("")}</div>
@@ -1207,7 +1225,7 @@ async function runMatch(ex, afterAnswer) {
           const fb = $("#fb", playerBody);
           fb.className = "feedback ok";
           fb.innerHTML = verdict(mistakes === 0,
-            mistakes === 0 ? "Все пары верны!" : "Доска собрана");
+            mistakes === 0 ? tr("Все пары верны!") : tr("Доска собрана"));
           setTimeout(resolve, 750);
         }
       } else {
@@ -1231,7 +1249,7 @@ async function runMatch(ex, afterAnswer) {
 async function runChoice(ex, afterAnswer) {
   let style = ex.prompt.style ||
     (ex.type === "kana_recognition" ? "jp" : "text");
-  let question = ex.question;
+  let question = ex.question_i18n ? qtr(ex.question_i18n) : ex.question;
   // Аудио-вопрос без доступной озвучки: показываем ромадзи вместо кнопки
   if (style === "audio" && !TTS.available && ex.prompt.fallback) {
     style = "text";
@@ -1244,15 +1262,15 @@ async function runChoice(ex, afterAnswer) {
   const jpish = style === "jp" || style === "jp-sentence";
   const jpClass = style === "jp" ? "jp" : style === "jp-sentence" ? "jp jp-sentence" : "";
   const promptHtml = style === "audio"
-    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="Прослушать ещё раз">🔊</button>`
-    : `<div class="prompt-text ${jpClass}" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${ex.prompt.text}</div>` +
+    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="${tr("Прослушать ещё раз")}">🔊</button>`
+    : `<div class="prompt-text ${jpClass}" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${tr(ex.prompt.text)}</div>` +
       (!jpish && ex.prompt.tts ? ttsButton(ex.prompt.tts) : "");
   playerBody.innerHTML = `
-    <p class="question">${question}</p>
+    <p class="question">${tr(question)}</p>
     ${promptHtml}
     <div class="options">
       ${ex.options.map((o, i) =>
-        `<button data-i="${i}" class="${ex.options_are_kana ? "jp" : ""}"><span class="kbd">${i + 1}</span>${o}</button>`).join("")}
+        `<button data-i="${i}" class="${ex.options_are_kana ? "jp" : ""}"><span class="kbd">${i + 1}</span>${tr(o)}</button>`).join("")}
     </div>
     <div class="feedback" id="fb"></div>
     <div class="spacer"></div>`;
@@ -1272,7 +1290,7 @@ async function runChoice(ex, afterAnswer) {
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
   Haptics[correct ? "good" : "bad"]();
   fb.innerHTML = verdict(correct, correct ? tr("Верно") :
-    tr("Правильно: {x}", { x: `<span class="jp">${ex.options[ex.answer]}</span>` }));
+    tr("Правильно: {x}", { x: `<span class="jp">${tr(ex.options[ex.answer])}</span>` }));
   speak(ex.prompt.tts || ex.answer_tts);
 
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
@@ -1286,7 +1304,7 @@ async function runChoice(ex, afterAnswer) {
       correct_answer: ex.options[ex.answer], given_answer: ex.options[choice],
       choices: ex.options,
     });
-    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
     await waitClick($("#next", playerBody));
   }
   return { correct, durationMs, usedHint: false };
@@ -1296,7 +1314,7 @@ async function runWordBuild(ex, afterAnswer) {
   // speak_after: озвучка слова до ответа выдала бы его (тип vocab_build)
   const quiet = !!ex.speak_after;
   playerBody.innerHTML = `
-    <p class="question">${ex.question}</p>
+    <p class="question">${tr(ex.question)}</p>
     <div class="prompt-text">${ex.prompt.text}</div>
     ${quiet ? "" : ttsButton(ex.prompt.tts)}
     <div class="build-slots" id="slots"></div>
@@ -1305,7 +1323,7 @@ async function runWordBuild(ex, afterAnswer) {
     </div>
     <div class="feedback" id="fb"></div>
     <div class="spacer"></div>
-    <button class="primary" id="check" disabled>Проверить</button>`;
+    <button class="primary" id="check" disabled>${tr("Проверить")}</button>`;
   animateIn(playerBody);
   if (!quiet) speak(ex.prompt.tts);
 
@@ -1316,7 +1334,7 @@ async function runWordBuild(ex, afterAnswer) {
 
   const renderSlots = () => {
     slots.innerHTML = assembled.map((a, i) =>
-      `<span data-pos="${i}" title="Убрать">${a.tile}</span>`).join("");
+      `<span data-pos="${i}" title="${tr("Убрать")}">${a.tile}</span>`).join("");
     // Проверяем только по кнопке: автосабмит не давал исправить последнюю плитку
     checkBtn.disabled = assembled.length !== ex.answer_tokens.length;
   };
@@ -1364,7 +1382,7 @@ async function runWordBuild(ex, afterAnswer) {
       prompt: ex.question || (ex.prompt && ex.prompt.text) || "",
       correct_answer: ex.answer_tokens.join(""), given_answer: word, choices: [],
     });
-    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
     await waitClick($("#next", playerBody));
   }
   return { correct, durationMs, usedHint: false };
@@ -1379,18 +1397,18 @@ async function runInput(ex, afterAnswer) {
   // Диктант без озвучки (офлайн) деградирует к показу перевода — иначе никак
   const audioMode = isAudio && TTS.available;
   const top = audioMode
-    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="Прослушать ещё раз">🔊</button>`
-    : `<div class="prompt-text">${isAudio ? ex.prompt.fallback_text : ex.prompt.text}</div>`;
+    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="${tr("Прослушать ещё раз")}">🔊</button>`
+    : `<div class="prompt-text">${tr(isAudio ? ex.prompt.fallback_text : ex.prompt.text)}</div>`;
   const question = (isAudio && !audioMode) ? "Введите слово по-японски" : ex.question;
   playerBody.innerHTML = `
-    <p class="question">${question}</p>
+    <p class="question">${tr(question)}</p>
     ${top}
     <input class="text-answer" id="ans" type="text" inputmode="text"
       autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-      placeholder="каной или ромадзи">
+      placeholder="${tr("каной или ромадзи")}">
     <div class="feedback" id="fb"></div>
     <div class="spacer"></div>
-    <button class="primary" id="check" disabled>Проверить</button>`;
+    <button class="primary" id="check" disabled>${tr("Проверить")}</button>`;
   animateIn(playerBody);
   if (audioMode) speak(ex.prompt.tts);
 
@@ -1427,7 +1445,7 @@ async function runInput(ex, afterAnswer) {
       prompt: (isAudio ? ex.prompt.fallback_text : ex.prompt.text) || ex.question || "",
       correct_answer: ex.answer, given_answer: input.value, choices: [],
     });
-    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
     await waitClick($("#next", playerBody));
   }
   return { correct, durationMs, usedHint: false };
@@ -1435,7 +1453,7 @@ async function runInput(ex, afterAnswer) {
 
 async function runTracing(ex, afterAnswer) {
   playerBody.innerHTML = `
-    <p class="question">${ex.question}</p>
+    <p class="question">${tr(ex.question)}</p>
     <div class="prompt-text" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${ex.prompt.text}</div>
     ${ttsButton(ex.prompt.tts)}
     <div id="trace-host"></div>
@@ -1459,11 +1477,11 @@ async function runTracing(ex, afterAnswer) {
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
   Haptics[correct ? "good" : "bad"]();
   fb.innerHTML = verdict(correct, correct
-    ? (result.errors === 0 ? "Написано чисто" : "Зачтено, была помарка")
-    : `Помарок: ${result.errors} — посмотрите анимацию черт ещё раз`);
+    ? (result.errors === 0 ? tr("Написано чисто") : tr("Зачтено, была помарка"))
+    : tr("Помарок: {n} — посмотрите анимацию черт ещё раз", { n: result.errors }));
   if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, result.usedHint)}</div>`;
 
-  playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">Дальше</button>`);
+  playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
   await waitClick($("#next", playerBody));
   return { correct, durationMs, usedHint: result.usedHint };
 }
@@ -1474,7 +1492,7 @@ async function runTwins(ex, afterAnswer) {
   for (let i = 0; i < ex.series.length; i++) {
     const round = ex.series[i];
     playerBody.innerHTML = `
-      <p class="question">${ex.question}</p>
+      <p class="question">${tr(ex.question)}</p>
       <div class="prompt-text">${round.prompt}</div>
       <div class="options">
         ${round.options.map((o, j) =>
@@ -1497,7 +1515,7 @@ async function runTwins(ex, afterAnswer) {
   Haptics[correct ? "good" : "bad"]();
   if (afterAnswer) await afterAnswer(correct, durationMs, false);
   playerBody.insertAdjacentHTML("beforeend",
-    `<div class="feedback ${correct ? "ok" : "bad"}">${correct ? "Серия без ошибок" : `Ошибок: ${errors} из ${ex.series.length}`}</div>`);
+    `<div class="feedback ${correct ? "ok" : "bad"}">${correct ? tr("Серия без ошибок") : tr("Ошибок: {n} из {m}", { n: errors, m: ex.series.length })}</div>`);
   await new Promise(r => setTimeout(r, 1000));
   return { correct, durationMs, usedHint: false };
 }
@@ -1581,7 +1599,7 @@ async function startLesson(lessonId) {
   playerBody.innerHTML = `
     <div class="result">
       <div class="result-mascot">${Art.mascotTile("cheer")}</div>
-      <h2>${isGate ? tr("Ворота пройдены!") : tr("{title} — пройден", { title: lesson.title })}</h2>
+      <h2>${isGate ? tr("Ворота пройдены!") : tr("{title} — пройден", { title: tr(lesson.title) })}</h2>
       <p>${tr("Точность {p}% · {a} из {b}", { p: Math.round(score * 100), a: correct, b: total })}${
         isGate ? "" : "<br>" + (done.cards_created
           ? tr("В SRS добавлено карточек: {n}", { n: done.cards_created }) : tr("Карточки уже в SRS"))}</p>
@@ -1619,11 +1637,11 @@ async function startReview() {
           exercise_type: item.exercise.type,
           used_hint: usedHint,
         });
-        let extra = `${verdict.rating_label} · следующий показ ${verdict.interval_human}`;
+        let extra = `${tr(verdict.rating_label)} · ${tr("следующий показ")} ${humanizeInterval((new Date(verdict.next_due) - Date.now()) / 1000)}`;
         if (!correct && item.info.hint)
           extra += `<br>${item.info.hint}`;
         if (verdict.is_leech)
-          extra += `<br>Эта карточка даётся тяжело — присмотритесь к подсказке`;
+          extra += `<br>${tr("Эта карточка даётся тяжело — присмотритесь к подсказке")}`;
         return extra;
       });
       if (token !== sessionToken) return;
@@ -1676,6 +1694,34 @@ async function renderReviewTab() {
   $("#btn-start")?.addEventListener("click", startReview);
 }
 
+/* ---------- Словарь: справочник изученного ----------
+   Всё, что попало в SRS (введено на уроках), сгруппировано по курсам. Клик по
+   элементу с озвучкой — проигрывает (глобальный [data-tts]-обработчик). */
+async function renderDict() {
+  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
+  const data = await api.get("/api/learned");
+  if (!data.courses.length) {
+    view.innerHTML = `<div class="dict-wrap"><div class="card"><p class="note center">${
+      tr("Пока пусто — пройдите урок, и выученное появится здесь для повторения.")}</p></div></div>`;
+    return;
+  }
+  const label = { new: tr("новое"), learning: tr("учится"), review: tr("в памяти") };
+  view.innerHTML = `<div class="dict-wrap">` + data.courses.map(c => `
+    <div class="card">
+      <h2>${tr(COURSE_LABEL[c.id] || c.title)} · ${c.count}</h2>
+      <div class="dict-grid">
+        ${c.items.map(it => `
+          <button class="dict-item st-${it.state}${it.leech ? " leech" : ""}"${
+            it.tts ? ` data-tts="${escapeHtml(it.tts)}"` : ""}>
+            <span class="di-title jp">${escapeHtml(it.title)}</span>
+            ${it.extra ? `<span class="di-extra jp">${escapeHtml(it.extra)}</span>` : ""}
+            <span class="di-sub">${escapeHtml(it.sub ? tr(it.sub) : "")}</span>
+            <span class="di-state">${label[it.state]}</span>
+          </button>`).join("")}
+      </div>
+    </div>`).join("") + `</div>`;
+}
+
 /* ---------- Статистика ---------- */
 const fmtDay = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
@@ -1718,9 +1764,9 @@ async function renderStats() {
       <h2>${tr("Достижения · {a}/{b}", { a: ach.unlocked, b: ach.total })}</h2>
       <div class="ach-grid">
         ${ach.items.map(a => `
-          <div class="ach ${a.unlocked ? "on " + a.tier : "off"}" title="${a.desc}">
+          <div class="ach ${a.unlocked ? "on " + a.tier : "off"}" title="${tr(a.desc)}">
             <div class="ach-ico">${Art.tile(a)}</div>
-            <div class="ach-t">${a.title}</div>
+            <div class="ach-t">${tr(a.title)}</div>
           </div>`).join("")}
       </div>
     </div>

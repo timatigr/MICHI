@@ -276,6 +276,94 @@ async def main():
                 problems.append(f"JS errors (stats): {errs_stats}")
             print(f"JS errors (stats): {errs_stats if errs_stats else '(none)'}")
 
+            # --- Словарь (справочник изученного) ---
+            await cdp.js("document.querySelector('nav.tabs button[data-view=dict]').click()")
+            await settle(1200)
+            await cdp.shot("m_dict")
+            dict_ok = await cdp.js(
+                "!!(document.querySelector('.dict-grid')||document.querySelector('.dict-wrap .note'))")
+            print(f"dict tab rendered: {'yes' if dict_ok else 'MISSING'}")
+            if not dict_ok:
+                problems.append("вкладка «Словарь» не отрисовалась")
+            ow_dict = await cdp.js(
+                "JSON.stringify([innerWidth, document.documentElement.scrollWidth])")
+            vw_d, sw_d = json.loads(ow_dict)
+            print(f"overflow (dict): vw={vw_d} scrollWidth={sw_d}")
+            if sw_d > vw_d + 1:
+                problems.append(f"горизонтальный overflow на «Словаре»: {sw_d}>{vw_d}")
+            errs_dict = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
+            if errs_dict:
+                problems.append(f"JS errors (dict): {errs_dict}")
+            print(f"JS errors (dict): {errs_dict if errs_dict else '(none)'}")
+
+            # --- Английский интерфейс (фаза 2: локализация контента) ---
+            await cdp.js("localStorage.setItem('michi_lang','en')")
+            await cdp.send("Page.navigate", url=ORIGIN + "/")
+            await settle(1300)
+            await cdp.js("document.querySelector('nav.tabs button[data-view=lessons]').click()")
+            await settle(1000)
+            await cdp.shot("m_lessons_en")
+            # синтетическое vocab-упражнение: вопрос и варианты-переводы должны стать EN
+            await cdp.fire(
+                "document.querySelector('#player').classList.add('open');"
+                "playerBody.classList.remove('center-step');setProgress(0.4);"
+                "runChoice({type:'vocab_choice',question:'Что означает это слово?',"
+                "prompt:{style:'jp',text:'みず',tts:'みず'},"
+                "options:['чай (зелёный)','хлеб','вода','рыба'],answer:2})")
+            await settle(1200)
+            await cdp.shot("m_exercise_en")
+            q_en = await cdp.js(
+                "(document.querySelector('#player-body .question')||{}).textContent||''")
+            print(f"EN exercise question: {q_en!r}")
+            if "What does this word" not in q_en:
+                problems.append(f"вопрос упражнения не переведён на EN: {q_en!r}")
+            await cdp.js("document.querySelector('#player-close').click();"
+                         "document.querySelector('#confirm-yes').click();")
+            await settle(500)
+            await cdp.js("document.querySelector('nav.tabs button[data-view=dict]').click()")
+            await settle(1000)
+            await cdp.shot("m_dict_en")
+            # синтетическое интро кандзи в EN: значение переведено, мнемоника скрыта
+            await cdp.fire(
+                "document.querySelector('#player').classList.add('open');"
+                "playerBody.classList.add('center-step');"
+                "showIntroKanji({char:'水',meaning:'вода',on:['スイ'],kun:['みず'],"
+                "examples:[{w:'水',r:'みず',ru:'вода'},{w:'水よう日',r:'すいようび',ru:'среда'}],"
+                "mnemonic:'тест-мнемоника',components:[],tts:'みず'})")
+            await settle(900)
+            await cdp.shot("m_kanji_en")
+            kmean = await cdp.js("(document.querySelector('.kanji-meaning')||{}).textContent||''")
+            has_mnem = await cdp.js("!!document.querySelector('#player-body .mnemonic')")
+            print(f"EN kanji intro: meaning={kmean!r} mnemonic_shown={has_mnem}")
+            if kmean != "water":
+                problems.append(f"значение кандзи в интро не переведено: {kmean!r}")
+            if has_mnem:
+                problems.append("мнемоника показана в EN (должна быть скрыта)")
+            await cdp.js("document.querySelector('#player-close').click();"
+                         "var c=document.querySelector('#confirm-yes');c&&c.click();")
+            await settle(400)
+            # overlay фаз 2+3 загрузился без синтаксических ошибок? (tr напрямую)
+            checks = json.loads(await cdp.js(
+                "JSON.stringify({"
+                "w:tr('вода'),"                                        # фаза 2: слово
+                "one:tr('один'),"                                      # фаза 3: значение кандзи
+                "st:tr('Я студент.'),"                                 # фаза 3: пример грамматики
+                "iv:tr('через {n} мин',{n:5}),"                        # клиентский интервал SRS
+                "wk:tr('«{x}» — запишите кандзи',{x:tr('Япония')}),"   # составной вопрос word_kanji
+                "vb:tr('«{v}» → {f}',{v:tr('идти, ехать'),f:tr('ます-форма')})})"))
+            print(f"EN content overlay: {checks}")
+            for key, want in (("w", "water"), ("one", "one"), ("st", "I'm a student."),
+                              ("iv", "in 5 min"), ("wk", "«Japan» — write it in kanji"),
+                              ("vb", "«to go» → ます form")):
+                if checks.get(key) != want:
+                    problems.append(
+                        f"EN overlay: {key}={checks.get(key)!r}, ждали {want!r}")
+            errs_en = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
+            if errs_en:
+                problems.append(f"JS errors (en): {errs_en}")
+            print(f"JS errors (en): {errs_en if errs_en else '(none)'}")
+            await cdp.js("localStorage.setItem('michi_lang','ru')")   # вернуть язык
+
             # --- Десктоп today ---
             await cdp.metrics(1100, 860, dpr=1, mobile=False)
             await cdp.send("Page.navigate", url=ORIGIN + "/")

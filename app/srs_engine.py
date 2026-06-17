@@ -196,8 +196,10 @@ def get_queue(conn, settings, limit=30):
 
 
 def counts(conn, settings):
-    # Тот же горизонт, что в get_queue, иначе числа на кнопке «Начать сессию»
-    # расходятся с фактической очередью
+    # Тот же горизонт И тот же дневной лимит, что в get_queue, иначе числа на
+    # кнопке «Начать сессию» расходятся с фактической очередью: при исчерпанном
+    # лимите повторений сессия не отдаст просроченные карточки, а счётчик их
+    # показывал бы.
     horizon = (_now() + LEARNING_LOOKAHEAD).isoformat()
     due_count = conn.execute(
         "SELECT COUNT(*) AS c FROM srs_cards WHERE reps > 0 AND due_at <= ?",
@@ -206,12 +208,14 @@ def counts(conn, settings):
     new_total = conn.execute(
         "SELECT COUNT(*) AS c FROM srs_cards WHERE reps = 0"
     ).fetchone()["c"]
+    done_today = reviews_done_today(conn)
+    reviews_left = max(int(settings["reviews_per_day"]) - done_today, 0)
     new_left_today = max(int(settings["new_per_day"]) - new_introduced_today(conn), 0)
     return {
-        "due": due_count,
+        "due": min(due_count, reviews_left),
         "new_available": min(new_total, new_left_today),
         "new_total": new_total,
-        "reviews_done_today": reviews_done_today(conn),
+        "reviews_done_today": done_today,
     }
 
 

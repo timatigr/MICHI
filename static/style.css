@@ -1053,6 +1053,35 @@ button.ghost:active { transform: scale(0.94); }
 .ai-pill.on { color: #fff; background: var(--success); }
 .ai-pill.off { color: var(--muted); background: var(--line); }
 
+/* --- Словарь: справочник изученного --- */
+.dict-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+.dict-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 11px 8px 9px; border-radius: 14px; cursor: pointer; text-align: center;
+  background: linear-gradient(180deg, var(--card-top), var(--card-bot));
+  border: 1px solid var(--card-edge); color: var(--text);
+  box-shadow: var(--shadow), var(--card-hi);
+  transition: transform .18s, box-shadow .18s, border-color .18s;
+}
+.dict-item .di-title { font-size: 23px; font-weight: 600; line-height: 1.15; color: var(--title); }
+.dict-item .di-extra { font-size: 11px; color: var(--muted); }
+.dict-item .di-sub {
+  font-size: 12.5px; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.dict-item .di-state {
+  margin-top: 2px; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; padding: 1px 8px; border-radius: 8px;
+  color: var(--muted); background: var(--line);
+}
+.dict-item.st-learning .di-state { color: var(--indigo); background: var(--pink-soft); }
+.dict-item.st-review .di-state { color: var(--success); background: rgba(92, 163, 126, .15); }
+.dict-item.leech { border-color: var(--bad-border); }
+.dict-item:active { transform: scale(0.96); }
+
 /* Уважение к prefers-reduced-motion (SRS.md 11.3) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
