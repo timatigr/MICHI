@@ -933,6 +933,75 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .tap-sound-row { margin: 14px 0 0; }
 .tap-sound-row select:disabled { opacity: 0.5; cursor: default; }
 
+/* ---------- Онбординг первого запуска ---------- */
+#onboarding {
+  position: fixed; inset: 0; z-index: 280; display: none; padding: 16px;
+  align-items: center; justify-content: center; background: var(--overlay);
+}
+#onboarding.open { display: flex; animation: fadein .2s ease both; }
+#onboarding.open .ob-card { animation: rise .26s cubic-bezier(.21, .8, .36, 1) both; }
+.ob-card {
+  position: relative; text-align: center; overflow-y: auto;
+  background: linear-gradient(180deg, var(--card-top), var(--card-bot));
+  border: 1px solid var(--card-edge); border-radius: var(--radius);
+  box-shadow: var(--shadow), var(--card-hi);
+  width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  padding: 30px 26px 22px;
+}
+.ob-skip {
+  position: absolute; top: 10px; right: 12px; padding: 6px 8px;
+  background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer;
+}
+.ob-skip:hover { color: var(--title); }
+.ob-mascot { width: 124px; height: 124px; margin: 0 auto 8px; }
+.ob-mascot.sm { width: 92px; height: 92px; }
+.ob-mascot svg { width: 100%; height: 100%; display: block; }
+.ob-kicker {
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--pink); font-weight: 700; margin-bottom: 4px;
+}
+.ob-title { font-size: 27px; font-weight: 700; color: var(--title); margin-bottom: 4px; }
+.ob-title.sm { font-size: 21px; margin-top: 2px; }
+.ob-sub { color: var(--indigo); font-weight: 600; margin-bottom: 12px; }
+.ob-body { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 18px; }
+.ob-field { text-align: left; }
+.ob-label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.ob-langs { display: flex; gap: 10px; }
+.ob-lang {
+  flex: 1; padding: 12px; border-radius: 14px; border: 1.5px solid var(--line);
+  background: var(--card); color: var(--title); font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: border-color .15s, background .15s, color .15s;
+}
+.ob-lang.active { border-color: var(--pink); background: var(--pink-soft); color: var(--pink); }
+.ob-goals { display: flex; gap: 10px; margin-bottom: 16px; }
+.ob-goal {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 16px 8px; border-radius: 16px; border: 1.5px solid var(--line);
+  background: var(--card); cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.ob-goal b { font-size: 26px; font-weight: 800; color: var(--title); line-height: 1; }
+.ob-goal span { font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 1px; }
+.ob-goal em { font-size: 12px; color: var(--muted); font-style: normal; margin-top: 5px; }
+.ob-goal.sel { border-color: var(--pink); background: var(--pink-soft); }
+.ob-goal.sel b, .ob-goal.sel em { color: var(--pink); }
+.ob-hear { width: 100%; }
+.ob-path {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 6px; margin-bottom: 20px;
+}
+.ob-chip {
+  font-family: "Noto Sans JP", sans-serif; font-size: 15px; font-weight: 500;
+  padding: 7px 11px; border-radius: 11px; background: var(--bg); color: var(--title);
+}
+.ob-arrow { color: var(--muted); font-size: 13px; }
+.ob-dots { display: flex; gap: 7px; justify-content: center; margin: 18px 0 14px; }
+.ob-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
+.ob-dot.on { background: var(--pink); width: 20px; border-radius: 4px; }
+.ob-nav { display: flex; gap: 10px; }
+.ob-nav button { flex: 1; }
+.ob-final { display: flex; flex-direction: column; gap: 10px; }
+
 .confetti { position: fixed; inset: 0; z-index: 300; pointer-events: none; }
 
 .spacer { flex: 1; }

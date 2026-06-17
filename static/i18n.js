@@ -210,6 +210,26 @@ const EN = {
   "Восстановление…": "Restoring…",
   "Восстановление заменит весь текущий прогресс данными из копии. Перед заменой рядом сохраняется страховочный michi.db.bak. Продолжить?":
     "Restoring will replace all current progress with data from the backup. A safety michi.db.bak is saved alongside first. Continue?",
+
+  // --- Онбординг первого запуска ---
+  "Пропустить": "Skip",
+  "Назад": "Back",
+  "Далее": "Next",
+  "Добро пожаловать": "Welcome",
+  "Японский с нуля — и в удовольствие": "Japanese from zero — and a joy",
+  "Кана, слова, кандзи и грамматика N5 — маленькими уроками. Умное повторение само напомнит, что пора освежить выученное.":
+    "Kana, words, kanji and N5 grammar — in bite-sized lessons. Smart spaced repetition reminds you when it's time to refresh.",
+  "Язык интерфейса": "Interface language",
+  "Выберите дневную цель": "Choose a daily goal",
+  "Цель в XP на день держит серию 🔥. Повторение +2 XP, урок +20 XP. Поменять можно в ⚙ в любой момент.":
+    "A daily XP goal keeps your streak going 🔥. Review +2 XP, lesson +20 XP. Change it anytime in ⚙.",
+  "Лёгкая": "Light", "Обычная": "Normal", "Серьёзная": "Serious",
+  "Послушать голос": "Hear the voice",
+  "С чего начнём": "Where we'll start",
+  "Старт — хирагана, японская азбука. Дальше курсы открываются сами: катакана параллельно, слова N5 после хираганы, затем кандзи и грамматика.":
+    "We start with hiragana, the Japanese syllabary. Then courses unlock on their own: katakana in parallel, N5 words after hiragana, then kanji and grammar.",
+  "Начать первый урок": "Start the first lesson",
+  "Осмотреться самому": "Look around first",
 };
 
 // Индекс по «схлопнутым» пробелам: ключи в словаре можно писать одной строкой,

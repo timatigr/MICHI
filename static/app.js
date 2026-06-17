@@ -34,6 +34,55 @@ const api = {
   },
 };
 
+/* ---------- UI-настройки: зеркало в БД (перенос между устройствами + бэкап) ----------
+   Источник истины на клиенте — localStorage (читается синхронно на старте всеми
+   модулями). Сервер — durable-зеркало: сюда пишем при изменении настройки, а на
+   старте подтягиваем (после импорта копии или на новом устройстве localStorage
+   пуст/устарел). Значения — те же строки, что в localStorage. */
+const Prefs = {
+  KEYS: ["michi_theme", "michi_lang", "michi_tts", "michi_haptics",
+         "michi_daily_goal", "michi_romaji", "michi_onboarded"],
+  _pending: null,
+  _timer: 0,
+
+  // Отложенная запись — коалесцирует частые изменения (напр. ползунок громкости)
+  push(key) {
+    this._pending = this._pending || {};
+    this._pending[key] = localStorage.getItem(key);
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => this.flush(), 600);
+  },
+
+  // Немедленно отправить накопленное (перед reload, чтобы запись не оборвалась)
+  flush() {
+    clearTimeout(this._timer);
+    if (!this._pending) return Promise.resolve();
+    const body = this._pending;
+    this._pending = null;
+    if (window.__noPrefWrite) return Promise.resolve();   // тестовый прогон не пишет в БД
+    return api.post("/api/prefs", body).catch(() => {});
+  },
+
+  // Старт: сервер авторитетнее. При расхождении переписываем localStorage и один
+  // раз перезагружаемся — модули переинициализируются из правильных значений.
+  // Локальные ключи, которых нет на сервере, засеваем (чтобы бэкап их содержал).
+  async sync() {
+    let server;
+    try { server = await api.get("/api/prefs"); } catch { return; }
+    let changed = false;
+    const seed = {};
+    for (const k of this.KEYS) {
+      const local = localStorage.getItem(k);
+      const srv = Object.prototype.hasOwnProperty.call(server, k) ? server[k] : null;
+      if (srv != null && srv !== local) { localStorage.setItem(k, srv); changed = true; }
+      else if (srv == null && local != null) seed[k] = local;
+    }
+    if (window.__noPrefWrite) return;                     // тестовый прогон: без записи и reload
+    if (Object.keys(seed).length) api.post("/api/prefs", seed).catch(() => {});
+    if (changed) location.reload();
+  },
+};
+
 /* ---------- Озвучка: нейроголос (Edge TTS на сервере) + фолбэк на браузер ---------- */
 const TTS = {
   prefs: {
@@ -126,6 +175,7 @@ const TTS = {
 
   save() {
     localStorage.setItem("michi_tts", JSON.stringify(this.prefs));
+    Prefs.push("michi_tts");
   },
 };
 if ("speechSynthesis" in window) {
@@ -300,6 +350,7 @@ const Haptics = {
   },
   save() {
     localStorage.setItem("michi_haptics", JSON.stringify(this.prefs));
+    Prefs.push("michi_haptics");
   },
 };
 Haptics.prefetch();
@@ -399,8 +450,10 @@ function fillLangSelect() {
   $("#set-lang").innerHTML = Object.entries(LANGS).map(([code, name]) =>
     `<option value="${code}" ${code === LANG ? "selected" : ""}>${name}</option>`).join("");
 }
-$("#set-lang").addEventListener("change", e => {
+$("#set-lang").addEventListener("change", async e => {
   setLang(e.target.value);
+  Prefs.push("michi_lang");
+  await Prefs.flush();              // дождаться записи на сервер до перезагрузки
   location.reload();
 });
 $("#btn-settings").addEventListener("click", openSettings);
@@ -433,6 +486,7 @@ $("#set-test").addEventListener("click", () => speak("こんにちは。ミチ�
 $("#set-romaji").addEventListener("change", e => Romaji.set(e.target.value));
 $("#set-goal").addEventListener("change", e => {
   localStorage.setItem("michi_daily_goal", e.target.value);
+  Prefs.push("michi_daily_goal");
   if (document.querySelector("nav.tabs button.active")?.dataset.view === "today")
     renderToday();
 });
@@ -468,6 +522,7 @@ const Theme = {
     const order = ["light", "dark", "auto"];
     this.pref = order[(order.indexOf(this.pref) + 1) % order.length];
     localStorage.setItem("michi_theme", this.pref);
+    Prefs.push("michi_theme");
     this.apply();
   },
 };
@@ -492,6 +547,7 @@ const Romaji = {
   set(pref) {
     this.pref = pref;
     localStorage.setItem("michi_romaji", pref);
+    Prefs.push("michi_romaji");
     this.apply();
   },
   /* Вызывается, когда из /api/overview известен прогресс курсов */
@@ -1868,7 +1924,132 @@ async function renderStats() {
   checkAchievements(true, ach);
 }
 
+/* ---------- Онбординг первого запуска ---------- */
+// Показывается один раз (флаг michi_onboarded): приветствие, выбор языка
+// интерфейса и дневной цели, краткая карта курса. Рендерится на JS (все строки
+// через tr(), так что EN/RU работают без перезагрузки), оверлеем поверх дашборда.
+const Onboarding = {
+  box: null,
+  step: 0,
+  goal: +(localStorage.getItem("michi_daily_goal") || 20),
+
+  maybeShow() {
+    if (localStorage.getItem("michi_onboarded")) return;
+    this.box = $("#onboarding");
+    if (!this.box) return;
+    this.step = 0;
+    this.render();
+    this.box.classList.add("open");
+  },
+
+  render() {
+    const steps = [this.stepWelcome, this.stepGoal, this.stepStart];
+    this.box.innerHTML = `
+      <div class="ob-card">
+        <button class="ob-skip" id="ob-skip">${tr("Пропустить")}</button>
+        <div class="ob-step">${steps[this.step].call(this)}</div>
+        <div class="ob-dots">${[0, 1, 2].map(i =>
+          `<span class="ob-dot ${i === this.step ? "on" : ""}"></span>`).join("")}</div>
+        <div class="ob-nav">
+          ${this.step > 0 ? `<button class="ghost" id="ob-back">${tr("Назад")}</button>` : ""}
+          ${this.step < 2 ? `<button class="primary" id="ob-next">${tr("Далее")}</button>` : ""}
+        </div>
+      </div>`;
+    this.wire();
+  },
+
+  wire() {
+    const b = this.box;
+    b.querySelector("#ob-skip").onclick = () => this.finish();
+    const next = b.querySelector("#ob-next");
+    if (next) next.onclick = () => { this.step++; this.render(); };
+    const back = b.querySelector("#ob-back");
+    if (back) back.onclick = () => { this.step--; this.render(); };
+    b.querySelectorAll(".ob-lang").forEach(el => (el.onclick = () => {
+      setLang(el.dataset.lang);
+      Prefs.push("michi_lang");
+      applyI18n();            // перевести статику (навигацию/настройки) под низом
+      this.render();
+    }));
+    b.querySelectorAll(".ob-goal").forEach(el => (el.onclick = () => {
+      this.goal = +el.dataset.goal;
+      localStorage.setItem("michi_daily_goal", this.goal);
+      Prefs.push("michi_daily_goal");
+      this.render();
+    }));
+    const hear = b.querySelector("#ob-hear");
+    if (hear) hear.onclick = () => speak("こんにちは。ミチへようこそ。");
+    const start = b.querySelector("#ob-start");
+    if (start) start.onclick = () => this.startFirst();
+    const look = b.querySelector("#ob-look");
+    if (look) look.onclick = () => { this.finish(); show("today"); };
+  },
+
+  stepWelcome() {
+    return `
+      <div class="ob-mascot">${Art.mascotTile("cheer")}</div>
+      <div class="ob-kicker">${tr("Добро пожаловать")}</div>
+      <h2 class="ob-title">MICHI（道）</h2>
+      <p class="ob-sub">${tr("Японский с нуля — и в удовольствие")}</p>
+      <p class="ob-body">${tr("Кана, слова, кандзи и грамматика N5 — маленькими уроками. Умное повторение само напомнит, что пора освежить выученное.")}</p>
+      <div class="ob-field">
+        <span class="ob-label">${tr("Язык интерфейса")}</span>
+        <div class="ob-langs">
+          ${Object.entries(LANGS).map(([code, name]) =>
+            `<button class="ob-lang ${code === LANG ? "active" : ""}" data-lang="${code}">${name}</button>`).join("")}
+        </div>
+      </div>`;
+  },
+
+  stepGoal() {
+    const opts = [[10, "Лёгкая"], [20, "Обычная"], [40, "Серьёзная"]];
+    return `
+      <h2 class="ob-title sm">${tr("Выберите дневную цель")}</h2>
+      <p class="ob-body">${tr("Цель в XP на день держит серию 🔥. Повторение +2 XP, урок +20 XP. Поменять можно в ⚙ в любой момент.")}</p>
+      <div class="ob-goals">
+        ${opts.map(([xp, label]) =>
+          `<button class="ob-goal ${xp === this.goal ? "sel" : ""}" data-goal="${xp}">
+             <b>${xp}</b><span>XP</span><em>${tr(label)}</em></button>`).join("")}
+      </div>
+      <button class="ghost ob-hear" id="ob-hear">🔊 ${tr("Послушать голос")}</button>`;
+  },
+
+  stepStart() {
+    const chips = ["ひらがな", "カタカナ", "単語", "漢字", "文法"];
+    return `
+      <div class="ob-mascot sm">${Art.mascotTile("cheer")}</div>
+      <h2 class="ob-title sm">${tr("С чего начнём")}</h2>
+      <p class="ob-body">${tr("Старт — хирагана, японская азбука. Дальше курсы открываются сами: катакана параллельно, слова N5 после хираганы, затем кандзи и грамматика.")}</p>
+      <div class="ob-path">${chips.map((c, i) =>
+        `<span class="ob-chip">${c}</span>` +
+        (i < chips.length - 1 ? `<span class="ob-arrow">→</span>` : "")).join("")}</div>
+      <div class="ob-final">
+        <button class="primary" id="ob-start">${tr("Начать первый урок")}</button>
+        <button class="ghost" id="ob-look">${tr("Осмотреться самому")}</button>
+      </div>`;
+  },
+
+  finish() {
+    localStorage.setItem("michi_onboarded", "1");
+    Prefs.push("michi_onboarded");
+    this.box.classList.remove("open");
+    this.box.innerHTML = "";
+  },
+
+  async startFirst() {
+    this.finish();
+    show("today");            // обновить дашборд (вдруг сменили язык) под плеером
+    try {
+      const lessons = await api.get("/api/lessons");
+      const first = lessons.find(l => l.status === "available");
+      if (first) startLesson(first.id);
+    } catch { /* нет сети — просто останемся на дашборде */ }
+  },
+};
+
 /* ---------- Старт ---------- */
 applyI18n();                // перевод статической разметки (навигация, настройки)
 checkAchievements(false);   // тихо засеять базу «увиденных» — без салюта на старте
 show("today");
+Onboarding.maybeShow();     // первый запуск — приветствие, выбор языка и цели
+Prefs.sync();               // подтянуть UI-настройки из БД (после импорта/нов. устройства)

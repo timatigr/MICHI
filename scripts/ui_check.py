@@ -176,9 +176,97 @@ async def main():
             await cdp.send("Runtime.enable")
             await cdp.send("Page.addScriptToEvaluateOnNewDocument", source=(
                 "window.__errs=[];"
+                "window.__noPrefWrite=true;"   # не писать UI-настройки в michi.db и не reload-иться
                 "addEventListener('error',e=>window.__errs.push(''+((e.error&&e.error.stack)||e.message)));"
                 "addEventListener('unhandledrejection',e=>window.__errs.push('promise:'+e.reason));"
             ))
+
+            # --- Онбординг первого запуска (показывается, пока пуст michi_onboarded) ---
+            await cdp.metrics(390, 844, dpr=2, mobile=True)
+            await cdp.send("Page.navigate", url=ORIGIN + "/")
+            await settle(1800)
+            ob_open = await cdp.js(
+                "document.querySelector('#onboarding').classList.contains('open')")
+            print(f"onboarding shown on first run: {ob_open}")
+            if not ob_open:
+                problems.append("онбординг не показался при пустом michi_onboarded")
+            await cdp.shot("m_onboarding_1")
+            info_ob = json.loads(await cdp.js(OVERFLOW_JS))
+            print(f"overflow (onboarding): vw={info_ob['vw']} scrollWidth={info_ob['scroll']}")
+            for b in info_ob["bad"]:
+                problems.append(f"overflow onboarding <{b['tag']}.{b['cls']}> "
+                                f"left={b['left']} right={b['right']}")
+            # Шаг 2 — дневная цель: 3 карточки, выбираем «Серьёзную» (40 XP)
+            await cdp.js("document.querySelector('#ob-next').click()")
+            await settle(500)
+            goals = await cdp.js("document.querySelectorAll('#onboarding .ob-goal').length")
+            await cdp.js("document.querySelectorAll('#onboarding .ob-goal')[2].click()")
+            await settle(300)
+            goal_saved = await cdp.js("localStorage.getItem('michi_daily_goal')")
+            print(f"onboarding goal cards={goals} picked={goal_saved!r}")
+            if goals != 3:
+                problems.append(f"на шаге цели не 3 карточки: {goals}")
+            if goal_saved != "40":
+                problems.append(f"выбор дневной цели не сохранился: {goal_saved!r}")
+            await cdp.shot("m_onboarding_2")
+            # Шаг 3 — карта курса и кнопка старта
+            await cdp.js("document.querySelector('#ob-next').click()")
+            await settle(500)
+            await cdp.shot("m_onboarding_3")
+            if not await cdp.js("!!document.querySelector('#ob-start')"):
+                problems.append("на финальном шаге онбординга нет кнопки старта")
+            # Возврат на шаг 1 и переключение языка интерфейса на English
+            await cdp.js("document.querySelector('#ob-back').click()")
+            await settle(200)
+            await cdp.js("document.querySelector('#ob-back').click()")
+            await settle(300)
+            await cdp.js("document.querySelectorAll('#onboarding .ob-lang')[1].click()")
+            await settle(400)
+            kicker = await cdp.js(
+                "(document.querySelector('#onboarding .ob-kicker')||{}).textContent||''")
+            print(f"onboarding EN kicker: {kicker!r}")
+            if kicker != "Welcome":
+                problems.append(f"онбординг не перевёлся на EN: kicker={kicker!r}")
+            await cdp.shot("m_onboarding_en")
+            await cdp.js("document.querySelectorAll('#onboarding .ob-lang')[0].click()")
+            await settle(200)
+            # Закрыть по «Пропустить» — флаг michi_onboarded должен выставиться
+            await cdp.js("document.querySelector('#ob-skip').click()")
+            await settle(300)
+            ob_closed = await cdp.js(
+                "!document.querySelector('#onboarding').classList.contains('open')")
+            flag = await cdp.js("localStorage.getItem('michi_onboarded')")
+            print(f"onboarding closed={ob_closed} flag={flag!r}")
+            if not ob_closed:
+                problems.append("онбординг не закрылся по «Пропустить»")
+            if flag != "1":
+                problems.append("после онбординга не выставлен michi_onboarded")
+            errs_ob = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
+            if errs_ob:
+                problems.append(f"JS errors (onboarding): {errs_ob}")
+            print(f"JS errors (onboarding): {errs_ob if errs_ob else '(none)'}")
+            # UI-настройки: модуль Prefs загружен и эндпоинт /api/prefs работает.
+            # Сам прогон в БД не пишет (window.__noPrefWrite), поэтому round-trip
+            # делаем напрямую через fetch и тут же возвращаем michi_theme как было.
+            prefs_mod = await cdp.js("typeof Prefs==='object' && Array.isArray(Prefs.KEYS)")
+            print(f"Prefs module: {'present' if prefs_mod else 'MISSING'}")
+            if not prefs_mod:
+                problems.append("модуль Prefs не загружен")
+            rt = await cdp.js(
+                "(async()=>{const g=async()=>(await fetch('/api/prefs')).json();"
+                "const before=await g();"
+                "await fetch('/api/prefs',{method:'POST',headers:{'Content-Type':'application/json'},"
+                "body:JSON.stringify({michi_theme:'__uicheck'})});"
+                "const mid=(await g()).michi_theme;"
+                "await fetch('/api/prefs',{method:'POST',headers:{'Content-Type':'application/json'},"
+                "body:JSON.stringify({michi_theme:before.michi_theme??null})});"
+                "return mid;})()")
+            print(f"prefs API round-trip: {rt!r}")
+            if rt != "__uicheck":
+                problems.append(f"POST/GET /api/prefs не сохраняет значение: {rt!r}")
+            # дальше онбординг не должен мешать; язык вернуть на ru
+            await cdp.js("localStorage.setItem('michi_lang','ru');"
+                         "localStorage.setItem('michi_onboarded','1')")
 
             # --- Мобильный: today + диагностика ---
             await cdp.metrics(390, 844, dpr=2, mobile=True)
