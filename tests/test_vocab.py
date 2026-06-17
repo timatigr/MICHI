@@ -77,6 +77,22 @@ def test_kana_strings_are_unique():
     assert not dupes, f"дублирующаяся кана: {sorted(dupes)}"
 
 
+def test_second_expansion_units_present():
+    """Второе расширение N5: юниты 15–24 (положение, школа, ещё глаголы и
+    прилагательные, одежда, животные, наречия, большие числа) и уроки v25–v34."""
+    assert set(range(15, 25)) <= set(UNITS)
+    ids = {l["id"] for l in LESSONS if l["unit"] in range(15, 25)}
+    assert {f"v{n}" for n in range(25, 35)} <= ids
+
+
+def test_third_expansion_units_present():
+    """Третье расширение N5 до объёма MVP (~400 слов): юниты 25–31 (даты,
+    счётные суффиксы, работа, покупки, досуг, движение, な-прил.) и v35–v41."""
+    assert set(range(25, 32)) <= set(UNITS)
+    ids = {l["id"] for l in LESSONS if l["unit"] in range(25, 32)}
+    assert {f"v{n}" for n in range(35, 42)} <= ids
+
+
 def test_vocab_size_grew():
-    """После расширения в курсе не меньше 230 слов."""
-    assert len(WORDS) >= 230, f"слов всего: {len(WORDS)}"
+    """После расширения курс достиг объёма MVP — не меньше 400 слов."""
+    assert len(WORDS) >= 400, f"слов всего: {len(WORDS)}"
