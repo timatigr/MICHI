@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from . import ai_tutor, db, gamification, srs_engine, tts
+from . import ai_tutor, db, gamification, identity, srs_engine, tts
 from .content.registry import (
     COURSES, GATE_PASS, GRAMMAR_BY_ID, GRAMMAR_UNITS, KANA_BY_CHAR, KANJI_BY_CHAR,
     KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_BY_ID, VOCAB_UNITS,
@@ -35,6 +35,34 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="MICHI prototype", lifespan=lifespan)
+
+# Secure-флаг cookie ставим в проде (HTTPS): MICHI_COOKIE_SECURE=1. Локально по
+# http он бы мешал отдавать cookie, поэтому по умолчанию выключен.
+_COOKIE_SECURE = os.environ.get("MICHI_COOKIE_SECURE", "0") == "1"
+_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5   # ~5 лет
+
+
+@app.middleware("http")
+async def _identify(request: Request, call_next):
+    """Анонимная сессия: на каждом запросе берём uid из подписанной cookie, на
+    первом визите — выдаём новый и ставим cookie (см. identity.py)."""
+    uid = identity.parse(request.cookies.get(identity.COOKIE_NAME))
+    fresh = uid is None
+    token = None
+    if fresh:
+        uid, token = identity.new_token()
+    request.state.uid = uid
+    response = await call_next(request)
+    if fresh:
+        response.set_cookie(
+            identity.COOKIE_NAME, token, max_age=_COOKIE_MAX_AGE,
+            httponly=True, samesite="lax", secure=_COOKIE_SECURE, path="/",
+        )
+    return response
+
+
+def _uid(request: Request) -> str:
+    return request.state.uid
 
 
 def _lesson_statuses(conn):
@@ -92,8 +120,8 @@ def _streak(conn):
 # ---------- Сегодня ----------
 
 @app.get("/api/overview")
-def overview():
-    conn = db.connect()
+def overview(request: Request):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         settings = db.get_settings(conn)
         c = srs_engine.counts(conn, settings)
@@ -187,8 +215,8 @@ def _lesson_group(lesson_id):
 
 
 @app.get("/api/lessons")
-def list_lessons():
-    conn = db.connect()
+def list_lessons(request: Request):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         statuses = _lesson_statuses(conn)
         out = []
@@ -209,10 +237,10 @@ def list_lessons():
 
 
 @app.get("/api/lessons/{lesson_id}")
-def get_lesson(lesson_id: str):
+def get_lesson(lesson_id: str, request: Request):
     if lesson_id not in LESSON_BY_ID:
         raise HTTPException(404, "Урок не найден")
-    conn = db.connect()
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         statuses = _lesson_statuses(conn)
         if statuses[lesson_id]["status"] == "locked":
@@ -229,11 +257,11 @@ class LessonResult(BaseModel):
 
 
 @app.post("/api/lessons/{lesson_id}/complete")
-def complete_lesson(lesson_id: str, result: LessonResult):
+def complete_lesson(lesson_id: str, result: LessonResult, request: Request):
     if lesson_id not in LESSON_BY_ID:
         raise HTTPException(404, "Урок не найден")
     lesson = LESSON_BY_ID[lesson_id]
-    conn = db.connect()
+    conn = db.connect(_uid(request))
     try:
         if _lesson_statuses(conn)[lesson_id]["status"] == "locked":
             raise HTTPException(403, "Сначала завершите предыдущий урок")
@@ -278,8 +306,8 @@ def complete_lesson(lesson_id: str, result: LessonResult):
 # ---------- SRS ----------
 
 @app.get("/api/srs/queue")
-def srs_queue(limit: int = 20):
-    conn = db.connect()
+def srs_queue(request: Request, limit: int = 20):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         settings = db.get_settings(conn)
         rows = srs_engine.get_queue(conn, settings, limit=limit)
@@ -309,8 +337,8 @@ class Answer(BaseModel):
 
 
 @app.post("/api/srs/answer")
-def srs_answer(answer: Answer):
-    conn = db.connect()
+def srs_answer(answer: Answer, request: Request):
+    conn = db.connect(_uid(request))
     try:
         row = conn.execute(
             "SELECT * FROM srs_cards WHERE id = ?", (answer.card_id,)
@@ -411,8 +439,8 @@ async def tts_synthesize(text: str, voice: str = tts.DEFAULT_VOICE):
 # ---------- Статистика ----------
 
 @app.get("/api/stats")
-def stats():
-    conn = db.connect()
+def stats(request: Request):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         settings = db.get_settings(conn)
         states = {r["state"]: r["c"] for r in conn.execute(
@@ -490,8 +518,8 @@ class SrsSettingsPatch(BaseModel):
 
 
 @app.get("/api/settings")
-def settings_get():
-    conn = db.connect()
+def settings_get(request: Request):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         return db.get_settings(conn)
     finally:
@@ -499,9 +527,9 @@ def settings_get():
 
 
 @app.post("/api/settings")
-def settings_update(patch: SrsSettingsPatch):
+def settings_update(patch: SrsSettingsPatch, request: Request):
     changes = patch.model_dump(exclude_none=True)
-    conn = db.connect()
+    conn = db.connect(_uid(request))
     try:
         for key, value in changes.items():
             db.set_setting(conn, key, value)
@@ -517,8 +545,8 @@ def settings_update(patch: SrsSettingsPatch):
 # и подтягивает на старте (после импорта/на новом устройстве).
 
 @app.get("/api/prefs")
-def prefs_get():
-    conn = db.connect()
+def prefs_get(request: Request):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         return db.get_ui_prefs(conn)
     finally:
@@ -526,8 +554,8 @@ def prefs_get():
 
 
 @app.post("/api/prefs")
-def prefs_set(patch: dict[str, str | None]):
-    conn = db.connect()
+def prefs_set(patch: dict[str, str | None], request: Request):
+    conn = db.connect(_uid(request))
     try:
         for key, value in patch.items():
             db.set_ui_pref(conn, key, value)   # неизвестные ключи отбрасываются
@@ -539,8 +567,8 @@ def prefs_set(patch: dict[str, str | None]):
 # ---------- Достижения ----------
 
 @app.get("/api/achievements")
-def achievements():
-    conn = db.connect()
+def achievements(request: Request):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         data = gamification.achievements(conn, _streak(conn))
         data["xp"] = gamification.xp_summary(conn)
@@ -584,8 +612,8 @@ def _learned_display(item_type, item_id):
 
 
 @app.get("/api/learned")
-def learned():
-    conn = db.connect()
+def learned(request: Request):
+    conn = db.connect(_uid(request), create_if_missing=False)
     try:
         rows = conn.execute(
             "SELECT item_type, item_id, state, reps, is_leech FROM srs_cards ORDER BY id"
@@ -632,23 +660,33 @@ def learned():
 # ---------- Резервная копия данных ----------
 
 @app.get("/api/export")
-def export_db():
-    """Скачать консистентный снимок всего прогресса одним SQLite-файлом."""
+def export_db(request: Request):
+    """Скачать консистентный снимок своего прогресса одним SQLite-файлом."""
     fd, tmp = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    db.backup_to(tmp)
+    db.backup_to(tmp, _uid(request))
     name = f"michi-backup-{datetime.now().date().isoformat()}.db"
     return FileResponse(tmp, media_type="application/octet-stream", filename=name,
                         background=BackgroundTask(os.remove, tmp))
 
 
+# Личная база — десятки тысяч карточек; реальный бэкап измеряется мегабайтами.
+# Лимит отсекает «залив на 2 ГБ» (DoS по памяти/диску) до чтения тела целиком.
+_IMPORT_MAX_BYTES = 64 * 1024 * 1024
+
+
 @app.post("/api/import")
 async def import_db(request: Request):
-    """Восстановить прогресс из ранее скачанной копии (перезаписывает текущий).
+    """Восстановить свой прогресс из ранее скачанной копии (перезаписывает текущий).
     Файл шлётся сырым телом запроса — поэтому python-multipart не нужен."""
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > _IMPORT_MAX_BYTES:
+        raise HTTPException(413, "Файл слишком большой")
     data = await request.body()
     if not data:
         raise HTTPException(400, "Пустой файл")
+    if len(data) > _IMPORT_MAX_BYTES:   # на случай, если Content-Length соврал
+        raise HTTPException(413, "Файл слишком большой")
     fd, tmp = tempfile.mkstemp(suffix=".db")
     try:
         with os.fdopen(fd, "wb") as f:
@@ -656,7 +694,7 @@ async def import_db(request: Request):
         if not db.is_michi_db(tmp):
             raise HTTPException(400, "Это не резервная копия MICHI")
         try:
-            cards, reviews = db.restore_from(tmp)
+            cards, reviews = db.restore_from(tmp, _uid(request))
         except sqlite3.OperationalError:
             raise HTTPException(409, "База занята — закройте другие вкладки и повторите")
     finally:

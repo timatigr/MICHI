@@ -15,6 +15,12 @@ michi.db.bak
 tts_cache/
 ai_cache/
 
+# Публичный хостинг: per-user базы и серверный секрет подписи cookie
+data/
+
+# Локальная конфигурация Claude Code (хуки/пути конкретной машины)
+.claude/settings.local.json
+
 # Локальный запуск с секретами (ключ ИИ) — не коммитить
 run-local.bat
 

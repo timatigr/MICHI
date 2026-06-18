@@ -1,13 +1,26 @@
 # -*- coding: utf-8 -*-
-"""SQLite-хранилище. Упрощённая версия схемы из SRS.md раздела 12:
-один пользователь, поэтому без таблицы users; reviews — append-only журнал,
+"""SQLite-хранилище. Схема из SRS.md раздела 12; reviews — append-only журнал,
 из которого состояние SRS восстановимо (принцип из раздела 13.2).
+
+Публичный хостинг (анонимные сессии, см. identity.py): у каждого пользователя
+своя база data/users/<uid>.db. Так весь код, что и так принимает соединение
+параметром, остаётся без изменений, а экспорт/импорт естественно охватывают
+ровно «мой прогресс» (это копия одного файла) — и импорт не может затронуть
+чужие данные. Базу создаём лениво (на первой записи), чтобы боты/краулеры не
+плодили пустые файлы; для незнакомого пользователя на чтении отдаём эфемерную
+in-memory базу с начальным состоянием.
 """
 import json
+import re
 import sqlite3
+import time
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "michi.db"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "users"
+
+# uid приходит уже провалидированным из identity.parse/new_token; страхуемся
+# ещё раз, т.к. он попадает в имя файла (защита от обхода каталога).
+_UID_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS srs_cards (
@@ -66,19 +79,21 @@ DEFAULT_SETTINGS = {
 }
 
 
-def connect():
-    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+def _user_path(user_id):
+    if not _UID_RE.match(user_id or ""):
+        raise ValueError(f"некорректный идентификатор пользователя: {user_id!r}")
+    return DATA_DIR / f"{user_id}.db"
+
+
+def _prepare(conn):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     # WAL: читатели не блокируют писателя — две вкладки не ловят "database is
     # locked"; busy_timeout даёт записи подождать вместо мгновенной ошибки.
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
-    return conn
-
-
-def init_db():
-    conn = connect()
+    # Схема идемпотентна (IF NOT EXISTS) — заодно доукомплектовывает базу, заведённую
+    # на более старой версии. Дёшево: пара CREATE/INSERT-IGNORE на крошечных таблицах.
     with conn:
         conn.executescript(SCHEMA)
         for k, v in DEFAULT_SETTINGS.items():
@@ -86,7 +101,25 @@ def init_db():
                 "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
                 (k, json.dumps(v)),
             )
-    conn.close()
+    return conn
+
+
+def connect(user_id, create_if_missing=True):
+    """Соединение с базой пользователя (data/users/<uid>.db).
+
+    create_if_missing=False и базы ещё нет → эфемерная in-memory база: чтения дают
+    начальное состояние (ноль карточек, дефолтные настройки), файл на диске не
+    появляется. Записи должны звать с create_if_missing=True (по умолчанию).
+    """
+    path = _user_path(user_id)
+    if path.exists() or create_if_missing:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        return _prepare(sqlite3.connect(path, timeout=5.0))
+    return _prepare(sqlite3.connect(":memory:"))
+
+
+def init_db():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_settings(conn):
@@ -140,9 +173,9 @@ def set_ui_pref(conn, key, value):
 _EXPECTED_TABLES = {"srs_cards", "reviews", "lesson_progress", "settings"}
 
 
-def backup_to(dest_path):
-    """Консистентный снимок текущей БД в dest_path."""
-    src = connect()
+def backup_to(dest_path, user_id):
+    """Консистентный снимок базы пользователя в dest_path."""
+    src = connect(user_id, create_if_missing=False)
     try:
         dst = sqlite3.connect(dest_path)
         try:
@@ -167,11 +200,15 @@ def is_michi_db(path):
     return _EXPECTED_TABLES <= tables
 
 
-def restore_from(src_path):
-    """Перезаписать текущую БД содержимым src_path. Перед перезаписью кладёт
-    страховочную копию рядом (<DB_PATH>.bak). Возвращает (cards, reviews)."""
-    backup_to(str(DB_PATH) + ".bak")
-    live = connect()
+def restore_from(src_path, user_id):
+    """Перезаписать базу пользователя содержимым src_path. Перед перезаписью кладёт
+    страховочную копию рядом (<uid>.db.bak). Возвращает (cards, reviews).
+    Затрагивает только файл этого пользователя — чужие данные недостижимы."""
+    path = _user_path(user_id)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        backup_to(str(path) + ".bak", user_id)
+    live = connect(user_id, create_if_missing=True)
     try:
         incoming = sqlite3.connect(src_path)
         try:
@@ -190,3 +227,39 @@ def restore_from(src_path):
     finally:
         live.close()
     return cards, reviews
+
+
+# ---------- Чистка заброшенных пустых баз (публичный хостинг) ----------
+# Анонимная сессия плодит базу при любой записи (в т.ч. зашёл-потыкал-ушёл).
+# Базы без какой-либо учебной активности и давно не трогавшиеся — мусор;
+# периодический вызов (cron, scripts/cleanup_users.py) удаляет их вместе с
+# WAL/страховочными файлами. Базы с прогрессом не трогаются никогда.
+_EMPTY_IF_ZERO = ("reviews", "lesson_progress", "srs_cards")
+
+
+def cleanup_stale_users(max_age_days=30):
+    """Удалить заброшенные (старше max_age_days) базы без учебной активности.
+    Возвращает число удалённых пользователей."""
+    if not DATA_DIR.exists():
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for path in DATA_DIR.glob("*.db"):
+        try:
+            if path.stat().st_mtime > cutoff:
+                continue
+            probe = sqlite3.connect(path)
+            try:
+                empty = all(
+                    probe.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] == 0
+                    for t in _EMPTY_IF_ZERO)
+            finally:
+                probe.close()
+        except sqlite3.DatabaseError:
+            continue   # битый/чужой файл — не наш, не трогаем
+        if not empty:
+            continue
+        for suffix in ("", "-wal", "-shm", ".bak"):
+            Path(str(path) + suffix).unlink(missing_ok=True)
+        removed += 1
+    return removed

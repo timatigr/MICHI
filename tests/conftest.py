@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Общие фикстуры тестов: изолированная in-memory БД и настройки по умолчанию.
+"""Общие фикстуры тестов.
 
-srs_engine принимает соединение и settings параметрами, поэтому тесты не
-трогают рабочий michi.db — каждый тест получает свежую базу в памяти.
+Движковые тесты работают с изолированной in-memory БД (фикстуры conn/settings):
+srs_engine принимает соединение и settings параметрами, поэтому тесты не трогают
+рабочие базы. API-тесты ходят через TestClient (фикстуры client/make_client) —
+каждый клиент = свой «браузер» со своей cookie-сессией и своей per-user базой в
+изолированном каталоге (db.DATA_DIR подменён на временный).
 """
 import sqlite3
 
@@ -23,3 +26,25 @@ def conn():
 @pytest.fixture
 def settings():
     return dict(db.DEFAULT_SETTINGS)
+
+
+@pytest.fixture
+def make_client(tmp_path, monkeypatch):
+    """Фабрика TestClient'ов поверх изолированного каталога per-user баз.
+
+    Разные клиенты получают разные анонимные cookie-сессии (uid) и потому не
+    видят данных друг друга — это позволяет проверять изоляцию пользователей.
+    MICHI_SECRET_KEY задаём, чтобы подпись cookie не писала secret.key в репозиторий.
+    """
+    monkeypatch.setattr(db, "DATA_DIR", tmp_path / "users")
+    monkeypatch.setenv("MICHI_SECRET_KEY", "test-secret-key-not-for-prod")
+    from fastapi.testclient import TestClient
+
+    from app import main
+
+    return lambda: TestClient(main.app)
+
+
+@pytest.fixture
+def client(make_client):
+    return make_client()
