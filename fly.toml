@@ -1,0 +1,34 @@
+# Fly.io — деплой MICHI. Подробности и переменные см. README → «Деплой».
+#
+# ВАЖНО: прогресс пользователей — это per-user SQLite на томе michi_data,
+# привязанном к ОДНОЙ машине. Держите ровно одну машину:
+#   fly scale count 1
+# Масштабирование до 2+ инстансов разорвёт данные между машинами.
+#
+# Перед первым деплоем поменяйте app на своё (имя уникально на весь Fly).
+
+app = "michi-change-me"
+primary_region = "fra"          # Франкфурт; смените при желании (fly platform regions)
+
+[build]
+  # Используется корневой Dockerfile проекта.
+
+[env]
+  MICHI_COOKIE_SECURE = "1"     # cookie только по HTTPS (за TLS Fly — обязательно)
+  MICHI_TTS_ENABLED = "0"       # Edge TTS троттлит под нагрузкой → браузерный голос
+  # MICHI_AI_* и ключи провайдеров ИИ — через `fly secrets set` (по желанию).
+
+[http_service]
+  internal_port = 8000
+  force_https = true            # http → https редирект
+  auto_stop_machines = "stop"   # гасить простаивающую машину (данные на томе целы)
+  auto_start_machines = true    # будить на входящий запрос
+  min_machines_running = 0      # 0 = «спит» без трафика (экономно); 1 = всегда онлайн
+
+[mounts]
+  source = "michi_data"         # имя тома (создаётся: fly volumes create michi_data)
+  destination = "/app/data"     # сюда пишутся секрет cookie и базы пользователей
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"              # хватает с запасом; 256mb тоже работает (дешевле)
