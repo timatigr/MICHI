@@ -26,7 +26,8 @@ KANA_CHARS = BASIC + DAKUTEN + SMALL + KATA_BASIC + KATA_DAKUTEN + KATA_SMALL
 # Кандзи курса (раздел 6). Пополняется по мере добавления уроков кандзи.
 KANJI_CHARS = ("一二三四五六七八九十日月火水木金土林森明本人大小中上下口目"
                "年時分半今何学校先生父母男女子友行来見聞話読書食飲"
-               "高安新古多長東西南北山川天気雨")
+               "高安新古多長東西南北山川天気雨"
+               "百千万円出入立休国語外車電駅")
 
 URL = "https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{:05x}.svg"
 PATH_RE = re.compile(r'<path[^>]*\bd="([^"]+)"')

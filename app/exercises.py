@@ -503,8 +503,10 @@ def item_info(item_type, item_id):
     elif item_type.startswith("kanji"):
         k = KANJI_BY_CHAR.get(item_id)
         if k:
-            return {"title": k["char"], "sub": k["meaning"],
-                    "hint": f"{k['char']} — {k['meaning']} ({k['reading']}). {k.get('mnemonic', '')}".strip()}
+            hint = f"{k['char']} — {k['meaning']} ({k['reading']}). {k.get('mnemonic', '')}".strip()
+            if k.get("mnemonic_reading"):
+                hint = f"{hint} {k['mnemonic_reading']}".strip()
+            return {"title": k["char"], "sub": k["meaning"], "hint": hint}
     elif item_type == "grammar":
         p = GRAMMAR_BY_ID.get(item_id)
         if p:
@@ -631,6 +633,7 @@ def _intro_kanji_step(k):
     step = {"type": "intro_kanji", "char": k["char"], "meaning": k["meaning"],
             "on": k.get("on", []), "kun": k.get("kun", []),
             "examples": k.get("examples", []), "mnemonic": k.get("mnemonic"),
+            "mnemonic_reading": k.get("mnemonic_reading"),
             "tts": k["reading"]}
     if k.get("components"):  # 6.3: разбор знака на изученные компоненты
         step["components"] = k["components"]

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Курс кандзи: три навыка-карточки, генераторы и сценарий урока."""
 from app.content.registry import (
-    COURSES, KANJI, KANJI_BY_CHAR, LESSON_BY_ID, srs_items_for_lesson,
+    COURSES, KANJI, KANJI_BY_CHAR, LESSON_BY_ID, RADICALS, srs_items_for_lesson,
 )
 from app.exercises import (
     item_info, kanji_meaning, kanji_reading, make_lesson_steps, review_exercise,
@@ -67,14 +67,34 @@ def test_item_info_kanji():
 
 
 def test_kanji_components_reference_known_kanji():
+    """Компонент — либо изученный кандзи, либо радикал из RADICALS (6.3)."""
     for k in KANJI:
         for c in k.get("components", []):
-            assert c["char"] in KANJI_BY_CHAR, \
-                f"{k['char']}: компонент {c['char']} не введён как кандзи"
+            assert c["char"] in KANJI_BY_CHAR or c["char"] in RADICALS, \
+                f"{k['char']}: компонент {c['char']} не кандзи и не радикал"
+
+
+def test_radical_components_use_canonical_image_name():
+    """Радикал-компонент подписан своим именем-образом из RADICALS (6.3)."""
+    for k in KANJI:
+        for c in k.get("components", []):
+            if c["char"] in RADICALS and c["char"] not in KANJI_BY_CHAR:
+                assert c["meaning"] == RADICALS[c["char"]], \
+                    f"{k['char']}: радикал {c['char']} подписан '{c['meaning']}', " \
+                    f"а в RADICALS — '{RADICALS[c['char']]}'"
+
+
+def test_radicals_are_not_also_taught_kanji():
+    """Радикалы — это отдельный пласт неканзи-компонентов, не дубли курса."""
+    for ch in RADICALS:
+        assert ch not in KANJI_BY_CHAR, \
+            f"{ch} есть и в RADICALS, и в курсе кандзи — выберите что-то одно"
 
 
 def test_kanji_components_introduced_earlier():
-    """i+1 (6.3): компонент вводится в более раннем уроке, чем составной знак."""
+    """i+1 (6.3): компонент-КАНДЗИ вводится в более раннем уроке, чем составной
+    знак. Радикалы (неканзи) от этого правила освобождены — они показываются
+    прямо в разборе со своим именем-образом."""
     order = {}
     kanji_course = next(c for c in COURSES if c["id"] == "kanji")
     for pos, lid in enumerate(kanji_course["lesson_ids"]):
@@ -84,6 +104,8 @@ def test_kanji_components_introduced_earlier():
     for k in KANJI:
         kp = order[k["char"]]
         for c in k.get("components", []):
+            if c["char"] not in KANJI_BY_CHAR:
+                continue  # радикал — не требует предварительного урока
             assert order[c["char"]] < kp, \
                 f"{k['char']} (урок {kp}) использует {c['char']} из урока {order[c['char']]}"
 

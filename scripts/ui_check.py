@@ -411,22 +411,27 @@ async def main():
             await cdp.js("document.querySelector('nav.tabs button[data-view=dict]').click()")
             await settle(1000)
             await cdp.shot("m_dict_en")
-            # синтетическое интро кандзи в EN: значение переведено, мнемоника скрыта
+            # синтетическое интро кандзи в EN: значение переведено, разбор на
+            # радикалы (6.3) переведён и виден, обе мнемоники (6.6) скрыты
             await cdp.fire(
                 "document.querySelector('#player').classList.add('open');"
                 "playerBody.classList.add('center-step');"
-                "showIntroKanji({char:'水',meaning:'вода',on:['スイ'],kun:['みず'],"
-                "examples:[{w:'水',r:'みず',ru:'вода'},{w:'水よう日',r:'すいようび',ru:'среда'}],"
-                "mnemonic:'тест-мнемоника',components:[],tts:'みず'})")
+                "showIntroKanji({char:'語',meaning:'язык; слово',on:['ゴ'],kun:['かた'],"
+                "examples:[{w:'語',r:'ご',ru:'язык (в словах)'},{w:'日本語',r:'にほんご',ru:'японский язык'}],"
+                "components:[{char:'言',meaning:'речь, слова'},{char:'五',meaning:'пять'},{char:'口',meaning:'рот'}],"
+                "mnemonic:'тест-значение',mnemonic_reading:'тест-чтение',tts:'ご'})")
             await settle(900)
             await cdp.shot("m_kanji_en")
             kmean = await cdp.js("(document.querySelector('.kanji-meaning')||{}).textContent||''")
             has_mnem = await cdp.js("!!document.querySelector('#player-body .mnemonic')")
-            print(f"EN kanji intro: meaning={kmean!r} mnemonic_shown={has_mnem}")
-            if kmean != "water":
+            parts_en = await cdp.js("document.querySelectorAll('#player-body .kanji-parts .part:not(.whole)').length")
+            print(f"EN kanji intro: meaning={kmean!r} mnemonic_shown={has_mnem} radical_parts={parts_en}")
+            if kmean != "language; word":
                 problems.append(f"значение кандзи в интро не переведено: {kmean!r}")
             if has_mnem:
                 problems.append("мнемоника показана в EN (должна быть скрыта)")
+            if parts_en != 3:
+                problems.append(f"разбор 語 на 3 радикала не отрисован (parts={parts_en})")
             await cdp.js("document.querySelector('#player-close').click();"
                          "var c=document.querySelector('#confirm-yes');c&&c.click();")
             await settle(400)
@@ -446,11 +451,52 @@ async def main():
                 if checks.get(key) != want:
                     problems.append(
                         f"EN overlay: {key}={checks.get(key)!r}, ждали {want!r}")
+            # синтетическое интро грамматики (новый юнит) в EN: значение переведено
+            await cdp.fire(
+                "document.querySelector('#player').classList.add('open');"
+                "playerBody.classList.add('center-step');"
+                "showIntroGrammar({title:'から〜まで',structure:'A から B まで',"
+                "meaning:'диапазон «от A до B» (время или место)',register:'neutral',"
+                "explanation:['Это から〜まで.'],caution:'Порядок фиксирован.',"
+                "examples:[{jp:'あさ から よる まで',ru:'с утра до вечера',tts:'あさからよるまで'}],tts:'から'})")
+            await settle(700)
+            await cdp.shot("m_grammar_en")
+            gmean = await cdp.js("(document.querySelector('#player-body .kanji-meaning')||{}).textContent||''")
+            print(f"EN grammar intro: meaning={gmean!r}")
+            if "from A to B" not in gmean:
+                problems.append(f"значение грамматики не переведено: {gmean!r}")
+            await cdp.js("document.querySelector('#player-close').click();"
+                         "var c=document.querySelector('#confirm-yes');c&&c.click();")
+            await settle(300)
             errs_en = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
             if errs_en:
                 problems.append(f"JS errors (en): {errs_en}")
             print(f"JS errors (en): {errs_en if errs_en else '(none)'}")
             await cdp.js("localStorage.setItem('michi_lang','ru')")   # вернуть язык
+
+            # --- RU интро кандзи: видны разбор на радикалы (6.3) и ДВЕ мнемоники (6.6) ---
+            await cdp.send("Page.navigate", url=ORIGIN + "/")
+            await settle(1200)
+            await cdp.fire(
+                "document.querySelector('#player').classList.add('open');"
+                "playerBody.classList.add('center-step');"
+                "showIntroKanji({char:'語',meaning:'язык; слово',on:['ゴ'],kun:['かた'],"
+                "examples:[{w:'語',r:'ご',ru:'язык (в словах)'},{w:'日本語',r:'にほんご',ru:'японский язык'}],"
+                "components:[{char:'言',meaning:'речь, слова'},{char:'五',meaning:'пять'},{char:'口',meaning:'рот'}],"
+                "mnemonic:'Речь 言, пять 五 и рот 口 складывают «язык».',"
+                "mnemonic_reading:'Он-ёми ゴ «го»: ГО! — заговори на чужом языке.',tts:'ご'})")
+            await settle(900)
+            await cdp.shot("m_kanji_ru")
+            parts_ru = await cdp.js("document.querySelectorAll('#player-body .kanji-parts .part:not(.whole)').length")
+            mr_ru = await cdp.js("!!document.querySelector('#player-body .mnemonic-reading')")
+            print(f"RU kanji intro: radical_parts={parts_ru} reading_mnemonic_shown={mr_ru}")
+            if parts_ru != 3:
+                problems.append(f"разбор на радикалы не отрисован в RU (parts={parts_ru}, ждали 3)")
+            if not mr_ru:
+                problems.append("блок мнемоники чтения (.mnemonic-reading) не показан в RU")
+            await cdp.js("document.querySelector('#player-close').click();"
+                         "var c=document.querySelector('#confirm-yes');c&&c.click();")
+            await settle(400)
 
             # --- Десктоп today ---
             await cdp.metrics(1100, 860, dpr=1, mobile=False)

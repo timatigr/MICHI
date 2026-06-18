@@ -54,8 +54,18 @@ Object.assign(EN, {
   "высокий; дорогой": "tall; expensive", "дешёвый; спокойный": "cheap; calm",
   "много": "many", "длинный; глава": "long; chief", "восток": "east", "запад": "west",
   "юг": "south", "север": "north", "небо": "sky", "дух; воздух": "spirit; air",
-  // компоненты кандзи
+  "сто": "hundred", "тысяча": "thousand", "десять тысяч": "ten thousand",
+  "иена; круг": "yen; circle", "выходить; выход": "to go out; exit",
+  "входить; вход": "to enter; entrance", "стоять; вставать": "to stand",
+  "отдыхать; отдых": "to rest; rest", "страна": "country", "язык; слово": "language; word",
+  "снаружи; вне": "outside", "машина; повозка": "car; vehicle",
+  "электричество": "electricity", "станция; вокзал": "station",
+  // компоненты кандзи и радикалы (имена-образы, 6.3)
   "луна": "moon", "солнце": "sun", "глаз": "eye", "рот": "mouth", "женщина": "woman",
+  "земля": "earth", "нож": "knife", "сила": "strength", "поле": "rice field",
+  "ухо": "ear", "речь, слова": "speech, words", "язык": "tongue",
+  "вечер; серп луны": "evening; crescent moon", "зевок, нехватка": "yawn; lack",
+  "крыша дома": "roof", "человек (сбоку)": "person (radical)",
 
   // --- Слова-примеры кандзи (интро / word_kanji) ---
   "один (число)": "one (number)", "одна штука": "one item", "две штуки": "two items",
@@ -87,6 +97,17 @@ Object.assign(EN, {
   "северный выход": "north exit", "гора Фудзи": "Mt. Fuji", "ручей": "stream, brook",
   "дух, настроение": "spirit, mood", "бодрость, здоровье": "energy, health",
   "ливень": "downpour, heavy rain",
+  // слова-примеры новых юнитов 12–15
+  "триста": "three hundred", "три тысячи": "three thousand",
+  "десять тысяч; тьма": "ten thousand; myriad", "иена": "yen", "сто иен": "one hundred yen",
+  "выходить": "to go out", "выход": "exit", "входить": "to enter", "вход": "entrance",
+  "стоять, вставать": "to stand, to get up", "нейтралитет": "neutrality",
+  "отдыхать": "to rest", "перерыв, выходной": "break, day off", "заграница": "foreign country",
+  "язык (в словах)": "language (in compounds)", "японский язык": "Japanese (language)",
+  "английский язык": "English (language)", "снаружи, улица": "outside, the street",
+  "машина": "car", "электричка": "train (electric)", "ток (в словах)": "electricity (in compounds)",
+  "электричество; свет": "electricity; lights", "станция, вокзал": "station",
+  "начальник станции": "stationmaster",
 
   // --- Грамматика: заголовки точек с русскими словами ---
   "из чего собран знак": "what a character is built from",
@@ -643,6 +664,14 @@ Object.assign(EN, {
     "Nature in pictographs: 山 “mountain” is three peaks, 川 “river” three streams, 天 “sky” a person 大 under the line of the firmament.",
   "Погода и настроение. 気 «дух, воздух» и 雨 «дождь» вместе дают 天気 «погода» и 元気 «бодрость».":
     "Weather and mood. 気 “spirit, air” and 雨 “rain” together give 天気 “weather” and 元気 “energy”.",
+  "Большие числа и деньги. С 百 «сто», 千 «тысяча» и 万 «десять тысяч» вы прочитаете любые цены, а 円 «иена» стоит на каждом ценнике в Японии.":
+    "Big numbers and money. With 百 “hundred”, 千 “thousand” and 万 “ten thousand” you can read any price, and 円 “yen” is on every price tag in Japan.",
+  "Кандзи-глаголы на каждый день. 出口 «выход» и 入口 «вход» висят на каждой двери, а 休 «отдыхать» собран из человека 亻 и дерева 木.":
+    "Everyday verb kanji. 出口 “exit” and 入口 “entrance” hang on every door, and 休 “to rest” is built from a person 亻 and a tree 木.",
+  "Страны и языки. 語 «язык» — образцовый сборный знак: речь 言 + пять 五 + рот 口. 日本語 «японский язык» и 外国 «заграница» вы теперь прочитаете.":
+    "Countries and languages. 語 “language” is a textbook composite: speech 言 + five 五 + mouth 口. You can now read 日本語 “Japanese” and 外国 “abroad”.",
+  "Город и транспорт. 電 «электричество» прячет уже знакомый дождь 雨, а 電車 «электричка» и 駅 «станция» — слова из любой поездки.":
+    "City and transport. 電 “electricity” hides the familiar rain 雨, and 電車 “train” and 駅 “station” are words for any trip.",
   "Три кирпичика японской фразы: тема (は), связка (です) и вопрос (か). С ними вы строите «Я — студент» и «Вы студент?».":
     "The three building blocks of a Japanese sentence: the topic (は), the copula (です) and the question (か). With them you build “I am a student” and “Are you a student?”.",
   "の связывает слова в «мой друг», «имя учителя»; も добавляет значение «тоже». Обе частицы очень частотны.":
@@ -669,5 +698,86 @@ Object.assign(EN, {
     "Plain (casual) forms for talking with friends and for notes: ～ない “don't do”, ～た “did”. Their polite equivalents are ません and ました.",
   "でしょう «наверное» смягчает утверждение; финальные ね (ищет согласия) и よ (сообщает новое); や — неполное перечисление «и прочее».":
     "でしょう “probably” softens a statement; the final ね (seeks agreement) and よ (delivers news); や — an incomplete list “and so on”.",
+
+  // --- Грамматика юниты 10–12: значения, предостережения, объяснения, примеры ---
+  "отрицание связки: «не является», антипод です": "negation of the copula: “is not”, the opposite of です",
+  "прошедшее время связки: «был, являлся»": "past tense of the copula: “was, were”",
+  "отрицание い-прилагательного: «не …»": "negation of an い-adjective: “not …”",
+  "диапазон «от A до B» (время или место)": "a range “from A to B” (time or place)",
+  "соединяет фразы с противопоставлением: «…, но …»": "joins clauses with contrast: “…, but …”",
+  "«когда …, во время …»": "“when …, during …”",
+  "вежливая просьба НЕ делать: «не делайте, пожалуйста»": "a polite request NOT to do: “please don't …”",
+  "превращает прилагательное в наречие к действию": "turns an adjective into an adverb for the action",
+  // cautions
+  "Существительное/な-прилагательное НЕ меняется — отрицание несёт только связка.":
+    "The noun / な-adjective does NOT change — only the copula carries the negation.",
+  "でした меняет только связку; существительное перед ней остаётся прежним.":
+    "でした changes only the copula; the noun before it stays the same.",
+  "Меняется само прилагательное, а не связка: НЕ «たかい じゃない».":
+    "The adjective itself changes, not the copula: NOT “たかい じゃない”.",
+  "Порядок фиксирован: сначала начало + から, потом конец + まで.":
+    "The order is fixed: start + から first, then end + まで.",
+  "Это が-союз, а не падежная が: оно идёт после です/ます, в шве фразы.":
+    "This is the conjunction が, not the subject-marker が: it comes after です/ます, at the seam between clauses.",
+  "Глагол/прилагательное перед とき стоят в простой (словарной) форме, не в ます.":
+    "The verb/adjective before とき is in the plain (dictionary) form, not the ます form.",
+  "Основа — именно ～ない-форма (のまない), а не словарная (のむ).":
+    "The base is the ～ない form (のまない), not the dictionary form (のむ).",
+  "Наречие стоит перед глаголом; форму меняет именно прилагательное (い→く, な→に).":
+    "The adverb goes before the verb; it is the adjective that changes form (い→く, な→に).",
+  // explanations
+  "Отрицание **です** — это **じゃ ありません** (вежливо) или **じゃ ない** (просто): せんせいです → せんせい**じゃ ありません** «не учитель».":
+    "The negative of **です** is **じゃ ありません** (polite) or **じゃ ない** (plain): せんせいです → せんせい**じゃ ありません** “not a teacher”.",
+  "Полная книжная форма — **では ありません**; в речи では почти всегда стягивается в じゃ.":
+    "The full written form is **では ありません**; in speech では almost always contracts to じゃ.",
+  "Прошедшее время **です** — это **でした** «был»: きのうは やすみ**でした** «Вчера был выходной».":
+    "The past tense of **です** is **でした** “was”: きのうは やすみ**でした** “Yesterday was a day off”.",
+  "Отрицательное прошедшее — **じゃ ありませんでした** «не был».":
+    "The negative past is **じゃ ありませんでした** “was not”.",
+  "У い-прилагательного отбрасываем **い** и добавляем **くない**: たか**い** → たか**くない** «недорогой».":
+    "For an い-adjective, drop **い** and add **くない**: たか**い** → たか**くない** “not expensive”.",
+  "Вежливо — добавить です: たかくない**です**. Исключение: いい → よくない «нехороший».":
+    "To be polite, add です: たかくない**です**. Exception: いい → よくない “not good”.",
+  "**から** — «от/с» (начало), **まで** — «до» (конец). Вместе задают промежуток: あさ**から**よる**まで** «с утра до вечера».":
+    "**から** is “from” (start), **まで** is “to/until” (end). Together they set a span: あさ**から**よる**まで** “from morning to evening”.",
+  "Работает и для мест: えき**から**うち**まで** «от станции до дома».":
+    "It works for places too: えき**から**うち**まで** “from the station to home”.",
+  "**が** в середине соединяет два предложения со значением «но»: やすいです**が**、おいしいです «дёшево, но вкусно».":
+    "**が** in the middle joins two clauses with the meaning “but”: やすいです**が**、おいしいです “it's cheap, but tasty”.",
+  "Не путайте с подлежащным が (раздел «существование»): здесь が стоит после целого предложения, а не после слова.":
+    "Don't confuse it with the subject が (see “existence”): here が follows a whole clause, not a single word.",
+  "**とき** «время» после глагола или прилагательного значит «когда»: にほんへ いく**とき** «когда еду в Японию».":
+    "**とき** “time” after a verb or adjective means “when”: にほんへ いく**とき** “when I go to Japan”.",
+  "После существительного нужна の: やすみ**の**とき «во время выходного».":
+    "After a noun you need の: やすみ**の**とき “during a day off”.",
+  "Берём простое отрицание глагола (～ない) и добавляем **でください**: のま**ない** → のま**ないでください** «не пейте, пожалуйста».":
+    "Take the plain negative of the verb (～ない) and add **でください**: のま**ない** → のま**ないでください** “please don't drink”.",
+  "Это отрицательная пара к ～てください (просьба сделать).":
+    "This is the negative counterpart of ～てください (a request to do something).",
+  "Чтобы описать КАК совершается действие, прилагательное становится наречием: い-прил. меняет い на **く** (はや**い** → はや**く** たべます «ем быстро»).":
+    "To describe HOW an action is done, the adjective becomes an adverb: an い-adjective changes い to **く** (はや**い** → はや**く** たべます “I eat quickly”).",
+  "な-прил. добавляет **に**: げんき → げんき**に** はなします «бодро разговариваю».":
+    "A な-adjective adds **に**: げんき → げんき**に** はなします “I talk energetically”.",
+  // example translations
+  "Я не студент.": "I'm not a student.", "Это не книга.": "This is not a book.",
+  "Учитель не бодр.": "The teacher isn't well.", "Вчера был выходной.": "Yesterday was a day off.",
+  "Это была книга.": "It was a book.", "Учитель был бодр.": "The teacher was well.",
+  "Эта книга недорогая.": "This book isn't expensive.", "Эта книга небольшая.": "This book isn't big.",
+  "Вода невкусная.": "The water isn't tasty.", "с утра до вечера": "from morning to evening",
+  "от станции до дома": "from the station to home", "с понедельника по воскресенье": "from Monday to Sunday",
+  "Вода дешёвая, но вкусная.": "The water is cheap, but tasty.",
+  "Эта книга дорогая, но новая.": "This book is expensive, but new.",
+  "когда еду в Японию": "when I go to Japan", "когда читаю книгу": "when I read a book",
+  "во время выходного": "during a day off", "Не пейте воду, пожалуйста.": "Please don't drink the water.",
+  "Не ешьте здесь, пожалуйста.": "Please don't eat here.",
+  "Не читайте эту книгу, пожалуйста.": "Please don't read this book.",
+  "ем быстро": "I eat quickly", "каждый день бодро разговариваю": "every day I talk energetically",
+  // lesson intros
+  "Замыкаем связку: отрицание です — じゃ ありません «не является», прошлое — でした «был». У い-прилагательных своё отрицание ～くない.":
+    "Completing the copula: the negative of です is じゃ ありません “is not”, the past is でした “was”. い-adjectives have their own negative ～くない.",
+  "Связываем части фразы: から〜まで «от … до …», соединительное が «но» и とき «когда». Предложения становятся длиннее и живее.":
+    "Linking parts of a sentence: から〜まで “from … to …”, the connective が “but” and とき “when”. Sentences grow longer and livelier.",
+  "Просьба НЕ делать — ～ないでください, пара к ～てください. И наречия: い-прил. → ～く, な-прил. → ～に, чтобы сказать, КАК совершается действие.":
+    "A request NOT to do — ～ないでください, the counterpart of ～てください. And adverbs: い-adj → ～く, な-adj → ～に, to say HOW an action is done.",
 });
 

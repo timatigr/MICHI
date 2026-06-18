@@ -109,6 +109,10 @@ Object.assign(EN, {
   "Ворота: Школа": "Gate: School", "Ворота: Глаголы-кандзи": "Gate: Verb kanji",
   "Ворота: Противоположности": "Gate: Opposites", "Ворота: Стороны света": "Gate: Cardinal directions",
   "Ворота: Город и природа": "Gate: Town and nature",
+  "Ворота: Большие числа и деньги": "Gate: Big numbers and money",
+  "Ворота: Выйти, войти, отдохнуть": "Gate: Out, in, rest",
+  "Ворота: Страна и язык": "Gate: Country and language",
+  "Ворота: Город: транспорт и ток": "Gate: City — transport and power",
   "Ворота: Основа предложения": "Gate: Sentence basics", "Ворота: Действия и места": "Gate: Actions and places",
   "Ворота: Признаки и вежливость": "Gate: Qualities and politeness",
   "Ворота: Указатели こ・そ・あ・ど": "Gate: こ・そ・あ・ど demonstratives",
@@ -116,6 +120,9 @@ Object.assign(EN, {
   "Ворота: Желания и предложения": "Gate: Wishes and suggestions",
   "Ворота: Причина и сравнение": "Gate: Reason and comparison", "Ворота: て-форма": "Gate: te-form",
   "Ворота: Простая форма и связки": "Gate: Plain form and connectors",
+  "Ворота: Отрицание и прошлое": "Gate: Negation and past",
+  "Ворота: Соединяем мысли": "Gate: Linking ideas",
+  "Ворота: Просьбы и наречия": "Gate: Requests and adverbs",
   "Ворота: Где это? Положение": "Gate: Where is it? Position",
   "Ворота: Учёба и школа": "Gate: Study and school", "Ворота: Открыть и войти": "Gate: Open and enter",
   "Ворота: Брать и давать": "Gate: Take and give", "Ворота: Размер и свет": "Gate: Size and light",
@@ -140,6 +147,10 @@ Object.assign(EN, {
   "высокий, дешёвый, новый, старый": "tall, cheap, new, old", "много, длинный": "many, long",
   "восток, запад, юг, север": "east, west, south, north", "гора, река, небо": "mountain, river, sky",
   "дух/воздух, дождь": "spirit/air, rain",
+  "сто, тысяча, иена": "hundred, thousand, yen",
+  "выйти, войти, встать, отдохнуть": "out, in, stand, rest",
+  "страна, язык, заграница": "country, language, abroad",
+  "машина, ток, станция": "car, power, station",
 
   // --- Грамматика: заголовки/подзаголовки (конструкции — фаза 3) ---
   "Прилагательные": "Adjectives", "те-форма": "te-form", "Простая форма": "Plain form",
@@ -150,6 +161,10 @@ Object.assign(EN, {
   "хочу и давай": "want and let's", "почему и сравнение": "why and comparison",
   "просьба, процесс, можно/нельзя": "request, ongoing action, may / may not",
   "оттенки и связки": "nuances and connectors",
+  "не так и было": "not so, and was so", "диапазон, «но», «когда»": "range, “but”, “when”",
+  "не делайте; как именно": "don't do it; exactly how",
+  "и-прил. отрицание (～くない)": "い-adj. negative (～くない)", "が (но)": "が (but)",
+  "Наречие: ～く / ～に": "Adverb: ～く / ～に",
 
   // --- Регионы «Пути» (составные заголовки) ---
   "Хирагана: годзюон": "Hiragana: gojūon", "Хирагана: дакутэн": "Hiragana: dakuten",
@@ -193,6 +208,10 @@ Object.assign(EN, {
   "Кандзи · Школа": "Kanji · School", "Кандзи · Семья": "Kanji · Family",
   "Кандзи · Глаголы-кандзи": "Kanji · Verb kanji", "Кандзи · Противоположности": "Kanji · Opposites",
   "Кандзи · Стороны света": "Kanji · Cardinal directions", "Кандзи · Город и природа": "Kanji · Town and nature",
+  "Кандзи · Большие числа и деньги": "Kanji · Big numbers and money",
+  "Кандзи · Выйти, войти, отдохнуть": "Kanji · Out, in, rest",
+  "Кандзи · Страна и язык": "Kanji · Country and language",
+  "Кандзи · Город: транспорт и ток": "Kanji · City — transport and power",
   "Грамматика · Основа предложения": "Grammar · Sentence basics",
   "Грамматика · Действия и места": "Grammar · Actions and places",
   "Грамматика · Признаки и вежливость": "Grammar · Qualities and politeness",
@@ -202,6 +221,9 @@ Object.assign(EN, {
   "Грамматика · Причина и сравнение": "Grammar · Reason and comparison",
   "Грамматика · て-форма": "Grammar · te-form",
   "Грамматика · Простая форма и связки": "Grammar · Plain form and connectors",
+  "Грамматика · Отрицание и прошлое": "Grammar · Negation and past",
+  "Грамматика · Соединяем мысли": "Grammar · Linking ideas",
+  "Грамматика · Просьбы и наречия": "Grammar · Requests and adverbs",
 
   // --- Достижения (название + описание) ---
   "Первый шаг": "First step", "Завершите первый урок": "Finish your first lesson",

@@ -180,7 +180,7 @@ def test_unit3_lesson_makes_one_card_per_point():
 
 from app.content import vocab_n5  # noqa: E402
 
-NEW_LESSONS = ("g06", "g07", "g08", "g09", "g10", "g11", "g12")
+NEW_LESSONS = ("g06", "g07", "g08", "g09", "g10", "g11", "g12", "g13", "g14", "g15")
 NEW_POINTS = (
     # Юнит 4 — указатели
     "kore_sore_are", "kono_sono_ano", "koko_soko_asoko",
@@ -194,6 +194,12 @@ NEW_POINTS = (
     "te_kudasai", "te_iru", "te_mo_ii", "te_wa_ikenai",
     # Юнит 9 — простая форма и связки
     "nai_form", "ta_form", "deshou", "ne", "yo", "ya",
+    # Юнит 10 — отрицание и прошлое
+    "dewa_nai", "deshita", "i_adj_neg",
+    # Юнит 11 — соединяем мысли
+    "kara_made", "ga_but", "toki",
+    # Юнит 12 — просьбы и наречия
+    "naide_kudasai", "adverb_form",
 )
 
 

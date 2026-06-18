@@ -1104,6 +1104,7 @@ async function showIntroKanji(step) {
     ${components}
     ${ttsButton(step.tts)}
     ${step.mnemonic && LANG === "ru" ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
+    ${step.mnemonic_reading && LANG === "ru" ? `<div class="mnemonic mnemonic-reading"><b>🔉 Чтение:</b> ${step.mnemonic_reading}</div>` : ""}
     ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
     <div class="spacer"></div>
     <button class="primary" id="next">${tr("Запомнил")}</button>`;

@@ -581,6 +581,13 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
   background: var(--card); border-radius: 16px; box-shadow: var(--shadow-sm);
   padding: 15px 17px; margin: 18px 0 0; font-size: 14.5px; line-height: 1.55;
 }
+/* Мнемоника на ЧТЕНИЕ (6.6) — отдельным акцентным блоком под мнемоникой значения */
+.mnemonic-reading {
+  margin-top: 10px;
+  background: linear-gradient(180deg, var(--pink-soft), var(--card));
+  border-left: 3px solid var(--pink);
+}
+.mnemonic-reading b { color: var(--pink); }
 .derivation {
   text-align: center; font-size: 19px; margin: 16px 0 0;
   font-family: var(--jp-font); color: var(--title);
