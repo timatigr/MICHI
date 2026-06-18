@@ -9,7 +9,7 @@ import pytest
 from app import ai_tutor, main
 
 _AI_ENV = ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "MICHI_AI_PROVIDER",
-           "MICHI_AI_ENABLED", "MICHI_AI_DAILY_LIMIT",
+           "MICHI_AI_ENABLED", "MICHI_AI_DAILY_LIMIT", "MICHI_AI_GLOBAL_DAILY_LIMIT",
            "MICHI_GEMINI_MODEL", "MICHI_CLAUDE_MODEL")
 
 
@@ -153,9 +153,38 @@ def test_item_type_mapping():
     assert main._item_type_for("anything", "kanji") == "kanji"  # явный приоритетнее
 
 
-def test_endpoint_status_and_guard(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    assert main.ai_status() == {"available": False}
-    with pytest.raises(main.HTTPException) as exc:
-        main.ai_explain(main.ExplainRequest(exercise_type="particle_choice"))
-    assert exc.value.status_code == 503
+def test_endpoint_status_and_guard(make_client):
+    # Без ключа (env очищен автофикстурой): статус available=False, разбор → 503.
+    c = make_client()
+    assert c.get("/api/ai/status").json() == {"available": False}
+    r = c.post("/api/ai/explain", json={"exercise_type": "particle_choice"})
+    assert r.status_code == 503
+
+
+def _fake_ai(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(ai_tutor, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(ai_tutor, "_request_explanation", lambda ctx: {
+        "category": "particle", "explanation": "x", "rule": "y", "counterexample": "z"})
+
+
+def test_quota_is_per_user(monkeypatch, tmp_path):
+    # Лимит на пользователя: один посетитель не сжигает квоту другого.
+    monkeypatch.setenv("MICHI_AI_DAILY_LIMIT", "1")
+    _fake_ai(monkeypatch, tmp_path)
+
+    assert ai_tutor.explain(_ctx("を"), "userA")["cached"] is False   # A тратит свою 1
+    assert ai_tutor.explain(_ctx("に"), "userA")["error"] == "daily_limit"
+    assert ai_tutor.explain(_ctx("へ"), "userB")["cached"] is False   # B независим
+    assert ai_tutor.usage("userA")["remaining"] == 0
+    assert ai_tutor.usage("userB")["remaining"] == 0
+
+
+def test_global_limit_caps_everyone(monkeypatch, tmp_path):
+    # Общий потолок защищает бюджет владельца поверх пер-юзерных лимитов.
+    monkeypatch.setenv("MICHI_AI_DAILY_LIMIT", "10")
+    monkeypatch.setenv("MICHI_AI_GLOBAL_DAILY_LIMIT", "1")
+    _fake_ai(monkeypatch, tmp_path)
+
+    assert ai_tutor.explain(_ctx("を"), "a")["cached"] is False       # total=1
+    assert ai_tutor.explain(_ctx("に"), "b")["error"] == "global_limit"

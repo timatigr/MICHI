@@ -367,12 +367,12 @@ class ExplainRequest(BaseModel):
 
 
 @app.get("/api/ai/status")
-def ai_status():
+def ai_status(request: Request):
     """Доступен ли ИИ-разбор (флаг/ключ/библиотека) + дневная квота — для UI."""
     avail = ai_tutor.available()
     out = {"available": avail}
     if avail:
-        out.update(ai_tutor.usage())
+        out.update(ai_tutor.usage(_uid(request)))
         out["provider"] = ai_tutor.provider_label()
     return out
 
@@ -394,7 +394,7 @@ def _item_type_for(exercise_type: str, explicit: str) -> str:
 
 
 @app.post("/api/ai/explain")
-def ai_explain(req: ExplainRequest):
+def ai_explain(req: ExplainRequest, request: Request):
     if not ai_tutor.available():
         raise HTTPException(503, "ИИ-разбор недоступен")
     item_type = _item_type_for(req.exercise_type, req.item_type)
@@ -411,21 +411,31 @@ def ai_explain(req: ExplainRequest):
         "sub": info.get("sub"),
         "hint": info.get("hint"),
     }
-    result = ai_tutor.explain(context)
+    result = ai_tutor.explain(context, _uid(request))
     if not result.get("available"):
         raise HTTPException(503, "ИИ-разбор временно недоступен")
     return result
 
 
 # ---------- Озвучка (Edge TTS, нейроголоса) ----------
+# На публичном хостинге серверный Edge TTS под потоком людей Microsoft троттлит,
+# а дисковый кэш растёт без границ. MICHI_TTS_ENABLED=0 выключает серверную
+# озвучку — фронт мягко откатывается на браузерный голос (Web Speech): пустой
+# список голосов → neuralOk=false, а ошибка на /api/tts → onerror → speakBrowser.
+_TTS_SERVER_ENABLED = os.environ.get("MICHI_TTS_ENABLED", "1") != "0"
+
 
 @app.get("/api/tts/voices")
 async def tts_voices():
+    if not _TTS_SERVER_ENABLED:
+        return []
     return await tts.list_voices()
 
 
 @app.get("/api/tts")
 async def tts_synthesize(text: str, voice: str = tts.DEFAULT_VOICE):
+    if not _TTS_SERVER_ENABLED:
+        raise HTTPException(503, "Серверная озвучка выключена")
     if not text.strip():
         raise HTTPException(400, "Пустой текст")
     try:

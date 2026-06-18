@@ -14,8 +14,13 @@
   MICHI_GEMINI_MODEL / MICHI_CLAUDE_MODEL — переопределить модель.
 
 Страховка по бюджету (задел под раздел 7.1/16.1 «фича-флаг, квоты» на масштабе):
-  MICHI_AI_ENABLED=0      — выключить ИИ даже при наличии ключа (фича-флаг);
-  MICHI_AI_DAILY_LIMIT=N  — максимум обращений к ИИ в сутки (по умолчанию 200).
+  MICHI_AI_ENABLED=0            — выключить ИИ даже при наличии ключа (фича-флаг);
+  MICHI_AI_DAILY_LIMIT=N        — лимит обращений к ИИ на пользователя в сутки
+                                  (по умолчанию 200); на публичном хостинге
+                                  защищает от того, что один посетитель сожжёт
+                                  весь бюджет;
+  MICHI_AI_GLOBAL_DAILY_LIMIT=N — общий потолок на всех пользователей в сутки
+                                  (по умолчанию без потолка) — страховка владельца.
 Кэш-хиты лимит не тратят (они бесплатны) — считаются только реальные запросы.
 """
 from __future__ import annotations
@@ -25,10 +30,15 @@ import hashlib
 import json
 import os
 import pathlib
+import threading
 
 CACHE_DIR = pathlib.Path(__file__).resolve().parent.parent / "ai_cache"
 DEFAULT_DAILY_LIMIT = 200
 _USAGE_FILE = "_usage.json"
+# Учёт квоты — read-modify-write одного файла; блокировка спасает от гонки между
+# одновременными запросами в пределах процесса (на нескольких воркерах счёт может
+# слегка недосчитываться — это лишь страховочный потолок, не биллинг).
+_USAGE_LOCK = threading.Lock()
 
 # Реестр провайдеров (7.1). key — env с ключом; model_env — переопределение модели.
 _PROVIDERS = {
@@ -127,10 +137,22 @@ def _enabled() -> bool:
 
 
 def _daily_limit() -> int:
+    """Лимит на одного пользователя в сутки."""
     try:
         return max(0, int(os.environ.get("MICHI_AI_DAILY_LIMIT", DEFAULT_DAILY_LIMIT)))
     except ValueError:
         return DEFAULT_DAILY_LIMIT
+
+
+def _global_limit() -> int | None:
+    """Общий суточный потолок на всех (None — без потолка)."""
+    raw = os.environ.get("MICHI_AI_GLOBAL_DAILY_LIMIT")
+    if raw is None:
+        return None
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return None
 
 
 def available() -> bool:
@@ -152,31 +174,40 @@ def _today() -> str:
     return datetime.date.today().isoformat()
 
 
+def _bucket(user_id) -> str:
+    """Ключ пользователя в счётчике; None → общий бакет (локальный однопользователь)."""
+    return user_id or "_"
+
+
 def _read_usage() -> dict:
-    """Счётчик обращений за сегодня (сбрасывается со сменой даты)."""
+    """Счётчик обращений за сегодня: {date, users:{uid:n}, total:n} (сброс по дате)."""
     try:
         data = json.loads((CACHE_DIR / _USAGE_FILE).read_text(encoding="utf-8"))
     except Exception:
         data = {}
     if data.get("date") != _today():
-        return {"date": _today(), "count": 0}
-    return {"date": _today(), "count": int(data.get("count", 0))}
+        return {"date": _today(), "users": {}, "total": 0}
+    users = data.get("users") if isinstance(data.get("users"), dict) else {}
+    return {"date": _today(), "users": dict(users), "total": int(data.get("total", 0))}
 
 
-def _bump_usage() -> None:
-    u = _read_usage()
-    u["count"] += 1
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        (CACHE_DIR / _USAGE_FILE).write_text(json.dumps(u), encoding="utf-8")
-    except Exception:
-        pass
+def _bump_usage(user_id=None) -> None:
+    with _USAGE_LOCK:
+        u = _read_usage()
+        key = _bucket(user_id)
+        u["users"][key] = int(u["users"].get(key, 0)) + 1
+        u["total"] = int(u.get("total", 0)) + 1
+        try:
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            (CACHE_DIR / _USAGE_FILE).write_text(json.dumps(u), encoding="utf-8")
+        except Exception:
+            pass
 
 
-def usage() -> dict:
-    """Сводка по дневной квоте — для статуса в настройках."""
+def usage(user_id=None) -> dict:
+    """Сводка по дневной квоте пользователя — для статуса в настройках."""
     limit = _daily_limit()
-    used = _read_usage()["count"]
+    used = int(_read_usage()["users"].get(_bucket(user_id), 0))
     return {"limit": limit, "used": used, "remaining": max(0, limit - used)}
 
 
@@ -293,11 +324,12 @@ def _request_explanation(context: dict) -> dict:
     return _request_claude(context)
 
 
-def explain(context: dict) -> dict:
+def explain(context: dict, user_id=None) -> dict:
     """Вернуть разбор ошибки. Сначала кэш, затем сеть.
 
     Формат ответа: {available, cached, category, explanation, rule, counterexample}.
-    При недоступности/сбое — {available: False, error: ...}.
+    При недоступности/сбое — {available: False, error: ...}. Квота считается по
+    пользователю (user_id); на масштабе ещё и общий потолок MICHI_AI_GLOBAL_DAILY_LIMIT.
     """
     if not available():
         return {"available": False, "error": "no_api_key"}
@@ -307,15 +339,19 @@ def explain(context: dict) -> dict:
     if cached is not None:
         return {"available": True, "cached": True, **cached}  # бесплатно, лимит не трогаем
 
-    if _read_usage()["count"] >= _daily_limit():
+    u = _read_usage()
+    if int(u["users"].get(_bucket(user_id), 0)) >= _daily_limit():
         return {"available": False, "error": "daily_limit"}
+    glimit = _global_limit()
+    if glimit is not None and int(u.get("total", 0)) >= glimit:
+        return {"available": False, "error": "global_limit"}
 
     try:
         data = _request_explanation(context)
     except Exception as exc:  # сеть/ключ/сбой — деградируем мягко (попытку не считаем)
         return {"available": False, "error": type(exc).__name__}
 
-    _bump_usage()  # успешный запрос к ИИ — расходуем единицу квоты
+    _bump_usage(user_id)  # успешный запрос к ИИ — расходуем единицу квоты пользователя
     result = {
         "category": data.get("category", "other"),
         "explanation": data.get("explanation", ""),
