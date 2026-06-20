@@ -188,3 +188,61 @@ def test_global_limit_caps_everyone(monkeypatch, tmp_path):
 
     assert ai_tutor.explain(_ctx("を"), "a")["cached"] is False       # total=1
     assert ai_tutor.explain(_ctx("に"), "b")["error"] == "global_limit"
+
+
+# Форму реального вызова провайдера тесты выше не трогали (мокали диспетчер
+# _request_explanation). Эти два мокают сам SDK-клиент и фиксируют, что запрос
+# собран по текущему API — чтобы апгрейд SDK или случайная правка это не сломали.
+
+def test_request_claude_call_shape(monkeypatch):
+    import anthropic
+
+    captured = {}
+
+    class _Block:
+        type = "text"
+        text = ('{"category": "particle", "explanation": "e", '
+                '"rule": "r", "counterexample": "c"}')
+
+    class _Client:
+        def __init__(self, *a, **k):
+            self.messages = self
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return type("R", (), {"content": [_Block()]})()
+
+    monkeypatch.setattr(anthropic, "Anthropic", _Client)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    out = ai_tutor._request_claude(_ctx())
+    assert out["category"] == "particle"                     # ответ распарсен из текста
+    assert captured["model"] == "claude-haiku-4-5"           # модель по умолчанию
+    fmt = captured["output_config"]["format"]                # структурный JSON-вывод
+    assert fmt["type"] == "json_schema"
+    assert fmt["schema"]["additionalProperties"] is False    # строгая схема у Claude
+    assert captured["messages"][0]["role"] == "user"
+
+
+def test_request_gemini_call_shape(monkeypatch):
+    from google import genai
+
+    captured = {}
+
+    class _Client:
+        def __init__(self, *a, **k):
+            self.models = self
+        def generate_content(self, **kwargs):
+            captured.update(kwargs)
+            return type("R", (), {"text": (
+                '{"category": "particle", "explanation": "e", '
+                '"rule": "r", "counterexample": "c"}')})()
+
+    monkeypatch.setattr(genai, "Client", _Client)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    # Конфиг строится из настоящих типов google-genai — кривое имя поля тут бы упало.
+    out = ai_tutor._request_gemini(_ctx())
+    assert out["category"] == "particle"
+    assert captured["model"] == "gemini-2.5-flash"
+    assert captured["contents"]                              # стимул-промпт передан
+    assert captured["config"] is not None                   # GenerateContentConfig собран
