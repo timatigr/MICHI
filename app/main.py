@@ -4,10 +4,12 @@
 Упрощённый аналог контракта из SRS.md раздела 13.2 (без auth — один
 пользователь, локальный запуск).
 """
+import asyncio
+import logging
 import os
 import sqlite3
 import tempfile
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -28,10 +30,65 @@ from .exercises import item_info, make_lesson_steps, review_exercise
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
+log = logging.getLogger("michi")
+
+# Авточистка заброшенных пустых баз (см. db.cleanup_stale_users). На auto-stop
+# машинах (Fly) суточный цикл может не наступить — поэтому первый прогон сразу
+# после старта (фактически на каждом «пробуждении»), затем раз в сутки для
+# долгоживущих инстансов. MICHI_CLEANUP_ENABLED=0 выключает, MICHI_CLEANUP_DAYS
+# задаёт порог «заброшенности» (по умолчанию 30 дней).
+_CLEANUP_ENABLED = os.environ.get("MICHI_CLEANUP_ENABLED", "1") != "0"
+_CLEANUP_INTERVAL_SEC = 24 * 60 * 60
+
+
+def _cleanup_max_age_days() -> int:
+    try:
+        return max(1, int(os.environ.get("MICHI_CLEANUP_DAYS", 30)))
+    except ValueError:
+        return 30
+
+
+async def _cleanup_loop():
+    while True:
+        try:
+            removed = await asyncio.to_thread(
+                db.cleanup_stale_users, _cleanup_max_age_days())
+            if removed:
+                log.info("Чистка: удалено заброшенных пустых баз: %d", removed)
+        except Exception:
+            log.exception("Чистка заброшенных баз не удалась")
+        await asyncio.sleep(_CLEANUP_INTERVAL_SEC)
+
+
+def _secret_key_warning():
+    """Текст предупреждения, если в прод-режиме (HTTPS-cookie) не задан явный
+    MICHI_SECRET_KEY; иначе None. Без него подпись cookie держится на
+    data/secret.key (пропадёт вместе с томом → все разлогинятся) или на эфемерном
+    ключе процесса (read-only ФС → сбрасывается на каждом рестарте)."""
+    secure = os.environ.get("MICHI_COOKIE_SECURE", "0") == "1"
+    if secure and not os.environ.get("MICHI_SECRET_KEY"):
+        return ("MICHI_SECRET_KEY не задан в прод-режиме (MICHI_COOKIE_SECURE=1): "
+                "cookie подписываются ключом из data/secret.key или эфемерным ключом "
+                "процесса — при потере тома или на read-only ФС все пользователи "
+                "потеряют доступ к своему прогрессу. Задайте постоянный секрет "
+                "(напр. `fly secrets set MICHI_SECRET_KEY=$(openssl rand -hex 32)`).")
+    return None
+
+
 @asynccontextmanager
 async def lifespan(_app):
     db.init_db()
-    yield
+    warning = _secret_key_warning()
+    if warning:
+        log.warning(warning)
+    task = asyncio.create_task(_cleanup_loop()) if _CLEANUP_ENABLED else None
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(title="MICHI prototype", lifespan=lifespan)
