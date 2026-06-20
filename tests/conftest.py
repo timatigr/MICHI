@@ -38,6 +38,10 @@ def make_client(tmp_path, monkeypatch):
     """
     monkeypatch.setattr(db, "DATA_DIR", tmp_path / "users")
     monkeypatch.setenv("MICHI_SECRET_KEY", "test-secret-key-not-for-prod")
+    # Рейт-лимит — инфраструктурная защита, не предмет API-тестов: они шлют много
+    # запросов с одного «IP» (TestClient) и иначе ловили бы 429. Сам лимитер
+    # включается явно в tests/test_ratelimit.py.
+    monkeypatch.setenv("MICHI_RATELIMIT_ENABLED", "0")
     from fastapi.testclient import TestClient
 
     from app import main

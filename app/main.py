@@ -12,12 +12,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from . import ai_tutor, db, gamification, identity, srs_engine, tts
+from . import ai_tutor, db, gamification, identity, ratelimit, srs_engine, tts
 from .content.registry import (
     COURSES, GATE_PASS, GRAMMAR_BY_ID, GRAMMAR_UNITS, KANA_BY_CHAR, KANJI_BY_CHAR,
     KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_BY_ID, VOCAB_UNITS,
@@ -46,6 +46,15 @@ _COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5   # ~5 лет
 async def _identify(request: Request, call_next):
     """Анонимная сессия: на каждом запросе берём uid из подписанной cookie, на
     первом визите — выдаём новый и ставим cookie (см. identity.py)."""
+    # Рейт-лимит только на /api/*: статика дёшева и кэшируется, а абуз-вектор —
+    # поток запросов без cookie, плодящий per-user базы (см. ratelimit.py).
+    if request.url.path.startswith("/api/"):
+        allowed, retry = ratelimit.check(ratelimit.client_ip(request))
+        if not allowed:
+            return JSONResponse(
+                {"detail": "Слишком много запросов — подождите немного"},
+                status_code=429, headers={"Retry-After": str(retry)},
+            )
     uid = identity.parse(request.cookies.get(identity.COOKIE_NAME))
     fresh = uid is None
     token = None
