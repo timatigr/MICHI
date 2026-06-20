@@ -98,6 +98,43 @@ app = FastAPI(title="MICHI prototype", lifespan=lifespan)
 _COOKIE_SECURE = os.environ.get("MICHI_COOKIE_SECURE", "0") == "1"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5   # ~5 лет
 
+# Content-Security-Policy под реальные ресурсы приложения. Свой JS только локальный
+# (app.js/art.js/…), внешних скриптов нет — но в коде есть инлайновый <script>
+# (тема до отрисовки), инлайновые обработчики onload/onerror у картинок-слотов и
+# инлайновые style= → script/style требуют 'unsafe-inline'. Источники при этом
+# заперты: скрипты/коннекты/картинки/медиа — только свой origin (+ Google Fonts
+# для стилей/шрифтов), фрейминг запрещён.
+_CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "media-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+])
+
+
+def _security_headers(secure=None):
+    """Заголовки безопасности для каждого ответа. HSTS — только в прод-режиме
+    (за TLS), иначе по http он бессмыслен."""
+    if secure is None:
+        secure = _COOKIE_SECURE
+    h = {
+        "Content-Security-Policy": _CSP,
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Frame-Options": "DENY",
+        "Permissions-Policy": "geolocation=(), camera=(), microphone=()",
+    }
+    if secure:
+        h["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return h
+
 
 @app.middleware("http")
 async def _identify(request: Request, call_next):
@@ -124,6 +161,16 @@ async def _identify(request: Request, call_next):
             identity.COOKIE_NAME, token, max_age=_COOKIE_MAX_AGE,
             httponly=True, samesite="lax", secure=_COOKIE_SECURE, path="/",
         )
+    return response
+
+
+# Регистрируется ПОСЛЕ _identify → внешний слой: проставляет заголовки на любой
+# ответ, включая 429 от рейт-лимита и статику.
+@app.middleware("http")
+async def _security(request: Request, call_next):
+    response = await call_next(request)
+    for key, value in _security_headers().items():
+        response.headers[key] = value
     return response
 
 

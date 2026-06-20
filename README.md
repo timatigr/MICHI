@@ -153,6 +153,10 @@ michi.db               — данные пользователя (создаёт
   при старте и далее раз в сутки внутри процесса (`MICHI_CLEANUP_DAYS`, по умолч.
   30; `MICHI_CLEANUP_ENABLED=0` — выключить). Базы с прогрессом не трогаются.
   Скрипт `scripts/cleanup_users.py [дней]` остаётся для ручного/cron-запуска.
+- **Заголовки безопасности** ставятся на каждый ответ автоматически (настройки не
+  нужны): CSP под ресурсы приложения (свой origin + Google Fonts, фрейминг запрещён),
+  `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`;
+  `Strict-Transport-Security` (HSTS) — только при `MICHI_COOKIE_SECURE=1` (за TLS).
 
 > Перенос личного локального прогресса (старый `michi.db`) на анонимный
 > аккаунт: откройте сайт, в ⚙ → «Импорт» выберите свой `michi.db` — он валиден
