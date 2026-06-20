@@ -31,10 +31,23 @@ def _now():
     return datetime.now(timezone.utc)
 
 
-def _local_today():
-    """Дневные сущности (стрик, лимиты, «сегодня») живут по локальным суткам
-    пользователя; в SQL им соответствует date(..., 'localtime')."""
-    return datetime.now().date()
+def local_today(tz_offset_min=None):
+    """Дата «сегодня» по локальным суткам пользователя.
+
+    Дневные сущности (стрик, лимиты, «сегодня») живут по локальным суткам.
+    tz_offset_min — смещение пользователя от UTC в минутах (восточнее = плюс).
+    None → серверные локальные сутки (одно-пользовательский/локальный режим, как было).
+    На публичном хостинге фронт шлёт смещение, иначе у всех был бы UTC-день сервера."""
+    if tz_offset_min is None:
+        return datetime.now().date()
+    return (datetime.now(timezone.utc) + timedelta(minutes=int(tz_offset_min))).date()
+
+
+def day_sql(col, tz_offset_min=None):
+    """SQLite-выражение «дата столбца (UTC ISO) по локальным суткам пользователя»."""
+    if tz_offset_min is None:
+        return f"date({col}, 'localtime')"
+    return f"date({col}, '{int(tz_offset_min):+d} minutes')"
 
 
 def make_scheduler(settings):
@@ -102,7 +115,7 @@ def auto_rate(conn, correct, duration_ms, exercise_type="", used_hint=False):
 
 
 def answer_card(conn, settings, card_row, correct, duration_ms,
-                exercise_type, used_hint=False):
+                exercise_type, used_hint=False, tz_offset_min=None):
     """Применить ответ: FSRS-пересчёт, журнал, пиявки. Возвращает сводку."""
     scheduler = make_scheduler(settings)
     card = Card.from_dict(json.loads(card_row["fsrs"]))
@@ -115,7 +128,7 @@ def answer_card(conn, settings, card_row, correct, duration_ms,
     reps = card_row["reps"] + 1
     lapses = card_row["lapses"] + (1 if rating == Rating.Again and state_before in (2, 3) else 0)
     is_leech = 1 if lapses >= LEECH_LAPSES else card_row["is_leech"]
-    introduced_on = card_row["introduced_on"] or _local_today().isoformat()
+    introduced_on = card_row["introduced_on"] or local_today(tz_offset_min).isoformat()
 
     with conn:
         conn.execute(
@@ -163,22 +176,22 @@ def _retrievability(scheduler, card_row):
         return 1.0
 
 
-def new_introduced_today(conn):
-    today = _local_today().isoformat()
+def new_introduced_today(conn, tz_offset_min=None):
+    today = local_today(tz_offset_min).isoformat()
     return conn.execute(
         "SELECT COUNT(*) AS c FROM srs_cards WHERE introduced_on = ?", (today,)
     ).fetchone()["c"]
 
 
-def reviews_done_today(conn):
-    today = _local_today().isoformat()
+def reviews_done_today(conn, tz_offset_min=None):
+    today = local_today(tz_offset_min).isoformat()
     return conn.execute(
-        "SELECT COUNT(*) AS c FROM reviews WHERE date(reviewed_at, 'localtime') = ?",
+        f"SELECT COUNT(*) AS c FROM reviews WHERE {day_sql('reviewed_at', tz_offset_min)} = ?",
         (today,),
     ).fetchone()["c"]
 
 
-def get_queue(conn, settings, limit=30):
+def get_queue(conn, settings, limit=30, tz_offset_min=None):
     """Очередь сессии по правилам раздела 4.4."""
     scheduler = make_scheduler(settings)
     now = _now()
@@ -195,11 +208,13 @@ def get_queue(conn, settings, limit=30):
     # Просроченные — по возрастанию вероятности вспоминания (риск забывания)
     due = sorted(due, key=lambda r: _retrievability(scheduler, r))
 
-    reviews_left = max(int(settings["reviews_per_day"]) - reviews_done_today(conn), 0)
+    reviews_left = max(
+        int(settings["reviews_per_day"]) - reviews_done_today(conn, tz_offset_min), 0)
     queue = list(due[:min(limit, reviews_left) if reviews_left else 0])
 
     # Новые карточки в пределах дневного лимита
-    new_left = max(int(settings["new_per_day"]) - new_introduced_today(conn), 0)
+    new_left = max(
+        int(settings["new_per_day"]) - new_introduced_today(conn, tz_offset_min), 0)
     slots = max(limit - len(queue), 0)
     need = min(new_left, slots)
     if need:
@@ -217,7 +232,7 @@ def get_queue(conn, settings, limit=30):
     return queue
 
 
-def counts(conn, settings):
+def counts(conn, settings, tz_offset_min=None):
     # Тот же горизонт И тот же дневной лимит, что в get_queue, иначе числа на
     # кнопке «Начать сессию» расходятся с фактической очередью: при исчерпанном
     # лимите повторений сессия не отдаст просроченные карточки, а счётчик их
@@ -234,9 +249,10 @@ def counts(conn, settings):
         "SELECT item_type, item_id FROM srs_cards WHERE reps = 0"
     ).fetchall()
     new_total = sum(1 for r in new_rows if item_exists(r["item_type"], r["item_id"]))
-    done_today = reviews_done_today(conn)
+    done_today = reviews_done_today(conn, tz_offset_min)
     reviews_left = max(int(settings["reviews_per_day"]) - done_today, 0)
-    new_left_today = max(int(settings["new_per_day"]) - new_introduced_today(conn), 0)
+    new_left_today = max(
+        int(settings["new_per_day"]) - new_introduced_today(conn, tz_offset_min), 0)
     return {
         "due": min(due_count, reviews_left),
         "new_available": min(new_total, new_left_today),
@@ -245,17 +261,17 @@ def counts(conn, settings):
     }
 
 
-def forecast(conn, days=14):
+def forecast(conn, days=14, tz_offset_min=None):
     """Сколько карточек станет due в каждый из ближайших дней."""
     rows = conn.execute(
-        "SELECT item_type, item_id, date(due_at, 'localtime') AS d FROM srs_cards "
-        "WHERE reps > 0"
+        f"SELECT item_type, item_id, {day_sql('due_at', tz_offset_min)} AS d "
+        "FROM srs_cards WHERE reps > 0"
     ).fetchall()
     by_date = {}
     for r in rows:                              # осиротевшие карточки не учитываем
         if item_exists(r["item_type"], r["item_id"]):
             by_date[r["d"]] = by_date.get(r["d"], 0) + 1
-    today = _local_today()
+    today = local_today(tz_offset_min)
     out = []
     backlog = sum(c for d, c in by_date.items() if d and d < today.isoformat())
     for i in range(days):

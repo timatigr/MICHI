@@ -17,16 +17,21 @@ async function apiError(r) {
   return new Error(detail || `${r.status} ${r.statusText}`);
 }
 
+// Смещение часового пояса браузера (минуты восточнее UTC). Бэкенд считает по нему
+// «сегодня»/серию/дневные лимиты — иначе на общем хостинге у всех был бы UTC-день
+// сервера (см. app/main.py _tz_offset_min). getTimezoneOffset = минуты к западу.
+const TZ_OFFSET = String(-new Date().getTimezoneOffset());
+
 const api = {
   async get(url) {
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: { "X-TZ-Offset": TZ_OFFSET } });
     if (!r.ok) throw await apiError(r);
     return r.json();
   },
   async post(url, body) {
     const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-TZ-Offset": TZ_OFFSET },
       body: JSON.stringify(body || {}),
     });
     if (!r.ok) throw await apiError(r);

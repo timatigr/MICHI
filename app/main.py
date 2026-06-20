@@ -131,6 +131,20 @@ def _uid(request: Request) -> str:
     return request.state.uid
 
 
+def _tz_offset_min(request: Request):
+    """Смещение пользователя от UTC в минутах из заголовка X-TZ-Offset (его шлёт
+    фронт: -new Date().getTimezoneOffset()). На публичном хостинге без него у всех
+    был бы UTC-день сервера; нет заголовка → None (серверные локальные сутки).
+    Зажато в ±14 ч, чтобы мусорное значение не ломало SQL-сдвиг даты."""
+    raw = request.headers.get("x-tz-offset")
+    if raw is None:
+        return None
+    try:
+        return max(-840, min(840, int(raw)))
+    except ValueError:
+        return None
+
+
 def _lesson_statuses(conn):
     rows = conn.execute("SELECT * FROM lesson_progress").fetchall()
     progress = {r["lesson_id"]: r for r in rows}
@@ -165,15 +179,17 @@ def _lesson_statuses(conn):
     return out
 
 
-def _streak(conn):
-    # Дни считаем по локальному времени: занятие после полуночи — это «сегодня»
+def _streak(conn, tz_offset_min=None):
+    # Дни считаем по локальным суткам пользователя: занятие после полуночи — «сегодня»
+    rev_day = srs_engine.day_sql("reviewed_at", tz_offset_min)
+    comp_day = srs_engine.day_sql("completed_at", tz_offset_min)
     days = {r["d"] for r in conn.execute(
-        "SELECT DISTINCT date(reviewed_at, 'localtime') AS d FROM reviews"
+        f"SELECT DISTINCT {rev_day} AS d FROM reviews"
     )} | {r["d"] for r in conn.execute(
-        "SELECT DISTINCT date(completed_at, 'localtime') AS d FROM lesson_progress "
+        f"SELECT DISTINCT {comp_day} AS d FROM lesson_progress "
         "WHERE completed_at IS NOT NULL"
     )}
-    today = datetime.now().date()
+    today = srs_engine.local_today(tz_offset_min)
     streak, day = 0, today
     if today.isoformat() not in days:
         day = today - timedelta(days=1)  # сегодня ещё не занимался — серия не сгорела
@@ -187,17 +203,18 @@ def _streak(conn):
 
 @app.get("/api/overview")
 def overview(request: Request):
+    tz = _tz_offset_min(request)
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
         settings = db.get_settings(conn)
-        c = srs_engine.counts(conn, settings)
+        c = srs_engine.counts(conn, settings, tz)
         statuses = _lesson_statuses(conn)
         next_lesson = next(
             (lid for lid in LESSON_ORDER if statuses[lid]["status"] == "available"), None)
-        today = datetime.now().date().isoformat()
+        today = srs_engine.local_today(tz).isoformat()
         today_row = conn.execute(
             "SELECT COUNT(*) AS total, COALESCE(SUM(correct), 0) AS correct "
-            "FROM reviews WHERE date(reviewed_at, 'localtime') = ?", (today,)
+            f"FROM reviews WHERE {srs_engine.day_sql('reviewed_at', tz)} = ?", (today,)
         ).fetchone()
         courses = [
             {"id": course["id"], "title": course["title"],
@@ -209,7 +226,7 @@ def overview(request: Request):
         ]
         return {
             "srs": c,
-            "streak": _streak(conn),
+            "streak": _streak(conn, tz),
             "xp": gamification.xp_summary(conn),
             "today": {
                 "reviews": today_row["total"],
@@ -373,10 +390,11 @@ def complete_lesson(lesson_id: str, result: LessonResult, request: Request):
 
 @app.get("/api/srs/queue")
 def srs_queue(request: Request, limit: int = 20):
+    tz = _tz_offset_min(request)
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
         settings = db.get_settings(conn)
-        rows = srs_engine.get_queue(conn, settings, limit=limit)
+        rows = srs_engine.get_queue(conn, settings, limit=limit, tz_offset_min=tz)
         items = []
         for r in rows:
             ex = review_exercise(r["item_type"], r["item_id"], reps=r["reps"])
@@ -389,7 +407,7 @@ def srs_queue(request: Request, limit: int = 20):
                 "exercise": ex,
                 "info": item_info(r["item_type"], r["item_id"]),
             })
-        return {"items": items, "counts": srs_engine.counts(conn, settings)}
+        return {"items": items, "counts": srs_engine.counts(conn, settings, tz)}
     finally:
         conn.close()
 
@@ -404,6 +422,7 @@ class Answer(BaseModel):
 
 @app.post("/api/srs/answer")
 def srs_answer(answer: Answer, request: Request):
+    tz = _tz_offset_min(request)
     conn = db.connect(_uid(request))
     try:
         row = conn.execute(
@@ -414,7 +433,7 @@ def srs_answer(answer: Answer, request: Request):
         settings = db.get_settings(conn)
         return srs_engine.answer_card(
             conn, settings, row, answer.correct, answer.duration_ms,
-            answer.exercise_type, answer.used_hint,
+            answer.exercise_type, answer.used_hint, tz,
         )
     finally:
         conn.close()
@@ -516,6 +535,7 @@ async def tts_synthesize(text: str, voice: str = tts.DEFAULT_VOICE):
 
 @app.get("/api/stats")
 def stats(request: Request):
+    tz = _tz_offset_min(request)
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
         settings = db.get_settings(conn)
@@ -536,12 +556,13 @@ def stats(request: Request):
         # Все 14 дней, включая нулевые — иначе график из одного дня
         # превращается в сплошной столбец на всю ширину
         act_days = 14
-        start = (datetime.now().date() - timedelta(days=act_days - 1))
+        start = (srs_engine.local_today(tz) - timedelta(days=act_days - 1))
+        rev_day = srs_engine.day_sql("reviewed_at", tz)
         act_rows = conn.execute(
-            "SELECT date(reviewed_at, 'localtime') AS d, COUNT(*) AS c, "
+            f"SELECT {rev_day} AS d, COUNT(*) AS c, "
             "COALESCE(SUM(correct),0) AS ok FROM reviews "
-            "WHERE date(reviewed_at, 'localtime') >= ? "
-            "GROUP BY date(reviewed_at, 'localtime')", (start.isoformat(),)
+            f"WHERE {rev_day} >= ? "
+            f"GROUP BY {rev_day}", (start.isoformat(),)
         ).fetchall()
         act_by_day = {r["d"]: r for r in act_rows}
         activity = [
@@ -568,7 +589,7 @@ def stats(request: Request):
                  if d in act_by_day else None}
                 for d in activity
             ],
-            "forecast": srs_engine.forecast(conn, days=14),
+            "forecast": srs_engine.forecast(conn, days=14, tz_offset_min=tz),
             "hardest": [
                 {"char": info["title"], "romaji": info["sub"],
                  "lapses": r["lapses"], "is_leech": bool(r["is_leech"])}
@@ -646,7 +667,7 @@ def prefs_set(patch: dict[str, str | None], request: Request):
 def achievements(request: Request):
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
-        data = gamification.achievements(conn, _streak(conn))
+        data = gamification.achievements(conn, _streak(conn, _tz_offset_min(request)))
         data["xp"] = gamification.xp_summary(conn)
         return data
     finally:
