@@ -1,0 +1,6 @@
+# Shell-скрипты в Docker-образе должны иметь LF — иначе shebang ломается
+# в Linux-контейнере («no such file or directory»).
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+# В Dockerfile CRLF может поломать продолжения строк (`\`) — держим LF.
+Dockerfile text eol=lf
