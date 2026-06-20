@@ -25,7 +25,7 @@ from .content.registry import (
     KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_BY_ID, VOCAB_UNITS,
     srs_items_for_lesson,
 )
-from .exercises import item_info, make_lesson_steps, review_exercise
+from .exercises import _mnemonics_for, item_info, make_lesson_steps, review_exercise
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -736,12 +736,14 @@ def _learned_display(item_type, item_id):
         info = KANA_BY_CHAR.get(item_id)
         if info:
             course = "hiragana" if info.get("script") == "h" else "katakana"
-            return course, {"title": item_id, "sub": info["romaji"], "tts": item_id}
+            return course, {"title": item_id, "sub": info["romaji"], "tts": item_id,
+                            "mn": _mnemonics_for(info)}
     elif item_type.startswith("kanji"):
         k = KANJI_BY_CHAR.get(item_id)
         if k:
             return "kanji", {"title": k["char"], "sub": k["meaning"],
-                             "tts": k["reading"], "extra": k["reading"]}
+                             "tts": k["reading"], "extra": k["reading"],
+                             "mn": [m for m in [k.get("mnemonic")] if m]}
     elif item_type.startswith("vocab"):
         w = VOCAB_BY_ID.get(item_id)
         if w:
@@ -750,8 +752,12 @@ def _learned_display(item_type, item_id):
     elif item_type == "grammar":
         p = GRAMMAR_BY_ID.get(item_id)
         if p:
+            # Озвучка точки — первый пример целиком (частицы вроде は в контексте
+            # читаются верно: «wa», а не «ha»); структура с A/B непроизносима.
+            ex = (p.get("examples") or [None])[0]
+            tts = (ex.get("reading") or "".join(ex["tokens"])) if ex else None
             return "grammar", {"title": p["title"], "sub": p["meaning"],
-                               "tts": None, "extra": p.get("structure")}
+                               "tts": tts, "extra": p.get("structure")}
     return None
 
 

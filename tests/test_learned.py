@@ -37,7 +37,10 @@ def test_grammar_maps_to_grammar_course():
     g = GRAMMAR[0]
     course, d = _learned_display("grammar", g["id"])
     assert course == "grammar"
-    assert d["title"] == g["title"] and d["tts"] is None
+    assert d["title"] == g["title"]
+    # Озвучка точки — её первый пример целиком (раньше молчала в словаре)
+    ex = g["examples"][0]
+    assert d["tts"] == (ex.get("reading") or "".join(ex["tokens"]))
 
 
 def test_unknown_items_return_none():
