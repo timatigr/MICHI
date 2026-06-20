@@ -46,7 +46,8 @@ const api = {
    пуст/устарел). Значения — те же строки, что в localStorage. */
 const Prefs = {
   KEYS: ["michi_theme", "michi_lang", "michi_tts", "michi_haptics",
-         "michi_daily_goal", "michi_romaji", "michi_onboarded"],
+         "michi_daily_goal", "michi_romaji", "michi_onboarded",
+         "michi_mnemo_fav", "michi_mnemo_custom"],
   _pending: null,
   _timer: 0,
 
@@ -85,6 +86,41 @@ const Prefs = {
     if (window.__noPrefWrite) return;                     // тестовый прогон: без записи и reload
     if (Object.keys(seed).length) api.post("/api/prefs", seed).catch(() => {});
     if (changed) location.reload();
+  },
+};
+
+/* ---------- Ассоциации: личный фаворит + своя мнемоника (6.6) ----------
+   Хранится клиентски (зеркалится в БД через Prefs): michi_mnemo_fav —
+   {знак: индекс пресета | "custom"}, michi_mnemo_custom — {знак: текст}. */
+const Mnemo = {
+  _get(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch { return {}; } },
+  _set(key, obj) { localStorage.setItem(key, JSON.stringify(obj)); Prefs.push(key); },
+
+  custom(char) { return this._get("michi_mnemo_custom")[char] || ""; },
+  setCustom(char, text) {
+    const m = this._get("michi_mnemo_custom");
+    text = (text || "").trim();
+    if (text) m[char] = text; else delete m[char];
+    this._set("michi_mnemo_custom", m);
+  },
+  fav(char) { const v = this._get("michi_mnemo_fav")[char]; return v == null ? 0 : v; },
+  setFav(char, val) { const m = this._get("michi_mnemo_fav"); m[char] = val; this._set("michi_mnemo_fav", m); },
+
+  // Все варианты знака: пресеты сервера + (если вписана) своя
+  options(char, presets) {
+    const opts = (presets || []).map(t => ({ text: t, custom: false }));
+    const c = this.custom(char);
+    if (c) opts.push({ text: c, custom: true });
+    return opts;
+  },
+  // Выбранная пользователем ассоциация (текст) или null
+  favText(char, presets) {
+    const opts = this.options(char, presets);
+    if (!opts.length) return null;
+    const f = this.fav(char);
+    if (f === "custom") { const c = opts.find(o => o.custom); if (c) return c.text; }
+    const idx = (typeof f === "number" && f >= 0 && f < (presets || []).length) ? f : 0;
+    return (presets && presets[idx]) || opts[0].text || null;
   },
 };
 
@@ -462,6 +498,7 @@ $("#set-lang").addEventListener("change", async e => {
   location.reload();
 });
 $("#btn-settings").addEventListener("click", openSettings);
+$("#player-settings").addEventListener("click", openSettings);   // настройки прямо из урока
 $("#set-close").addEventListener("click", () => settingsModal.classList.remove("open"));
 settingsModal.addEventListener("click", e => {
   if (e.target === settingsModal) settingsModal.classList.remove("open");
@@ -974,9 +1011,28 @@ function openPlayer(mode) {
   playerMode = mode;
   player.classList.add("open");
   setProgress(0);
+  Combo.reset();
   $("#player-counter").textContent = "";
   return sessionToken;
 }
+
+/* Серия верных ответов внутри сессии — лёгкий мотиватор (🔥 N), сброс на ошибке. */
+const Combo = {
+  n: 0, el: null,
+  _box() { return this.el || (this.el = document.getElementById("combo")); },
+  reset() { this.n = 0; const el = this._box(); if (el) { el.hidden = true; el.className = "combo"; } },
+  update(correct) {
+    const el = this._box();
+    if (!correct) return this.reset();
+    this.n++;
+    if (!el) return;
+    if (this.n < 3) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = `🔥 ${this.n}`;
+    el.classList.toggle("milestone", this.n % 5 === 0);   // вехи 5/10/15 — ярче
+    el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+  },
+};
 function closePlayer() {
   sessionToken++;
   if (exerciseCleanup) exerciseCleanup();
@@ -1042,6 +1098,117 @@ async function showIntroText(step) {
   await waitClick($("#next", playerBody));
 }
 
+// Экранирование текста в значение атрибута (своя мнемоника — ввод пользователя)
+const escAttr = s => escapeHtml(s).replace(/"/g, "&quot;");
+
+// Блок «выбери ассоциацию» в интро (только RU — мнемоники русскоязычные)
+function mnemoChoiceHtml(char, presets) {
+  presets = presets || [];
+  const opts = Mnemo.options(char, presets);
+  const fav = Mnemo.fav(char);
+  const isFav = o => o.custom ? fav === "custom"
+    : (typeof fav === "number" ? presets.indexOf(o.text) === fav : presets.indexOf(o.text) === 0);
+  const row = o => {
+    const val = o.custom ? "custom" : presets.indexOf(o.text);
+    const on = isFav(o);
+    return `<button type="button" class="mnemo-opt ${on ? "fav" : ""}" data-val="${val}">
+       <span class="mnemo-star">${on ? "★" : "☆"}</span>
+       <span class="mnemo-text">${escapeHtml(o.text)}</span></button>`;
+  };
+  return `<div class="mnemo-block" data-char="${escAttr(char)}">
+    <p class="mnemo-head">${tr("Ассоциация — отметь, что лучше запомнится")}</p>
+    <div class="mnemo-choices">${opts.map(row).join("")}</div>
+    <input class="mnemo-custom" maxlength="120"
+      placeholder="${tr("…или впиши свою")}" value="${escAttr(Mnemo.custom(char))}">
+  </div>`;
+}
+
+// Кандзи: только «впиши свою» (пресетов-картинок у кандзи две — образ и чтение,
+// их не ранжируем; своя заметка — отдельный личный крючок).
+function customMnemoHtml(char) {
+  const c = Mnemo.custom(char);
+  return `<div class="mnemo-block mnemo-own" data-char="${escAttr(char)}">
+    ${c ? `<p class="mnemo-head">📝 ${tr("Твоя ассоциация")}</p>` +
+          `<div class="mnemo-own-text">${escapeHtml(c)}</div>` : ""}
+    <input class="mnemo-custom" maxlength="140"
+      placeholder="${tr("…впиши свою ассоциацию")}" value="${escAttr(c)}">
+  </div>`;
+}
+function bindCustomMnemo(root) {
+  const block = root.querySelector(".mnemo-own");
+  if (!block) return;
+  const char = block.dataset.char;
+  const inp = block.querySelector(".mnemo-custom");
+  inp.onchange = () => {
+    Mnemo.setCustom(char, inp.value);
+    block.outerHTML = customMnemoHtml(char);
+    bindCustomMnemo(root);
+  };
+}
+
+function bindMnemo(root) {
+  const block = root.querySelector(".mnemo-block");
+  if (!block) return;
+  const char = block.dataset.char;
+  const presets = block._presets || [];
+  block.querySelectorAll(".mnemo-opt").forEach(btn => btn.onclick = () => {
+    const val = btn.dataset.val === "custom" ? "custom" : Number(btn.dataset.val);
+    Mnemo.setFav(char, val);
+    Haptics.tap && Haptics.tap();
+    block.querySelectorAll(".mnemo-opt").forEach(b => {
+      const on = (b.dataset.val === "custom") ? (val === "custom") : (Number(b.dataset.val) === val);
+      b.classList.toggle("fav", on);
+      b.querySelector(".mnemo-star").textContent = on ? "★" : "☆";
+    });
+  });
+  const inp = block.querySelector(".mnemo-custom");
+  if (inp) inp.onchange = () => {
+    const had = !!Mnemo.custom(char);
+    Mnemo.setCustom(char, inp.value);
+    if (inp.value.trim() && !had) Mnemo.setFav(char, "custom");  // вписал — сразу его в фавориты
+    const fresh = mnemoChoiceHtml(char, presets);
+    block.outerHTML = fresh;
+    const nb = root.querySelector(".mnemo-block");
+    if (nb) nb._presets = presets;
+    bindMnemo(root);
+  };
+}
+
+// Краткий отклик на ответ (сдержанно): подсветка края экрана + печать ✓ на верный
+function answerFx(correct, glyphEl) {
+  const fl = document.getElementById("fx-flash");
+  if (fl) { fl.className = ""; void fl.offsetWidth; fl.className = correct ? "ok" : "bad"; }
+  if (correct) {
+    const s = document.createElement("div");
+    s.className = "answer-stamp"; s.textContent = "✓";
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 900);
+  } else if (glyphEl) {
+    glyphEl.classList.remove("fx-shake"); void glyphEl.offsetWidth; glyphEl.classList.add("fx-shake");
+  }
+}
+
+// Напоминание ассоциации при ошибке (только RU): личный фаворит знака +
+// «не путай» с похожим, если выбрали именно его (опирается на ex.confusables).
+function mountMnemoReminder(host, ex, choice) {
+  if (LANG !== "ru") return;
+  let html = "";
+  const fav = (ex.mnemonics && ex.mnemonics.length)
+    ? Mnemo.favText(ex.item_id, ex.mnemonics) : null;
+  if (fav)
+    html += `<div class="mnemo-remind"><span class="mr-char jp">${escapeHtml(ex.item_id)}</span>` +
+            `<span><b>${tr("Вспомни")}:</b> ${escapeHtml(fav)}</span></div>`;
+  const own = Mnemo.custom(ex.item_id);
+  if (own && own !== fav)
+    html += `<div class="mnemo-remind own"><span class="mr-char">📝</span>` +
+            `<span><b>${tr("Твоя заметка")}:</b> ${escapeHtml(own)}</span></div>`;
+  const chosen = ex.options[choice];
+  if (ex.confusables && ex.confusables[chosen])
+    html += `<div class="mnemo-remind warn"><span class="mr-char jp">${escapeHtml(chosen)}</span>` +
+            `<span><b>${tr("Не путай")}:</b> ${escapeHtml(ex.confusables[chosen])}</span></div>`;
+  if (html) host.insertAdjacentHTML("beforeend", `<div class="mnemo-reminders">${html}</div>`);
+}
+
 async function showIntroKana(step) {
   const lookalikes = (step.lookalikes || []).map(l =>
     `<span class="jp">${l.char}<small>${l.romaji}</small></span>`).join("");
@@ -1049,17 +1216,21 @@ async function showIntroKana(step) {
   const glyph = step.strokes
     ? `<div class="kana-anim" id="kana-anim" data-tts="${step.char}" title="${tr("Анимация порядка черт")}"></div>`
     : `<div class="big-kana ${step.char.length > 1 ? "small" : ""}" data-tts="${step.char}">${step.char}</div>`;
+  const presets = (step.mnemonics && step.mnemonics.length) ? step.mnemonics
+    : (step.mnemonic ? [step.mnemonic] : []);
   playerBody.innerHTML = `
     ${glyph}
     <div class="romaji-big">${step.romaji}</div>
     ${ttsButton(step.tts)}
     ${step.derivation ? `<div class="derivation">${step.derivation}</div>` : ""}
-    ${step.mnemonic && LANG === "ru" ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
+    ${LANG === "ru" && presets.length ? mnemoChoiceHtml(step.char, presets) : ""}
     ${step.note ? `<p class="note">${tr(step.note)}</p>` : ""}
     ${lookalikes ? `<p class="note center">${tr("не путайте с")}</p><div class="lookalikes">${lookalikes}</div>` : ""}
     <div class="spacer"></div>
     <button class="primary" id="next">${tr("Запомнил")}</button>`;
   if (step.strokes) Tracing.preview($("#kana-anim", playerBody), step.strokes, 176);
+  const mb = playerBody.querySelector(".mnemo-block");
+  if (mb) { mb._presets = presets; bindMnemo(playerBody); }
   animateIn(playerBody);
   speak(step.tts);
   await waitClick($("#next", playerBody));
@@ -1110,10 +1281,12 @@ async function showIntroKanji(step) {
     ${ttsButton(step.tts)}
     ${step.mnemonic && LANG === "ru" ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
     ${step.mnemonic_reading && LANG === "ru" ? `<div class="mnemonic mnemonic-reading"><b>🔉 Чтение:</b> ${step.mnemonic_reading}</div>` : ""}
+    ${LANG === "ru" ? customMnemoHtml(step.char) : ""}
     ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
     <div class="spacer"></div>
     <button class="primary" id="next">${tr("Запомнил")}</button>`;
   if (step.strokes) Tracing.preview($("#kana-anim", playerBody), step.strokes, 176);
+  bindCustomMnemo(playerBody);
   animateIn(playerBody);
   speak(step.tts);
   await waitClick($("#next", playerBody));
@@ -1351,6 +1524,7 @@ async function runChoice(ex, afterAnswer) {
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
   Haptics[correct ? "good" : "bad"]();
+  answerFx(correct, playerBody.querySelector(".prompt-text, .audio-prompt"));
   fb.innerHTML = verdict(correct, correct ? tr("Верно") :
     tr("Правильно: {x}", { x: `<span class="jp">${tr(ex.options[ex.answer])}</span>` }));
   speak(ex.prompt.tts || ex.answer_tts);
@@ -1360,6 +1534,7 @@ async function runChoice(ex, afterAnswer) {
   if (correct) {
     await new Promise(r => setTimeout(r, 900));
   } else {
+    mountMnemoReminder(playerBody, ex, choice);
     mountExplain(playerBody, {
       exercise_type: ex.type, item_id: ex.item_id || "",
       prompt: ex.prompt.text || question || "",
@@ -1429,6 +1604,7 @@ async function runWordBuild(ex, afterAnswer) {
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
   Haptics[correct ? "good" : "bad"]();
+  answerFx(correct, $("#slots", playerBody));
   fb.innerHTML = verdict(correct, correct
     ? `<span class="jp">${word}</span>`
     : tr("Правильно: {x}", { x: `<span class="jp">${ex.answer_tokens.join("")}</span>` }));
@@ -1493,6 +1669,7 @@ async function runInput(ex, afterAnswer) {
   const fb = $("#fb", playerBody);
   fb.className = `feedback ${correct ? "ok" : "bad"}`;
   Haptics[correct ? "good" : "bad"]();
+  answerFx(correct, input);
   fb.innerHTML = verdict(correct, correct
     ? `<span class="jp">${ex.answer}</span>`
     : tr("Правильно: {x}", { x: `<span class="jp">${ex.answer}</span>` }));
@@ -1622,6 +1799,7 @@ async function startLesson(lessonId) {
       if (token !== sessionToken) return;
       total++;
       if (res.correct) correct++;
+      Combo.update(res.correct);
     }
     localStorage.setItem(RESUME_KEY, JSON.stringify({
       lessonId, title: lesson.title, steps, i: i + 1, correct, total,
@@ -1709,6 +1887,7 @@ async function startReview() {
       if (token !== sessionToken) return;
       done++;
       if (res.correct) okCount++;
+      Combo.update(res.correct);
     }
   }
   if (token !== sessionToken) return;
@@ -1759,6 +1938,36 @@ async function renderReviewTab() {
 /* ---------- Словарь: справочник изученного ----------
    Всё, что попало в SRS (введено на уроках), сгруппировано по курсам. Клик по
    элементу с озвучкой — проигрывает (глобальный [data-tts]-обработчик). */
+// Галерея личных ассоциаций (только RU): свои заметки + выбранные не-дефолтные
+// пресеты по уже изученным знакам. Опирается на it.mn (пресеты из /api/learned).
+function mnemoGalleryHtml(courses) {
+  const seen = new Set();
+  const entries = [];
+  for (const c of courses) for (const it of c.items) {
+    const g = it.title;
+    if (seen.has(g)) continue;
+    let text = null, tag = "";
+    const custom = Mnemo.custom(g);
+    if (custom) { text = custom; tag = tr("своя"); }
+    else if (it.mn && it.mn.length) {
+      const f = Mnemo.fav(g);
+      if (typeof f === "number" && f > 0 && f < it.mn.length) { text = it.mn[f]; tag = tr("выбрана"); }
+    }
+    if (!text) continue;
+    seen.add(g);
+    entries.push(`<button class="mg-item"${it.tts ? ` data-tts="${escapeHtml(it.tts)}"` : ""}>
+      <span class="mg-char jp">${escapeHtml(g)}</span>
+      <span class="mg-text">${escapeHtml(text)}</span>
+      <span class="mg-tag">${tag}</span></button>`);
+  }
+  if (!entries.length) return "";
+  return `<div class="card mnemo-gallery">
+    <h2>✨ ${tr("Мои ассоциации")} · ${entries.length}</h2>
+    <p class="note">${tr("Твои собственные и выбранные образы. Нажми — послушать знак.")}</p>
+    <div class="mg-grid">${entries.join("")}</div>
+  </div>`;
+}
+
 async function renderDict() {
   view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
   const data = await api.get("/api/learned");
@@ -1768,7 +1977,8 @@ async function renderDict() {
     return;
   }
   const label = { new: tr("новое"), learning: tr("учится"), review: tr("в памяти") };
-  view.innerHTML = `<div class="dict-wrap">` + data.courses.map(c => `
+  const gallery = LANG === "ru" ? mnemoGalleryHtml(data.courses) : "";
+  view.innerHTML = `<div class="dict-wrap">` + gallery + data.courses.map(c => `
     <div class="card">
       <h2>${tr(COURSE_LABEL[c.id] || c.title)} · ${c.count}</h2>
       <div class="dict-grid">

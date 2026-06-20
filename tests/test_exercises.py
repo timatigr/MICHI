@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """Генераторы упражнений и сценарии уроков."""
 from app.content.registry import (
-    COURSES, GRAMMAR, KANA, KANJI_BY_CHAR, LESSON_BY_ID, VOCAB,
+    COURSES, GRAMMAR, KANA, KANA_BY_CHAR, KANJI_BY_CHAR, LESSON_BY_ID, VOCAB,
 )
 from app.exercises import (
-    dictation, grammar_cloze, make_lesson_steps, review_exercise, vocab_choice,
-    vocab_input, vocab_match, vocab_reverse_choice, word_kanji,
+    _mnemonics_for, dictation, grammar_cloze, kana_recognition, kana_reverse,
+    make_lesson_steps, review_exercise, vocab_choice, vocab_input, vocab_match,
+    vocab_reverse_choice, word_kanji,
 )
 
 
@@ -141,3 +142,47 @@ def test_kanji_lessons_link_words_with_known_kanji():
     jp_types = {review_exercise("vocab_jp_ru", wid, reps=r)["type"] for r in range(3)}
     assert "vocab_input" in ru_types
     assert "dictation" in jp_types
+
+
+def test_mnemonics_keep_canonical_first_and_dedup():
+    """Список ассоциаций: основная `mnemonic` всегда первая, без пустот/дублей."""
+    info = {"mnemonic": "Основа", "mnemonics": ["Основа", "Альтернатива", ""]}
+    assert _mnemonics_for(info) == ["Основа", "Альтернатива"]
+    assert _mnemonics_for({"mnemonic": "Одна"}) == ["Одна"]
+    assert _mnemonics_for({}) == []
+
+
+def test_seeded_kana_offer_multiple_associations():
+    """У первых рядов хираганы есть альтернативная ассоциация «на выбор»."""
+    for ch in ("あ", "か", "さ"):
+        assert len(_mnemonics_for(KANA_BY_CHAR[ch])) >= 2
+
+
+def test_kana_exercises_carry_mnemonics_for_reminder():
+    """Упражнения каны несут ассоциации знака (фронт напоминает их при ошибке)."""
+    ch = "き"
+    rec = kana_recognition(ch)
+    assert rec["mnemonics"] and rec["mnemonics"][0] == KANA_BY_CHAR[ch]["mnemonic"]
+    rev = kana_reverse(ch)
+    assert rev["mnemonics"][0] == KANA_BY_CHAR[ch]["mnemonic"]
+
+
+def test_kanji_exercises_carry_their_mnemonic():
+    """Кандзи-упражнения несут профильную мнемонику для напоминания при ошибке:
+    значение → образ (mnemonic), чтение → звуковая (mnemonic_reading)."""
+    from app.exercises import kanji_meaning, kanji_reading
+    k = next(x for x in KANJI_BY_CHAR.values()
+             if x.get("mnemonic") and x.get("mnemonic_reading"))
+    assert kanji_meaning(k)["mnemonics"] == [k["mnemonic"]]
+    assert kanji_reading(k)["mnemonics"] == [k["mnemonic_reading"]]
+
+
+def test_reverse_confusables_map_distractors_not_answer():
+    """confusables даёт ассоциацию знаков-дистракторов, но не самого ответа."""
+    ch = "き"
+    for _ in range(8):
+        rev = kana_reverse(ch)
+        assert ch not in rev["confusables"]                  # ответ не подсказываем
+        for c, m in rev["confusables"].items():
+            assert c in rev["options"] and c != ch
+            assert m == KANA_BY_CHAR[c]["mnemonic"]

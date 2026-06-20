@@ -309,9 +309,12 @@ async def main():
                 "document.querySelector('#player').classList.add('open');"
                 "playerBody.classList.remove('center-step');setProgress(0.4);"
                 "document.querySelector('#player-counter').textContent='3 · осталось ~7';"
-                "runChoice({type:'kana_recognition',question:'Какой знак так читается?',"
+                "runChoice({type:'kana_reverse',question:'Какой знак так читается?',"
                 "prompt:{style:'jp',text:'あ',tts:'あ'},options:['か','さ','あ','な'],"
-                "answer:2,options_are_kana:true})")
+                "answer:2,options_are_kana:true,item_id:'あ',"
+                "mnemonics:['Антенна на крыше дома — «А-а, ловит!»',"
+                "'Аист расправил крылья — «А-а!»'],"
+                "confusables:{'か':'КАтана, рассекающая воздух'}})")
             await settle(1300)
             await cdp.shot("m_exercise")
             if await cdp.js("!!document.querySelector('#player-body .options button')"):
@@ -326,8 +329,42 @@ async def main():
                 if abs(shift) > 2:
                     problems.append(f"layout shift {shift}px при ответе")
                 print(f"layout shift options.top: {before}->{after} = {shift}px (цель ~0)")
+                # Напоминание ассоциации при ошибке: фаворит + «не путай»
+                rem = await cdp.js("document.querySelectorAll("
+                                   "'#player-body .mnemo-remind').length")
+                print(f"mnemo reminders on mistake: {rem}")
+                if rem < 2:
+                    problems.append("напоминание ассоциации/«не путай» не показано при ошибке")
+                # Настройки прямо из урока: ⚙ в шапке плеера открывает модалку
+                await cdp.js("document.getElementById('player-settings').click()")
+                await settle(500)
+                set_open = await cdp.js("document.getElementById('settings').classList.contains('open')")
+                print(f"settings open from lesson: {set_open}")
+                if not set_open:
+                    problems.append("⚙ в плеере не открыла настройки")
+                await cdp.js("document.getElementById('set-close').click()")
+                await settle(300)
             else:
                 problems.append("упражнение-выбор не отрендерилось")
+
+            # --- Интро каны: выбор ассоциации «на выбор» + своя ---
+            await cdp.fire(
+                "showIntroKana({type:'intro_kana',char:'き',romaji:'ki',tts:'き',"
+                "mnemonic:'КЛЮЧ (key) с двумя зубцами',"
+                "mnemonics:['КЛЮЧ (key) с двумя зубцами','Колосок пшеницы клонится — «КИ»']})")
+            await settle(700)
+            mn_opts = await cdp.js("document.querySelectorAll("
+                                   "'#player-body .mnemo-opt').length")
+            await cdp.js("document.querySelectorAll('#player-body .mnemo-opt')[1].click()")
+            await settle(200)
+            fav_on = await cdp.js("document.querySelectorAll("
+                                  "'#player-body .mnemo-opt')[1].classList.contains('fav')")
+            await cdp.shot("m_mnemo_intro")
+            print(f"mnemo choices: {mn_opts}, fav switched to #2: {fav_on}")
+            if mn_opts < 2 or not fav_on:
+                problems.append("выбор ассоциации в интро не работает")
+            await cdp.js("document.querySelector('#player-body #next')."
+                         "click&&document.querySelector('#player-body #next').click()")
 
             # --- Настройки (тумблер + селектор звука) ---
             await cdp.send("Page.navigate", url=ORIGIN + "/")
@@ -497,6 +534,67 @@ async def main():
             await cdp.js("document.querySelector('#player-close').click();"
                          "var c=document.querySelector('#confirm-yes');c&&c.click();")
             await settle(400)
+
+            # --- Кандзи: поле «впиши свою ассоциацию» (RU) ---
+            await cdp.fire(
+                "document.querySelector('#player').classList.add('open');"
+                "playerBody.classList.add('center-step');"
+                "showIntroKanji({char:'水',meaning:'вода',on:['スイ'],kun:['みず'],"
+                "examples:[{w:'水',r:'みず',ru:'вода'}],"
+                "mnemonic:'тест-образ',mnemonic_reading:'тест-чтение',tts:'みず'})")
+            await settle(600)
+            own_present = await cdp.js(
+                "!!document.querySelector('#player-body .mnemo-own input.mnemo-custom')")
+            await cdp.js("var i=document.querySelector('#player-body .mnemo-own input.mnemo-custom');"
+                         "i.value='капля воды стекает';i.dispatchEvent(new Event('change'))")
+            await settle(200)
+            own_saved = await cdp.js("!!document.querySelector('#player-body .mnemo-own-text')")
+            print(f"kanji custom field: present={own_present} shows_after_save={own_saved}")
+            if not own_present or not own_saved:
+                problems.append("поле своей ассоциации у кандзи не работает")
+            await cdp.shot("m_kanji_custom")
+            await cdp.js("document.querySelector('#player').classList.remove('open')")
+            await settle(200)
+
+            # --- Combo-счётчик серии в шапке плеера ---
+            await cdp.js("openPlayer('review');Combo.update(true);Combo.update(true);Combo.update(true)")
+            await settle(150)
+            combo_txt = await cdp.js(
+                "var c=document.getElementById('combo');(c&&!c.hidden)?c.textContent:''")
+            print(f"combo after 3 correct: {combo_txt!r}")
+            if "3" not in combo_txt:
+                problems.append("combo-счётчик не показался на серии из 3")
+            combo_hidden = await cdp.js("Combo.update(false);document.getElementById('combo').hidden")
+            if not combo_hidden:
+                problems.append("combo не сбросился на ошибке")
+            await cdp.js("document.querySelector('#player').classList.remove('open')")
+            await settle(200)
+
+            # --- Галерея личных ассоциаций в «Словаре» ---
+            await cdp.js("document.querySelector('nav.tabs button[data-view=dict]').click()")
+            await settle(1000)
+            first = await cdp.js("(document.querySelector('.dict-item .di-title')||{}).textContent||''")
+            if first:
+                # реальный путь: своя заметка по изученному знаку → попадает в галерею
+                payload = json.dumps(json.dumps({first: "тест-ассоциация"}, ensure_ascii=False))
+                await cdp.js(f"localStorage.setItem('michi_mnemo_custom', {payload})")
+                await cdp.js("renderDict()")
+            else:
+                # демо-БД пуста: синтетический рендер галереи из поддельных данных
+                await cdp.js(
+                    "localStorage.setItem('michi_mnemo_custom',"
+                    "JSON.stringify({'あ':'моя ассоциация на А','し':'крючок ШИ'}));"
+                    "var courses=[{id:'hiragana',items:["
+                    "{title:'あ',tts:'あ',mn:['x']},"
+                    "{title:'し',tts:'し',mn:['y']}]}];"
+                    "view.innerHTML=\"<div class='dict-wrap'>\"+mnemoGalleryHtml(courses)+\"</div>\"")
+            await settle(800)
+            gallery_n = await cdp.js("document.querySelectorAll('.mnemo-gallery .mg-item').length")
+            print(f"mnemo gallery items: {gallery_n}")
+            await cdp.shot("m_dict_gallery")
+            if gallery_n < 1:
+                problems.append("галерея личных ассоциаций не показалась")
+            await cdp.js("localStorage.removeItem('michi_mnemo_custom')")
 
             # --- Десктоп today ---
             await cdp.metrics(1100, 860, dpr=1, mobile=False)

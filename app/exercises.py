@@ -94,6 +94,32 @@ def _with_options(correct, distractors):
     return options, options.index(correct)
 
 
+def _mnemonics_for(info):
+    """Полный список ассоциаций знака: основная + альтернативы (6.6).
+
+    Обратная совместимость: поле `mnemonic` остаётся первым/каноничным,
+    `mnemonics` — необязательные дополнительные варианты «на выбор».
+    """
+    out = []
+    for m in [info.get("mnemonic"), *info.get("mnemonics", [])]:
+        if m and m not in out:
+            out.append(m)
+    return out
+
+
+def _confusables(option_chars, correct):
+    """Ассоциации знаков-дистракторов (только для вариантов-каны): фронт
+    показывает «не путай X с Y» при выборе похожего знака."""
+    out = {}
+    for c in option_chars:
+        if c == correct:
+            continue
+        m = KANA_BY_CHAR.get(c, {}).get("mnemonic")
+        if m:
+            out[c] = m
+    return out
+
+
 def kana_recognition(char):
     """Тип 1: знак -> выбор чтения из 4."""
     info = KANA_BY_CHAR[char]
@@ -101,7 +127,8 @@ def kana_recognition(char):
     return {"type": "kana_recognition", "item_id": char,
             "prompt": {"text": char, "tts": char, "style": "jp"},
             "question": "Как читается этот знак?",
-            "options": options, "answer": answer}
+            "options": options, "answer": answer,
+            "mnemonics": _mnemonics_for(info)}
 
 
 def kana_reverse(char):
@@ -111,7 +138,9 @@ def kana_reverse(char):
     return {"type": "kana_reverse", "item_id": char,
             "prompt": {"text": info["romaji"], "tts": char},
             "question": "Какой знак так читается?",
-            "options": options, "answer": answer, "options_are_kana": True}
+            "options": options, "answer": answer, "options_are_kana": True,
+            "mnemonics": _mnemonics_for(info),
+            "confusables": _confusables(options, char)}
 
 
 def kana_dakuten(char):
@@ -126,7 +155,9 @@ def kana_dakuten(char):
     return {"type": "kana_dakuten", "item_id": char,
             "prompt": {"text": info["romaji"], "tts": char},
             "question": "Выберите знак для этого звука",
-            "options": options, "answer": options.index(char), "options_are_kana": True}
+            "options": options, "answer": options.index(char), "options_are_kana": True,
+            "mnemonics": _mnemonics_for(info),
+            "confusables": _confusables(options, char)}
 
 
 def _make_tiles(tokens, lesson_id=None):
@@ -318,7 +349,8 @@ def kanji_meaning(k):
     return {"type": "kanji_meaning", "item_id": k["char"],
             "prompt": {"text": k["char"], "tts": None, "style": "jp"},
             "question": "Что значит этот иероглиф?",
-            "options": options, "answer": answer}
+            "options": options, "answer": answer,
+            "mnemonics": [m for m in [k.get("mnemonic")] if m]}
 
 
 def kanji_reading(k):
@@ -330,7 +362,8 @@ def kanji_reading(k):
             "prompt": {"text": word["w"], "tts": None, "style": "jp"},
             "question": "Как читается это слово?",
             "options": options, "answer": answer, "options_are_kana": True,
-            "answer_tts": word["r"]}
+            "answer_tts": word["r"],
+            "mnemonics": [m for m in [k.get("mnemonic_reading")] if m]}
 
 
 def _is_kanji(c):
@@ -573,7 +606,8 @@ def _intro_step(char):
     info = KANA_BY_CHAR[char]
     step = {"type": "intro_kana", "char": char, "romaji": info["romaji"],
             "kind": info["kind"], "tts": char,
-            "mnemonic": info.get("mnemonic"), "note": info.get("note")}
+            "mnemonic": info.get("mnemonic"), "mnemonics": _mnemonics_for(info),
+            "note": info.get("note")}
     if char in STROKES:  # 2.1: анимация порядка черт при знакомстве
         step["strokes"] = STROKES[char]
     base = info.get("base")

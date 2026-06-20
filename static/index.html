@@ -60,7 +60,9 @@
     <div class="player-top">
       <button class="close" id="player-close" title="Выйти">✕</button>
       <div class="progress"><div id="player-progress"></div></div>
+      <span id="combo" class="combo" hidden></span>
       <span id="player-counter" class="stat-label"></span>
+      <button class="close" id="player-settings" title="Настройки">⚙</button>
     </div>
     <div class="player-body" id="player-body"></div>
   </div>
@@ -156,6 +158,9 @@
 
   <!-- Онбординг первого запуска -->
   <div id="onboarding"></div>
+
+  <!-- Краткая подсветка края экрана на ответ (верно/ошибка) -->
+  <div id="fx-flash"></div>
 
   <script src="i18n.js"></script>
   <script src="content_en.js"></script>

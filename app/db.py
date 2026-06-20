@@ -142,6 +142,7 @@ def set_setting(conn, key, value):
 UI_PREF_KEYS = {
     "michi_theme", "michi_lang", "michi_tts", "michi_haptics",
     "michi_daily_goal", "michi_romaji", "michi_onboarded",
+    "michi_mnemo_fav", "michi_mnemo_custom",
 }
 
 
