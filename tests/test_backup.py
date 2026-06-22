@@ -111,6 +111,23 @@ def test_restore_old_backup_recreates_ui_prefs(uid, tmp_path):
     assert "ui_prefs" in tables
 
 
+def test_delete_user_removes_all_files(uid):
+    _seed(uid, cards=2, reviews=1)
+    snap = str(db._user_path(uid)) + ".snap"
+    db.backup_to(snap, uid)
+    db.restore_from(snap, uid)                       # создаёт страховочный <uid>.db.bak
+    path = db._user_path(uid)
+    assert path.exists() and pathlib.Path(str(path) + ".bak").exists()
+
+    assert db.delete_user(uid) is True
+    for suffix in ("", "-wal", "-shm", ".bak"):       # ни основного, ни sidecar-файлов
+        assert not pathlib.Path(str(path) + suffix).exists()
+
+
+def test_delete_user_idempotent_when_absent(uid):
+    assert db.delete_user(uid) is False               # нечего удалять — не падает
+
+
 def test_is_michi_db_rejects_non_sqlite(tmp_path):
     junk = tmp_path / "x.db"
     junk.write_bytes(b"definitely not a database")

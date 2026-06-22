@@ -852,5 +852,24 @@ async def import_db(request: Request):
     return {"ok": True, "cards": cards, "reviews": reviews}
 
 
+# ---------- Удаление своих данных (право «начать с чистого листа») ----------
+
+@app.post("/api/account/delete")
+def account_delete(request: Request):
+    """Безвозвратно стереть все данные текущего пользователя и выдать новую
+    анонимную сессию (новый uid в cookie) — чтобы не осталось привязки к старым
+    данным. Затрагивает только базу этого пользователя."""
+    db.delete_user(_uid(request))
+    uid, token = identity.new_token()
+    resp = JSONResponse({"ok": True})
+    # Запрос пришёл с валидной cookie → middleware _identify свою cookie не ставит
+    # (fresh=False), поэтому наша ротация uid сохраняется.
+    resp.set_cookie(
+        identity.COOKIE_NAME, token, max_age=_COOKIE_MAX_AGE,
+        httponly=True, samesite="lax", secure=_COOKIE_SECURE, path="/",
+    )
+    return resp
+
+
 # Статика — в самом конце, чтобы не перехватывать /api/*
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
