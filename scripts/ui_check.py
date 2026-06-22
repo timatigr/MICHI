@@ -376,6 +376,24 @@ async def main():
             print(f"tap-sound options: {opts}")
             await cdp.shot("m_settings")
 
+            # --- О проекте / приватность (открывается из настроек) ---
+            await cdp.js("document.getElementById('open-about').click()")
+            await settle(500)
+            about_open = await cdp.js(
+                "document.getElementById('about').classList.contains('open')")
+            about_sections = await cdp.js(
+                "document.querySelectorAll('#about .about-body h3').length")
+            about_overflow = await cdp.js(
+                "(()=>{const c=document.querySelector('#about .settings-card');"
+                "return c?c.scrollWidth<=c.clientWidth+1:false})()")
+            print(f"about modal: open={about_open} sections={about_sections} "
+                  f"fits={about_overflow}")
+            await cdp.shot("m_about")
+            if not about_open or about_sections < 2:
+                problems.append("модалка «О проекте» не открылась/без контента")
+            await cdp.js("document.getElementById('about-close').click()")
+            await settle(300)
+
             # --- Статистика: лимиты SRS должны быть редактируемыми ---
             await cdp.send("Page.navigate", url=ORIGIN + "/")
             await settle(900)
@@ -396,6 +414,11 @@ async def main():
             print(f"stats backup buttons: {'present' if backup_ok else 'MISSING'}")
             if not backup_ok:
                 problems.append("на вкладке статистики нет кнопок резервной копии")
+            # Кнопка удаления своих данных присутствует (НЕ кликаем — она необратима)
+            delete_ok = await cdp.js("!!document.querySelector('#data-delete')")
+            print(f"stats delete-my-data button: {'present' if delete_ok else 'MISSING'}")
+            if not delete_ok:
+                problems.append("на вкладке статистики нет кнопки удаления данных")
             errs_stats = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
             if errs_stats:
                 problems.append(f"JS errors (stats): {errs_stats}")

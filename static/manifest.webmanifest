@@ -1,0 +1,20 @@
+{
+  "name": "MICHI — японский язык",
+  "short_name": "MICHI",
+  "description": "Тренажёр японского с нуля: кана, кандзи и грамматика N5 с умным интервальным повторением.",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F2FB",
+  "theme_color": "#EF7FA8",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

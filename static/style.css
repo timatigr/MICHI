@@ -983,14 +983,43 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .chip.leech { box-shadow: 0 0 0 2px var(--bad-border), var(--shadow-sm); }
 
 /* --- Модальные оверлеи: настройки и подтверждение выхода --- */
-#settings, #confirm {
+#settings, #confirm, #about {
   position: fixed; inset: 0; z-index: 200; display: none;
   align-items: center; justify-content: center; background: var(--overlay);
 }
+#about { z-index: 240; }                /* поверх настроек, из которых открывается */
 #confirm { z-index: 250; } /* поверх плеера и настроек */
-#settings.open, #confirm.open { display: flex; animation: fadein .18s ease both; }
+#settings.open, #confirm.open, #about.open { display: flex; animation: fadein .18s ease both; }
 #settings.open .settings-card,
-#confirm.open .settings-card { animation: rise .22s cubic-bezier(.21, .8, .36, 1) both; }
+#confirm.open .settings-card,
+#about.open .settings-card { animation: rise .22s cubic-bezier(.21, .8, .36, 1) both; }
+
+/* Кнопка-ссылка (открыть «О проекте» из настроек) */
+.link-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--pink); font: inherit; font-size: 14px; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link-btn:hover { color: var(--indigo); }
+
+/* Текст страницы «О проекте / Приватность» */
+.about-body h3 {
+  font-size: 14px; font-weight: 700; color: var(--title);
+  margin: 22px 0 8px;
+}
+.about-body p {
+  font-size: 13.5px; line-height: 1.6; color: var(--muted); margin-bottom: 12px;
+}
+.about-body p a { color: var(--pink); }
+
+/* Опасное действие (удалить свои данные) — отделено и приглушено */
+.danger-zone { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.danger-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--error); font: inherit; font-size: 13px; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.danger-link:hover { opacity: .8; }
 .confirm-card { width: min(340px, calc(100vw - 40px)); }
 .confirm-card p { color: var(--title); font-size: 15px; line-height: 1.55; }
 .settings-card {

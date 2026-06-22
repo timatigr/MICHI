@@ -4,7 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MICHI（道）— японский язык</title>
+  <meta name="description" content="MICHI — бесплатный тренажёр японского с нуля: хирагана, катакана, кандзи и грамматика N5 с умным интервальным повторением (FSRS). Без регистрации.">
+  <meta name="theme-color" content="#EF7FA8">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-28 -28 56 56'%3E%3Cdefs%3E%3Cpath id='p' d='M0,-4 C-7,-7 -11,-15 -7.5,-21 C-5,-25 -2,-24.5 0,-20.5 C2,-24.5 5,-25 7.5,-21 C11,-15 7,-7 0,-4 Z'/%3E%3C/defs%3E%3Cg fill='%23EF7FA8'%3E%3Cuse href='%23p'/%3E%3Cuse href='%23p' transform='rotate(72)'/%3E%3Cuse href='%23p' transform='rotate(144)'/%3E%3Cuse href='%23p' transform='rotate(216)'/%3E%3Cuse href='%23p' transform='rotate(288)'/%3E%3C/g%3E%3Ccircle r='3.4' fill='%23F8CD6F'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <!-- Превью при шеринге ссылки (Open Graph / Twitter). og:image — относительный путь:
+       большинство сборщиков превью резолвят его от адреса страницы. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MICHI">
+  <meta property="og:title" content="MICHI — японский с нуля">
+  <meta property="og:description" content="Хирагана, катакана, кандзи и грамматика N5 с умным интервальным повторением. Маленькими уроками, без регистрации.">
+  <meta property="og:image" content="og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="ru_RU">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MICHI — японский с нуля">
+  <meta name="twitter:description" content="Хирагана, катакана, кандзи и грамматика N5 с умным интервальным повторением. Без регистрации.">
+  <meta name="twitter:image" content="og.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
@@ -137,6 +155,9 @@
         <label><span data-i18n="ИИ-разбор ошибок «Сэнсэй»">ИИ-разбор ошибок «Сэнсэй»</span> <span class="ai-pill" id="ai-pill">—</span></label>
         <p class="setting-hint" id="ai-status-hint"></p>
       </div>
+      <div class="setting setting-divider">
+        <button class="link-btn" id="open-about" data-i18n="О проекте и приватности">О проекте и приватности</button>
+      </div>
       </div>
       <div class="settings-actions">
         <button class="ghost" id="set-test" data-i18n="Прослушать">Прослушать</button>
@@ -152,6 +173,29 @@
       <div class="settings-actions">
         <button class="ghost" id="confirm-no" data-i18n="Остаться">Остаться</button>
         <button class="primary" id="confirm-yes" data-i18n="Выйти">Выйти</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- О проекте и приватность -->
+  <div id="about">
+    <div class="settings-card">
+      <div class="settings-scroll about-body">
+        <h2 data-i18n="О проекте">О проекте</h2>
+        <p data-i18n="MICHI（道, «путь») — бесплатный тренажёр японского с нуля: кана, лексика, кандзи и грамматика уровня JLPT N5. Материал даётся маленькими уроками, а умное интервальное повторение (алгоритм FSRS) само напоминает, что пора освежить выученное.">MICHI（道, «путь») — бесплатный тренажёр японского с нуля: кана, лексика, кандзи и грамматика уровня JLPT N5. Материал даётся маленькими уроками, а умное интервальное повторение (алгоритм FSRS) само напоминает, что пора освежить выученное.</p>
+
+        <h3 data-i18n="Приватность">Приватность</h3>
+        <p data-i18n="Без регистрации: ни почты, ни пароля. При первом заходе браузеру выдаётся анонимный идентификатор, он хранится в подписанной cookie и привязывает прогресс к этому браузеру. Никакой аналитики и трекеров третьих сторон.">Без регистрации: ни почты, ни пароля. При первом заходе браузеру выдаётся анонимный идентификатор, он хранится в подписанной cookie и привязывает прогресс к этому браузеру. Никакой аналитики и трекеров третьих сторон.</p>
+        <p data-i18n="Что хранится на сервере: ваши карточки, журнал ответов, пройденные уроки и настройки — в отдельной базе, привязанной к анонимному идентификатору. Данные не передаются третьим лицам и не используются для рекламы. Весь прогресс можно скачать одним файлом (⚙ → «Скачать копию») и восстановить на другом устройстве.">Что хранится на сервере: ваши карточки, журнал ответов, пройденные уроки и настройки — в отдельной базе, привязанной к анонимному идентификатору. Данные не передаются третьим лицам и не используются для рекламы. Весь прогресс можно скачать одним файлом (⚙ → «Скачать копию») и восстановить на другом устройстве.</p>
+        <p data-i18n="Сторонние запросы: шрифты подгружаются с Google Fonts (при этом Google видит IP-адрес запроса). ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.">Сторонние запросы: шрифты подгружаются с Google Fonts (при этом Google видит IP-адрес запроса). ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.</p>
+        <p data-i18n="Удалить данные: на вкладке «Статистика» → «Резервная копия» есть кнопка «Удалить мои данные» — она безвозвратно стирает весь прогресс с сервера и начинает чистую сессию. Можно и просто очистить cookie сайта. Заброшенные пустые сессии сервер удаляет сам.">Удалить данные: на вкладке «Статистика» → «Резервная копия» есть кнопка «Удалить мои данные» — она безвозвратно стирает весь прогресс с сервера и начинает чистую сессию. Можно и просто очистить cookie сайта. Заброшенные пустые сессии сервер удаляет сам.</p>
+
+        <h3 data-i18n="Лицензия и благодарности">Лицензия и благодарности</h3>
+        <p data-i18n-html='Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP (Google Fonts).'>Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP (Google Fonts).</p>
+        <p class="setting-hint" data-i18n="Учебный проект, предоставляется «как есть», без гарантий.">Учебный проект, предоставляется «как есть», без гарантий.</p>
+      </div>
+      <div class="settings-actions">
+        <button class="primary" id="about-close" data-i18n="Готово">Готово</button>
       </div>
     </div>
   </div>

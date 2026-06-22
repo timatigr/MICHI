@@ -408,6 +408,7 @@ document.addEventListener("pointerdown", e => {
 
 /* ---------- Настройки озвучки ---------- */
 const settingsModal = $("#settings");
+const aboutModal = $("#about");
 
 function fillVoiceSelect() {
   const sel = $("#set-voice");
@@ -502,6 +503,12 @@ $("#player-settings").addEventListener("click", openSettings);   // настро
 $("#set-close").addEventListener("click", () => settingsModal.classList.remove("open"));
 settingsModal.addEventListener("click", e => {
   if (e.target === settingsModal) settingsModal.classList.remove("open");
+});
+// «О проекте и приватность» — открывается поверх настроек
+$("#open-about").addEventListener("click", () => aboutModal.classList.add("open"));
+$("#about-close").addEventListener("click", () => aboutModal.classList.remove("open"));
+aboutModal.addEventListener("click", e => {
+  if (e.target === aboutModal) aboutModal.classList.remove("open");
 });
 $("#set-source").addEventListener("change", e => {
   TTS.prefs.source = e.target.value;
@@ -1049,7 +1056,8 @@ $("#player-close").addEventListener("click", askClosePlayer);
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   if ($("#confirm").classList.contains("open")) return; // закроет свой onclick
-  if (settingsModal.classList.contains("open")) settingsModal.classList.remove("open");
+  if (aboutModal.classList.contains("open")) aboutModal.classList.remove("open");
+  else if (settingsModal.classList.contains("open")) settingsModal.classList.remove("open");
   else if (player.classList.contains("open")) askClosePlayer();
 });
 function setProgress(frac) {
@@ -2088,6 +2096,10 @@ async function renderStats() {
       </div>
       <input type="file" id="data-file" accept=".db,application/octet-stream" hidden>
       <p class="note" id="data-msg" style="display:none"></p>
+      <div class="danger-zone">
+        <button class="danger-link" id="data-delete">${tr("Удалить мои данные")}</button>
+        <p class="note" style="margin-top:6px">${tr("Сотрёт весь прогресс с сервера и начнёт чистую сессию. Необратимо — сначала скачайте копию, если хотите сохранить.")}</p>
+      </div>
     </div>
     </div>`;
   // Лимиты SRS — серверные настройки: меняем по месту, сохраняем сразу
@@ -2133,6 +2145,27 @@ async function renderStats() {
     } catch (e) {
       msg.classList.add("err");
       msg.textContent = tr("Не удалось восстановить: {e}", { e: e.message });
+    }
+  });
+
+  // Удаление своих данных: двойное подтверждение → стереть на сервере → чистый старт
+  $("#data-delete").addEventListener("click", async () => {
+    const ok = await confirmDialog(
+      tr("Удалить весь ваш прогресс с сервера? Карточки, ответы, уроки и настройки " +
+      "будут стёрты безвозвратно — это нельзя отменить."),
+      tr("Удалить"));
+    if (!ok) return;
+    const msg = $("#data-msg");
+    msg.classList.remove("err");
+    msg.style.display = "block";
+    msg.textContent = tr("Удаление…");
+    try {
+      await api.post("/api/account/delete", {});
+      try { localStorage.clear(); } catch { /* приватный режим — не критично */ }
+      location.reload();                       // чистая сессия: новый uid, онбординг
+    } catch (e) {
+      msg.classList.add("err");
+      msg.textContent = tr("Не удалось удалить: {e}", { e: e.message });
     }
   });
 

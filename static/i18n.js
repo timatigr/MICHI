@@ -208,6 +208,14 @@ const EN = {
   "{a} из {b}": "{a} of {b}",
   "{n} знаков": "{n} characters",
   "Восстановление…": "Restoring…",
+  "Удалить мои данные": "Delete my data",
+  "Сотрёт весь прогресс с сервера и начнёт чистую сессию. Необратимо — сначала скачайте копию, если хотите сохранить.":
+    "Erases all progress on the server and starts a clean session. Irreversible — download a backup first if you want to keep it.",
+  "Удалить весь ваш прогресс с сервера? Карточки, ответы, уроки и настройки будут стёрты безвозвратно — это нельзя отменить.":
+    "Delete all your progress on the server? Cards, answers, lessons and settings will be erased permanently — this can't be undone.",
+  "Удалить": "Delete",
+  "Удаление…": "Deleting…",
+  "Не удалось удалить: {e}": "Couldn't delete: {e}",
   "Восстановление заменит весь текущий прогресс данными из копии. Перед заменой рядом сохраняется страховочный michi.db.bak. Продолжить?":
     "Restoring will replace all current progress with data from the backup. A safety michi.db.bak is saved alongside first. Continue?",
 
@@ -230,6 +238,26 @@ const EN = {
     "We start with hiragana, the Japanese syllabary. Then courses unlock on their own: katakana in parallel, N5 words after hiragana, then kanji and grammar.",
   "Начать первый урок": "Start the first lesson",
   "Осмотреться самому": "Look around first",
+
+  // --- О проекте / приватность ---
+  "О проекте и приватности": "About & privacy",
+  "О проекте": "About",
+  "MICHI（道, «путь») — бесплатный тренажёр японского с нуля: кана, лексика, кандзи и грамматика уровня JLPT N5. Материал даётся маленькими уроками, а умное интервальное повторение (алгоритм FSRS) само напоминает, что пора освежить выученное.":
+    "MICHI (道, “the path”) is a free beginner's Japanese trainer: kana, vocabulary, kanji and JLPT N5 grammar. Material comes in small lessons, and smart spaced repetition (the FSRS algorithm) reminds you when it's time to refresh what you've learned.",
+  "Приватность": "Privacy",
+  "Без регистрации: ни почты, ни пароля. При первом заходе браузеру выдаётся анонимный идентификатор, он хранится в подписанной cookie и привязывает прогресс к этому браузеру. Никакой аналитики и трекеров третьих сторон.":
+    "No sign-up: no email, no password. On your first visit the browser is given an anonymous identifier, stored in a signed cookie, which ties your progress to this browser. No analytics and no third-party trackers.",
+  "Что хранится на сервере: ваши карточки, журнал ответов, пройденные уроки и настройки — в отдельной базе, привязанной к анонимному идентификатору. Данные не передаются третьим лицам и не используются для рекламы. Весь прогресс можно скачать одним файлом (⚙ → «Скачать копию») и восстановить на другом устройстве.":
+    "What's stored on the server: your cards, answer log, completed lessons and settings — in a separate database tied to the anonymous identifier. The data is not shared with third parties or used for ads. You can download all your progress as a single file (⚙ → “Download backup”) and restore it on another device.",
+  "Сторонние запросы: шрифты подгружаются с Google Fonts (при этом Google видит IP-адрес запроса). ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.":
+    "Third-party requests: fonts are loaded from Google Fonts (Google sees the request's IP address). The «Sensei» AI mistake analysis is off by default; if the site owner enabled it, pressing the analyze button sends the specific exercise text and your answer to the AI provider (Anthropic or Google) solely to explain the mistake. Without a key, AI sends nothing anywhere.",
+  "Удалить данные: на вкладке «Статистика» → «Резервная копия» есть кнопка «Удалить мои данные» — она безвозвратно стирает весь прогресс с сервера и начинает чистую сессию. Можно и просто очистить cookie сайта. Заброшенные пустые сессии сервер удаляет сам.":
+    "Deleting your data: on the «Stats» tab → «Backup» there's a «Delete my data» button — it permanently erases all progress on the server and starts a clean session. You can also just clear the site's cookie. Abandoned empty sessions are removed by the server automatically.",
+  "Лицензия и благодарности": "License & credits",
+  'Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP (Google Fonts).':
+    'Code is licensed under MIT. Stroke-order data — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Interface sounds — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Fonts — Inter and Noto Sans JP (Google Fonts).',
+  "Учебный проект, предоставляется «как есть», без гарантий.":
+    "An educational project, provided «as is», without any warranty.",
 };
 
 // Индекс по «схлопнутым» пробелам: ключи в словаре можно писать одной строкой,
