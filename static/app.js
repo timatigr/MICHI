@@ -2094,8 +2094,51 @@ async function renderReviewTab() {
         ? `<button class="primary mt" id="btn-start">${tr("Начать сессию · {n} · ≈{m} мин", { n: total, m: estMin })}</button>`
         : `<p class="note center mt">${tr("Очередь пуста — всё повторено! Новые карточки появятся\n           после уроков, повторения — по расписанию FSRS.")}</p>`}
     </div>
+    ${o.mistakes_today ? `<div class="card">
+      <h2>${tr("Работа над ошибками")}</h2>
+      <p class="note" style="margin-top:0">${tr("Быстрый разбор того, в чём вы сегодня ошиблись. Это практика — на расписание SRS не влияет.")}</p>
+      <button class="ghost mt" id="btn-mistakes">${tr("Разобрать ошибки дня · {n}", { n: o.mistakes_today })}</button>
+    </div>` : ""}
     </div>`;
   $("#btn-start")?.addEventListener("click", startReview);
+  $("#btn-mistakes")?.addEventListener("click", startMistakes);
+}
+
+/* ---------- «Разбор ошибок дня»: практика по сегодняшним промахам ----------
+   Read-only: ответы НЕ уходят в SRS (runExercise без afterAnswer), поэтому
+   расписание/статистика не меняются — это эффект тестирования и «остывание». */
+async function startMistakes() {
+  const token = openPlayer("practice");
+  let data;
+  try { data = await api.get("/api/review/mistakes?limit=30"); }
+  catch { closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const items = data.items;
+  let done = 0, okCount = 0;
+  for (let i = 0; i < items.length; i++) {
+    if (token !== sessionToken) return;
+    setProgress(done / Math.max(items.length, 1));
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(items.length - i, 1) });
+    const res = await runExercise(items[i].exercise);   // без afterAnswer → не пишем в SRS
+    if (token !== sessionToken) return;
+    done++;
+    if (res.correct) okCount++;
+    Combo.update(res.correct);
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `
+    <div class="result">
+      <div class="mark">復</div>
+      <h2>${tr("Разбор ошибок завершён")}</h2>
+      <p>${done ? tr("Повторено: {n} · сейчас верно {p}%", { n: done, p: Math.round(okCount / done * 100) })
+                : tr("Сегодня ошибок нет — отлично!")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  await waitClick($("#finish", playerBody));
+  closePlayer();
 }
 
 /* ---------- Словарь: справочник изученного ----------
@@ -2152,6 +2195,7 @@ async function renderDict() {
             ${it.extra ? `<span class="di-extra jp">${escapeHtml(it.extra)}</span>` : ""}
             <span class="di-sub">${escapeHtml(it.sub ? tr(it.sub) : "")}</span>
             <span class="di-state">${label[it.state]}</span>
+            ${it.strength != null ? `<span class="di-strength" style="--s:${it.strength}" title="${tr("Память {p}%", { p: it.strength })}" aria-label="${tr("Память {p}%", { p: it.strength })}"></span>` : ""}
           </button>`).join("")}
       </div>
     </div>`).join("") + `</div>`;

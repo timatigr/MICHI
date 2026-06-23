@@ -1308,6 +1308,15 @@ button.ghost:active { transform: scale(0.94); }
 .dict-item.st-review .di-state { color: var(--success); background: rgba(92, 163, 126, .15); }
 .dict-item.leech { border-color: var(--bad-border); }
 .dict-item:active { transform: scale(0.96); }
+/* «Сила памяти» (FSRS retrievability): тонкий меметр под элементом */
+.di-strength {
+  display: block; width: 100%; height: 4px; margin-top: 6px;
+  border-radius: 3px; background: var(--line); overflow: hidden;
+}
+.di-strength::before {
+  content: ""; display: block; height: 100%; width: calc(var(--s) * 1%);
+  background: linear-gradient(90deg, var(--pink), var(--indigo));
+}
 
 /* Уважение к prefers-reduced-motion (SRS.md 11.3) */
 @media (prefers-reduced-motion: reduce) {

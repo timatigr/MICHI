@@ -176,6 +176,12 @@ def _retrievability(scheduler, card_row):
         return 1.0
 
 
+def retrievability(scheduler, card_row):
+    """Текущая вероятность вспомнить карточку (FSRS R, 0..1) — публичная обёртка
+    для «силы памяти» в /api/learned. card_row должен содержать колонку fsrs."""
+    return _retrievability(scheduler, card_row)
+
+
 def new_introduced_today(conn, tz_offset_min=None):
     today = local_today(tz_offset_min).isoformat()
     return conn.execute(

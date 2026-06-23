@@ -263,6 +263,11 @@ def overview(request: Request):
             "SELECT COUNT(*) AS total, COALESCE(SUM(correct), 0) AS correct "
             f"FROM reviews WHERE {srs_engine.day_sql('reviewed_at', tz)} = ?", (today,)
         ).fetchone()
+        # Карточки, в которых сегодня ошиблись — для «разбора ошибок дня»
+        mistakes_today = conn.execute(
+            "SELECT COUNT(DISTINCT card_id) AS c FROM reviews "
+            f"WHERE correct = 0 AND {srs_engine.day_sql('reviewed_at', tz)} = ?", (today,)
+        ).fetchone()["c"]
         courses = [
             {"id": course["id"], "title": course["title"],
              "lessons_total": len(course["lesson_ids"]),
@@ -286,6 +291,7 @@ def overview(request: Request):
                 if next_lesson else None
             ),
             "courses": courses,
+            "mistakes_today": mistakes_today,
         }
     finally:
         conn.close()
@@ -484,6 +490,36 @@ def srs_answer(answer: Answer, request: Request):
         )
     finally:
         conn.close()
+
+
+# ---------- Разбор ошибок дня (практика, не влияет на расписание SRS) ----------
+
+@app.get("/api/review/mistakes")
+def review_mistakes(request: Request, limit: int = 30):
+    """Карточки, в которых пользователь сегодня ошибся, как набор упражнений для
+    «работы над ошибками». Это практика: фронт НЕ отправляет ответы в SRS, поэтому
+    расписание/статистика не затрагиваются (эффект тестирования + «остывание»)."""
+    tz = _tz_offset_min(request)
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        today = srs_engine.local_today(tz).isoformat()
+        rows = conn.execute(
+            "SELECT id, item_type, item_id, reps FROM srs_cards WHERE id IN ("
+            "  SELECT card_id FROM reviews "
+            f"  WHERE correct = 0 AND {srs_engine.day_sql('reviewed_at', tz)} = ?"
+            ") ORDER BY id", (today,)
+        ).fetchall()
+    finally:
+        conn.close()
+    items = []
+    for r in rows:
+        ex = review_exercise(r["item_type"], r["item_id"], reps=r["reps"])
+        if ex is None:                      # осиротевшая карточка — пропускаем
+            continue
+        items.append({"exercise": ex, "info": item_info(r["item_type"], r["item_id"])})
+        if len(items) >= limit:
+            break
+    return {"items": items}
 
 
 # ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ----------
@@ -765,11 +801,16 @@ def _learned_display(item_type, item_id):
 def learned(request: Request):
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
+        settings = db.get_settings(conn)
         rows = conn.execute(
-            "SELECT item_type, item_id, state, reps, is_leech FROM srs_cards ORDER BY id"
+            "SELECT item_type, item_id, state, reps, is_leech, fsrs FROM srs_cards ORDER BY id"
         ).fetchall()
     finally:
         conn.close()
+    # «Сила памяти» (8/USP): текущая вероятность вспомнить по FSRS (retrievability).
+    # Для элемента из нескольких карточек (слово=2, кандзи=3) берём минимум —
+    # элемент крепок настолько, насколько крепок его слабейший навык.
+    scheduler = srs_engine.make_scheduler(settings)
 
     groups, order = {}, {}     # course -> {item_id: agg}; course -> [item_id, ...]
     for r in rows:
@@ -780,13 +821,16 @@ def learned(request: Request):
         bucket = groups.setdefault(course, {})
         a = bucket.get(r["item_id"])
         if a is None:
-            a = bucket[r["item_id"]] = {"disp": fields, "total": 0,
-                                        "reviewed": 0, "reps": 0, "leech": False}
+            a = bucket[r["item_id"]] = {"disp": fields, "total": 0, "reviewed": 0,
+                                        "reps": 0, "leech": False, "r_min": None}
             order.setdefault(course, []).append(r["item_id"])
         a["total"] += 1
         a["reps"] += r["reps"]
         if r["reps"] > 0 and r["state"] == 2:   # state 2 = review (в долгой памяти)
             a["reviewed"] += 1
+        if r["reps"] > 0:                       # сила памяти — только по показанным
+            rr = srs_engine.retrievability(scheduler, r)
+            a["r_min"] = rr if a["r_min"] is None else min(a["r_min"], rr)
         if r["is_leech"]:
             a["leech"] = True
 
@@ -801,7 +845,10 @@ def learned(request: Request):
         if not ids:
             continue
         items = [{**groups[cid][iid]["disp"], "state": state_of(groups[cid][iid]),
-                  "leech": groups[cid][iid]["leech"]} for iid in ids]
+                  "leech": groups[cid][iid]["leech"],
+                  "strength": (round(groups[cid][iid]["r_min"] * 100)
+                               if groups[cid][iid]["r_min"] is not None else None)}
+                 for iid in ids]
         out.append({"id": cid, "title": _LEARNED_TITLES[cid],
                     "count": len(items), "items": items})
     return {"courses": out}
