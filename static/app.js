@@ -561,15 +561,31 @@ const Theme = {
     return this.pref === "dark" || (this.pref === "auto" && this.media.matches);
   },
   apply() {
-    document.documentElement.dataset.theme = this.isDark() ? "dark" : "light";
+    const dark = this.isDark();
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
     const btn = $("#btn-theme");
     btn.textContent = this.icons[this.pref];
     btn.title = `Тема: ${this.labels[this.pref]} (нажмите, чтобы сменить)`;
+    // Кнопка в плеере: показывает «куда переключим» (☾ в светлой, ☀ в тёмной)
+    const pbtn = document.getElementById("player-theme");
+    if (pbtn) {
+      pbtn.textContent = dark ? "☀" : "☾";
+      pbtn.title = dark ? "Дневной режим" : "Ночной режим";
+    }
   },
   toggle() {
     // светлая -> тёмная -> авто -> ... (авто не теряется навсегда)
     const order = ["light", "dark", "auto"];
     this.pref = order[(order.indexOf(this.pref) + 1) % order.length];
+    this._save();
+  },
+  // Прямое переключение свет<->тьма (кнопка в уроке): фиксируем явное
+  // предпочтение от текущего вида, без «авто» — чтобы ночной режим был в один тап.
+  flip() {
+    this.pref = this.isDark() ? "light" : "dark";
+    this._save();
+  },
+  _save() {
     localStorage.setItem("michi_theme", this.pref);
     Prefs.push("michi_theme");
     this.apply();
@@ -579,6 +595,7 @@ Theme.media.addEventListener("change", () => {
   if (Theme.pref === "auto") Theme.apply();
 });
 $("#btn-theme").addEventListener("click", () => Theme.toggle());
+$("#player-theme").addEventListener("click", () => Theme.flip());
 Theme.apply();
 
 /* ---------- Ромадзи в интерфейсе курса (2.1: отключается после хираганы) ---------- */

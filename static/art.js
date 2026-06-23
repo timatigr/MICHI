@@ -1,11 +1,9 @@
-/* MICHI — иллюстрации достижений: кавай-SVG + drop-in растровые слоты.
+/* MICHI — иллюстрации достижений: кавай-SVG под палитру проекта.
 
-   SVG рисуются под палитру проекта, масштабируются без потерь и живут в тёмной
-   теме (свои цвета, не зависят от темы — сидят на тировом градиенте плитки).
-   Хотите «настоящий» аниме-арт на достижение? Положите картинку в
-   static/img/ach/<id>.png (id — из app/gamification.py, напр. first_kanji.png) —
-   она автоматически перекроет SVG (Art.tile). Никаких манифестов: чего нет —
-   тихо падает обратно на SVG (onerror). */
+   SVG масштабируются без потерь и живут в тёмной теме (свои цвета, не зависят от
+   темы — сидят на тировом градиенте плитки). Единый стиль на все достижения:
+   незнакомый id тихо падает на эмодзи из поля icon, так что новые достижения не
+   ломают сетку. (Маскот ниже поддерживает drop-in static/img/mascot.png.) */
 "use strict";
 
 const Art = {
@@ -27,19 +25,15 @@ const Art = {
 
   kindFor(id) { return this.KIND[id] || null; },
 
-  /* Полная плитка: SVG (всегда) + растровый слот сверху (если файл есть). Для
-     закрытых — силуэт (CSS .locked обесцвечивает) с замочком, без фото-слота. */
+  /* Полная плитка: кавай-SVG (или эмодзи для незнакомого id). Для закрытых —
+     силуэт (CSS .locked обесцвечивает) с замочком. */
   tile(ach, big = false) {
     const kind = this.kindFor(ach.id);
     const art = kind ? this.svg(kind, ach)
       : `<span class="ach-emoji">${ach.icon || "🏆"}</span>`;
-    const photo = ach.unlocked
-      ? `<img class="ach-photo" src="/img/ach/${ach.id}.png" alt="" loading="lazy"
-           onload="this.classList.add('ok')" onerror="this.remove()">`
-      : "";
     const lock = ach.unlocked ? "" : `<span class="ach-lock">🔒</span>`;
     return `<span class="ach-art ${ach.unlocked ? "" : "locked"}${big ? " big" : ""}"
-      data-kind="${kind || "emoji"}">${art}${photo}${lock}</span>`;
+      data-kind="${kind || "emoji"}">${art}${lock}</span>`;
   },
 
   svg(kind, ach) {
