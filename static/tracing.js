@@ -94,8 +94,8 @@ const Tracing = (() => {
         <canvas width="${size * dpr}" height="${size * dpr}"
                 style="width:${size}px;height:${size}px"></canvas>
         <div class="trace-tools">
-          <button class="ghost small" data-act="clear">Стереть</button>
-          ${opts.mode === "memory" ? `<button class="ghost small" data-act="hint">Подсказка</button>` : ""}
+          <button class="ghost small" data-act="clear">${tr("Стереть")}</button>
+          ${opts.mode === "memory" ? `<button class="ghost small" data-act="hint">${tr("Подсказка")}</button>` : ""}
           <span class="trace-counter"></span>
         </div>
         <div class="trace-msg"></div>
@@ -177,7 +177,7 @@ const Tracing = (() => {
         ctx.textBaseline = "middle";
         ctx.fillText(String(idx + 1), x, y);
       }
-      counter.textContent = `черта ${Math.min(idx + 1, total)} из ${total}`;
+      counter.textContent = tr("черта {a} из {b}", { a: Math.min(idx + 1, total), b: total });
     }
 
     function setMsg(text, kind) {
@@ -210,7 +210,7 @@ const Tracing = (() => {
       if (bwd < fwd && bwd <= threshold) {
         // Форма верна, направление обратное (6.7: направление каждой черты)
         if (opts.mode === "memory") errors++;
-        setMsg("Направление: эта черта пишется с другого конца", "warn");
+        setMsg(tr("Направление: эта черта пишется с другого конца"), "warn");
         return;
       }
       const endsOk =
@@ -224,7 +224,7 @@ const Tracing = (() => {
         redraw();
         if (idx === total) {
           finished = true;
-          setMsg(errors === 0 ? "Отлично написано!" : "Готово", "ok");
+          setMsg(errors === 0 ? tr("Отлично написано!") : tr("Готово"), "ok");
           opts.onComplete({ errors, usedHint });
         }
         return;
@@ -238,10 +238,10 @@ const Tracing = (() => {
       setTimeout(() => { flashStroke = null; redraw(); }, 450);
       if (failsOnCurrent >= 2) {
         if (opts.mode === "memory") usedHint = true;
-        setMsg("Смотрите, как пишется эта черта", "warn");
+        setMsg(tr("Смотрите, как пишется эта черта"), "warn");
         animateHint(idx);
       } else {
-        setMsg("Не похоже — попробуйте ещё раз", "warn");
+        setMsg(tr("Не похоже — попробуйте ещё раз"), "warn");
       }
     }
 

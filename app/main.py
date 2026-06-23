@@ -102,13 +102,13 @@ _COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5   # ~5 лет
 # (app.js/art.js/…), внешних скриптов нет — но в коде есть инлайновый <script>
 # (тема до отрисовки), инлайновые обработчики onload/onerror у картинок-слотов и
 # инлайновые style= → script/style требуют 'unsafe-inline'. Источники при этом
-# заперты: скрипты/коннекты/картинки/медиа — только свой origin (+ Google Fonts
-# для стилей/шрифтов), фрейминг запрещён.
+# заперты: скрипты/стили/шрифты/коннекты/картинки/медиа — только свой origin
+# (шрифты self-hosted, внешних запросов нет), фрейминг запрещён.
 _CSP = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data:",
     "connect-src 'self'",
     "media-src 'self'",

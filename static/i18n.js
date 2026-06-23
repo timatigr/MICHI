@@ -271,13 +271,13 @@ const EN = {
     "No sign-up: no email, no password. On your first visit the browser is given an anonymous identifier, stored in a signed cookie, which ties your progress to this browser. No analytics and no third-party trackers.",
   "Что хранится на сервере: ваши карточки, журнал ответов, пройденные уроки и настройки — в отдельной базе, привязанной к анонимному идентификатору. Данные не передаются третьим лицам и не используются для рекламы. Весь прогресс можно скачать одним файлом (⚙ → «Скачать копию») и восстановить на другом устройстве.":
     "What's stored on the server: your cards, answer log, completed lessons and settings — in a separate database tied to the anonymous identifier. The data is not shared with third parties or used for ads. You can download all your progress as a single file (⚙ → “Download backup”) and restore it on another device.",
-  "Сторонние запросы: шрифты подгружаются с Google Fonts (при этом Google видит IP-адрес запроса). ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.":
-    "Third-party requests: fonts are loaded from Google Fonts (Google sees the request's IP address). The «Sensei» AI mistake analysis is off by default; if the site owner enabled it, pressing the analyze button sends the specific exercise text and your answer to the AI provider (Anthropic or Google) solely to explain the mistake. Without a key, AI sends nothing anywhere.",
+  "Сторонние запросы: интерфейс, шрифты и звуки отдаются с этого же сайта — никаких сторонних шрифтов, CDN или аналитики. ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.":
+    "Third-party requests: the interface, fonts and sounds are all served from this site — no third-party fonts, CDNs or analytics. The «Sensei» AI mistake analysis is off by default; if the site owner enabled it, pressing the analyze button sends the specific exercise text and your answer to the AI provider (Anthropic or Google) solely to explain the mistake. Without a key, AI sends nothing anywhere.",
   "Удалить данные: на вкладке «Статистика» → «Резервная копия» есть кнопка «Удалить мои данные» — она безвозвратно стирает весь прогресс с сервера и начинает чистую сессию. Можно и просто очистить cookie сайта. Заброшенные пустые сессии сервер удаляет сам.":
     "Deleting your data: on the «Stats» tab → «Backup» there's a «Delete my data» button — it permanently erases all progress on the server and starts a clean session. You can also just clear the site's cookie. Abandoned empty sessions are removed by the server automatically.",
   "Лицензия и благодарности": "License & credits",
-  'Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP (Google Fonts).':
-    'Code is licensed under MIT. Stroke-order data — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Interface sounds — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Fonts — Inter and Noto Sans JP (Google Fonts).',
+  'Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP.':
+    'Code is licensed under MIT. Stroke-order data — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Interface sounds — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Fonts — Inter and Noto Sans JP.',
   "Учебный проект, предоставляется «как есть», без гарантий.":
     "An educational project, provided «as is», without any warranty.",
 };
@@ -301,6 +301,27 @@ function tr(s, vars) {
 function setLang(l) {
   LANG = l;
   localStorage.setItem("michi_lang", l);
+  if (l === "en") loadEnContent();   // подгрузить EN-оверлей контента при переключении
+}
+
+/* EN-оверлей контента (content_en*.js, ~158КБ переводов слов/упражнений/уроков)
+   грузим лениво и только в английском — русскому большинству он мёртвый груз.
+   Скрипты выполняют Object.assign(EN, {...}); async=false + порядок вставки
+   сохраняют порядок применения оверлеев. Идемпотентно; ошибка загрузки —
+   мягкий откат на русские строки (tr вернёт исходный ключ). */
+let _enContentPromise = null;
+function loadEnContent() {
+  if (_enContentPromise) return _enContentPromise;
+  const files = ["content_en.js", "content_en_2.js", "content_en_3.js"];
+  _enContentPromise = Promise.all(files.map(src => new Promise(resolve => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = false;
+    s.onload = resolve;
+    s.onerror = () => resolve();
+    document.head.appendChild(s);
+  })));
+  return _enContentPromise;
 }
 
 /* Перевод статической разметки index.html: data-i18n (textContent) и

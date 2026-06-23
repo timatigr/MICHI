@@ -16,8 +16,11 @@ def test_headers_present_on_static_and_api(client):
 def test_csp_allows_app_resources():
     csp = main._CSP
     assert "frame-ancestors 'none'" in csp                       # анти-кликджекинг
-    assert "https://fonts.googleapis.com" in csp                 # стили Google Fonts
-    assert "https://fonts.gstatic.com" in csp                    # шрифты Google Fonts
+    assert "font-src 'self'" in csp                              # шрифты self-hosted
+    assert "style-src 'self' 'unsafe-inline'" in csp            # стили — только свой origin
+    # Шрифты self-hosted: внешних запросов к Google Fonts быть не должно
+    assert "googleapis.com" not in csp
+    assert "gstatic.com" not in csp
     assert "img-src 'self' data:" in csp                         # PNG-слоты + data: favicon
     assert "media-src 'self'" in csp                             # <audio> озвучки /api/tts
 

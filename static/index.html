@@ -23,8 +23,9 @@
   <meta name="twitter:title" content="MICHI — японский с нуля">
   <meta name="twitter:description" content="Хирагана, катакана, кандзи и грамматика N5 с умным интервальным повторением. Без регистрации.">
   <meta name="twitter:image" content="og.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Шрифты self-hosted (без Google Fonts): приватность + офлайн + быстрее FCP.
+       Inter (вариативный, срезы latin/latin-ext/cyrillic) и субсет Noto Sans JP. -->
+  <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="style.css">
   <script>
     // До загрузки стилей — чтобы тёмная тема не мигала белым
@@ -202,14 +203,14 @@
   </div>
 
   <!-- Онбординг первого запуска -->
-  <div id="onboarding"></div>
+  <div id="onboarding" role="dialog" aria-modal="true" aria-label="MICHI"></div>
 
   <!-- Краткая подсветка края экрана на ответ (верно/ошибка) -->
   <div id="fx-flash"></div>
 
   <script src="i18n.js"></script>
-  <script src="content_en.js"></script>
-  <script src="content_en_2.js"></script>
+  <!-- content_en*.js (EN-оверлей контента, ~158КБ) грузятся динамически только в
+       английском режиме (loadEnContent в i18n.js) — русскому большинству не нужны. -->
   <script src="tracing.js"></script>
   <script src="art.js"></script>
   <script src="app.js"></script>

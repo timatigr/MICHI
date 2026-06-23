@@ -4,3 +4,6 @@
 docker-entrypoint.sh text eol=lf
 # В Dockerfile CRLF может поломать продолжения строк (`\`) — держим LF.
 Dockerfile text eol=lf
+# Шрифты бинарные: явно отключаем нормализацию EOL (защита woff2 от порчи).
+*.woff2 binary
+*.woff binary

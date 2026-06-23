@@ -285,6 +285,14 @@ function qtr(qi) {
   return tr(qi.key, vars);
 }
 
+/* Промпт упражнений-сборки. У kana_word_build это «ромадзи — перевод»:
+   ромадзи не трогаем, переводим только перевод (после « — »); одиночную
+   строку (vocab_build / sentence_scramble — это чистый русский) — целиком. */
+function trBuildPrompt(s) {
+  const i = s.indexOf(" — ");
+  return i < 0 ? tr(s) : s.slice(0, i) + " — " + tr(s.slice(i + 3));
+}
+
 /* Интервал до следующего показа — считаем на клиенте из next_due (зеркало
    srs_engine._humanize), чтобы число и единицы переводились через tr. */
 function humanizeInterval(secs) {
@@ -2396,6 +2404,7 @@ const Onboarding = {
   async startFirst() {
     this.finish();
     show("today");            // обновить дашборд (вдруг сменили язык) под плеером
+    if (LANG === "en") await loadEnContent();   // EN-контент урока до его рендера
     try {
       const lessons = await api.get("/api/lessons");
       const first = lessons.find(l => l.status === "available");
@@ -2405,8 +2414,19 @@ const Onboarding = {
 };
 
 /* ---------- Старт ---------- */
-applyI18n();                // перевод статической разметки (навигация, настройки)
-checkAchievements(false);   // тихо засеять базу «увиденных» — без салюта на старте
-show("today");
-Onboarding.maybeShow();     // первый запуск — приветствие, выбор языка и цели
-Prefs.sync();               // подтянуть UI-настройки из БД (после импорта/нов. устройства)
+function boot() {
+  applyI18n();              // перевод статической разметки (навигация, настройки)
+  checkAchievements(false); // тихо засеять базу «увиденных» — без салюта на старте
+  show("today");
+  Onboarding.maybeShow();   // первый запуск — приветствие, выбор языка и цели
+  Prefs.sync();             // подтянуть UI-настройки из БД (после импорта/нов. устройства)
+}
+// В английском дожидаемся EN-оверлея контента до первого рендера (иначе мелькнул
+// бы русский); русскому большинству оверлей не грузится вовсе.
+if (LANG === "en") loadEnContent().then(boot); else boot();
+
+/* PWA: офлайн-оболочка через Service Worker (мягко — без него всё работает) */
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () =>
+    navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}

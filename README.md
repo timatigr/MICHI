@@ -154,7 +154,8 @@ michi.db               — данные пользователя (создаёт
   30; `MICHI_CLEANUP_ENABLED=0` — выключить). Базы с прогрессом не трогаются.
   Скрипт `scripts/cleanup_users.py [дней]` остаётся для ручного/cron-запуска.
 - **Заголовки безопасности** ставятся на каждый ответ автоматически (настройки не
-  нужны): CSP под ресурсы приложения (свой origin + Google Fonts, фрейминг запрещён),
+  нужны): CSP под ресурсы приложения (только свой origin — шрифты self-hosted,
+  внешних запросов нет; фрейминг запрещён),
   `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`;
   `Strict-Transport-Security` (HSTS) — только при `MICHI_COOKIE_SECURE=1` (за TLS).
 
