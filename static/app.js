@@ -39,6 +39,18 @@ const api = {
   },
 };
 
+/* Кэш /api/overview: его тянут и «Сегодня», и «Повторение» — без кэша переключение
+   вкладок = лишний round-trip. Короткий TTL + явная инвалидация после сессии
+   (closePlayer), когда данные реально меняются. */
+let _ov = { data: null, t: 0 };
+async function getOverview() {
+  if (_ov.data && Date.now() - _ov.t < 15000) return _ov.data;
+  _ov.data = await api.get("/api/overview");
+  _ov.t = Date.now();
+  return _ov.data;
+}
+function invalidateOverview() { _ov = { data: null, t: 0 }; }
+
 /* ---------- UI-настройки: зеркало в БД (перенос между устройствами + бэкап) ----------
    Источник истины на клиенте — localStorage (читается синхронно на старте всеми
    модулями). Сервер — durable-зеркало: сюда пишем при изменении настройки, а на
@@ -911,7 +923,7 @@ function greeting() {
 
 async function renderToday() {
   view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
-  const o = await api.get("/api/overview");
+  const o = await getOverview();
   setStreakPill(o.streak);
   Romaji.syncProgress(o.courses);
   const next = o.next_lesson;
@@ -1117,6 +1129,19 @@ function confirmDialog(text, yesLabel = tr("Выйти")) {
   });
 }
 
+/* Краткое всплывающее уведомление (вместо нативного alert) — не ломает визуальный
+   язык, объявляется скринридером (role=status). Сам исчезает через ~3 с. */
+function toast(msg, isError = false) {
+  const t = document.createElement("div");
+  t.className = "toast" + (isError ? " err" : "");
+  t.setAttribute("role", "status");
+  t.setAttribute("aria-live", "polite");
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add("show"));
+  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 3200);
+}
+
 /* ---------- Плеер (общий для уроков и SRS) ---------- */
 const player = $("#player");
 const playerBody = $("#player-body");
@@ -1160,18 +1185,21 @@ function closePlayer() {
   sessionToken++;
   if (exerciseCleanup) exerciseCleanup();
   player.classList.remove("open");
+  invalidateOverview();        // за сессию изменились серия/XP/очередь — обновить
   show("today");
 }
 async function askClosePlayer() {
-  const msg = playerMode === "review"
-    ? tr("Прервать повторение? Все ответы уже сохранены.")
-    : tr("Выйти из урока? Потом продолжите с этого же места.");
+  const msg = playerMode === "lesson"
+    ? tr("Выйти из урока? Потом продолжите с этого же места.")
+    : playerMode === "practice"
+      ? tr("Прервать разбор ошибок?")
+      : tr("Прервать повторение? Все ответы уже сохранены.");
   if (await confirmDialog(msg)) closePlayer();
 }
 $("#player-close").addEventListener("click", askClosePlayer);
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
-  if ($("#confirm").classList.contains("open")) return; // закроет свой onclick
+  if ($("#confirm").classList.contains("open")) { $("#confirm-no").click(); return; } // отмена
   if (aboutModal.classList.contains("open")) aboutModal.classList.remove("open");
   else if (settingsModal.classList.contains("open")) settingsModal.classList.remove("open");
   else if (player.classList.contains("open")) askClosePlayer();
@@ -1182,6 +1210,12 @@ function setProgress(frac) {
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-tts]");
   if (t) speak(t.dataset.tts);
+});
+/* Тач: у столбиков графиков нет hover-подсказки — показываем значение по тапу
+   (на устройствах без курсора), на десктопе остаётся нативный title. */
+document.addEventListener("click", e => {
+  const bar = e.target.closest(".bars .bar");
+  if (bar && bar.title && matchMedia("(hover: none)").matches) toast(bar.title);
 });
 
 function waitClick(el) {
@@ -1878,18 +1912,23 @@ async function runTwins(ex, afterAnswer) {
   Haptics[correct ? "good" : "bad"]();
   if (afterAnswer) await afterAnswer(correct, durationMs, false);
   playerBody.insertAdjacentHTML("beforeend",
-    `<div class="feedback ${correct ? "ok" : "bad"}">${correct ? tr("Серия без ошибок") : tr("Ошибок: {n} из {m}", { n: errors, m: ex.series.length })}</div>`);
+    `<div class="feedback ${correct ? "ok" : "bad"}" role="status" aria-live="polite">${correct ? tr("Серия без ошибок") : tr("Ошибок: {n} из {m}", { n: errors, m: ex.series.length })}</div>`);
   await new Promise(r => setTimeout(r, 1000));
   return { correct, durationMs, usedHint: false };
 }
 
-/* ---------- Урок (с продолжением с места выхода) ---------- */
-const RESUME_KEY = "michi_lesson_resume";
+/* ---------- Урок (с продолжением с места выхода) ----------
+   Ключ resume — по lessonId: иначе старт другого урока затирал сохранённый
+   прогресс первого (один общий ключ терял место выхода). Храним сам сценарий
+   (steps сгенерированы со случайностью — так продолжаем ту же сессию). */
+const RESUME_PREFIX = "michi_lesson_resume_";
+const resumeKey = id => RESUME_PREFIX + id;
 
 async function startLesson(lessonId) {
   let lesson, startIdx = 0, correct = 0, total = 0;
+  localStorage.removeItem("michi_lesson_resume");   // миграция: убрать старый общий ключ
   // Если из этого урока выходили на середине — продолжаем с того же шага
-  const saved = JSON.parse(localStorage.getItem(RESUME_KEY) || "null");
+  const saved = JSON.parse(localStorage.getItem(resumeKey(lessonId)) || "null");
   if (saved && saved.lessonId === lessonId && Array.isArray(saved.steps)) {
     lesson = { title: saved.title, steps: saved.steps };
     startIdx = saved.i;
@@ -1925,13 +1964,13 @@ async function startLesson(lessonId) {
       if (res.correct) correct++;
       Combo.update(res.correct);
     }
-    localStorage.setItem(RESUME_KEY, JSON.stringify({
+    localStorage.setItem(resumeKey(lessonId), JSON.stringify({
       lessonId, title: lesson.title, steps, i: i + 1, correct, total,
     }));
   }
   if (token !== sessionToken) return;
   setProgress(1);
-  localStorage.removeItem(RESUME_KEY);
+  localStorage.removeItem(resumeKey(lessonId));
 
   const score = total ? correct / total : 1;
   const done = await api.post(`/api/lessons/${lessonId}/complete`, { score });
@@ -2037,7 +2076,7 @@ async function startReview() {
 /* ---------- Вкладка «Повторение» ---------- */
 async function renderReviewTab() {
   view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
-  const o = await api.get("/api/overview");
+  const o = await getOverview();
   setStreakPill(o.streak);
   Romaji.syncProgress(o.courses);
   const total = o.srs.due + o.srs.new_available;

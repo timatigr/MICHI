@@ -475,6 +475,8 @@ html[data-theme="dark"] .hero {
   background: var(--card); border-radius: var(--radius); padding: 20px;
   box-shadow: var(--shadow); cursor: pointer; position: relative;
   transition: transform .15s cubic-bezier(.21, .8, .36, 1), background .25s;
+  /* Перф: на «Все» в «Пути» до 172 карточек — пропускаем рендер вне экрана */
+  content-visibility: auto; contain-intrinsic-size: auto 150px;
 }
 .lesson-card:hover { transform: translateY(-3px); }
 .lesson-card.locked { opacity: 0.5; cursor: default; }
@@ -972,13 +974,13 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .bars .bar small { min-height: 11px; }
 .bars .bar > div { width: 100%; background: var(--pink); border-radius: 3px 3px 0 0; min-height: 2px; opacity: 0.8; transition: height .4s cubic-bezier(.21, .8, .36, 1); }
 .bars .bar.fc > div { background: var(--bar-soft); }
-.bars .bar small { font-size: 8.5px; color: var(--muted); white-space: nowrap; }
+.bars .bar small { font-size: 0.53125rem; color: var(--muted); white-space: nowrap; }
 .hardest-list { display: flex; flex-wrap: wrap; gap: 10px; }
 .hardest-list .chip {
   font-family: var(--jp-font); background: var(--card); border-radius: 12px;
-  padding: 7px 13px; font-size: 19px; color: var(--title); box-shadow: var(--shadow-sm);
+  padding: 7px 13px; font-size: 1.1875rem; color: var(--title); box-shadow: var(--shadow-sm);
 }
-.hardest-list .chip small { font-size: 11px; color: var(--muted); margin-left: 5px; font-family: Inter, sans-serif; }
+.hardest-list .chip small { font-size: 0.6875rem; color: var(--muted); margin-left: 5px; font-family: Inter, sans-serif; }
 .chip.leech { box-shadow: 0 0 0 2px var(--bad-border), var(--shadow-sm); }
 
 /* --- Модальные оверлеи: настройки и подтверждение выхода --- */
@@ -1145,20 +1147,32 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 
 .confetti { position: fixed; inset: 0; z-index: 300; pointer-events: none; }
 
+/* Тост: краткое уведомление вместо нативного alert (над нижней навигацией) */
+.toast {
+  position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 16px); z-index: 500; pointer-events: none;
+  max-width: min(440px, calc(100vw - 32px)); text-align: center;
+  background: var(--title); color: var(--card); font-size: 0.875rem; font-weight: 600;
+  padding: 12px 18px; border-radius: 14px; box-shadow: var(--shadow);
+  opacity: 0; transition: opacity .26s ease, transform .26s cubic-bezier(.21,.8,.36,1);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.err { background: var(--error); color: #fff; }
+
 .spacer { flex: 1; }
 .center { text-align: center; }
 .mt { margin-top: 14px; }
 /* Лоадер плавно проявляется: при быстрой загрузке вспышка почти не видна */
-.empty { text-align: center; color: var(--muted); padding: 48px 0; font-size: 14px; animation: fadein .3s ease both; }
+.empty { text-align: center; color: var(--muted); padding: 48px 0; font-size: 0.875rem; animation: fadein .3s ease both; }
 
 @media (max-width: 480px) {
-  .big-kana { font-size: 84px; }
-  .prompt-text.jp { font-size: 68px; }
-  .options button.jp { font-size: 27px; }
+  .big-kana { font-size: 5.25rem; }
+  .prompt-text.jp { font-size: 4.25rem; }
+  .options button.jp { font-size: 1.6875rem; }
   .lesson-grid { gap: 12px; }
   .lesson-card { padding: 16px; }
-  .lesson-card .circle { width: 54px; height: 54px; font-size: 25px; }
-  .lesson-card h3 { font-size: 16px; }
+  .lesson-card .circle { width: 54px; height: 54px; font-size: 1.5625rem; }
+  .lesson-card h3 { font-size: 1rem; }
 }
 
 /* --- Десктоп: занять пустые бока, «Сегодня» как дашборд в две колонки --- */
@@ -1276,15 +1290,17 @@ button.ghost:active { transform: scale(0.94); }
   border: 1px solid var(--card-edge); color: var(--text);
   box-shadow: var(--shadow), var(--card-hi);
   transition: transform .18s, box-shadow .18s, border-color .18s;
+  /* Перф: словарь может быть 700+ элементов — рендерим только видимые */
+  content-visibility: auto; contain-intrinsic-size: auto 92px;
 }
-.dict-item .di-title { font-size: 23px; font-weight: 600; line-height: 1.15; color: var(--title); }
-.dict-item .di-extra { font-size: 11px; color: var(--muted); }
+.dict-item .di-title { font-size: 1.4375rem; font-weight: 600; line-height: 1.15; color: var(--title); }
+.dict-item .di-extra { font-size: 0.6875rem; color: var(--muted); }
 .dict-item .di-sub {
-  font-size: 12.5px; line-height: 1.3;
+  font-size: 0.78125rem; line-height: 1.3;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 .dict-item .di-state {
-  margin-top: 2px; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  margin-top: 2px; font-size: 0.5625rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .6px; padding: 1px 8px; border-radius: 8px;
   color: var(--muted); background: var(--line);
 }
