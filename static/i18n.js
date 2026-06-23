@@ -55,6 +55,28 @@ const EN = {
   "Прослушать": "Play sample",
   "Верно": "Correct",
   "Правильно: {x}": "Correct: {x}",
+  "пройден": "completed",
+  "закрыто": "locked",
+  "доступен": "available",
+  "Урок": "Lesson",
+  // --- Тренажёр письма (tracing.js) ---
+  "Стереть": "Clear",
+  "Подсказка": "Hint",
+  "черта {a} из {b}": "stroke {a} of {b}",
+  "Направление: эта черта пишется с другого конца": "Direction: this stroke goes the other way",
+  "Отлично написано!": "Beautifully written!",
+  "Смотрите, как пишется эта черта": "Watch how this stroke is written",
+  "Не похоже — попробуйте ещё раз": "Doesn't match — try again",
+  "Память {p}%": "Memory {p}%",
+  // --- Разбор ошибок дня ---
+  "Работа над ошибками": "Mistake review",
+  "Быстрый разбор того, в чём вы сегодня ошиблись. Это практика — на расписание SRS не влияет.":
+    "A quick run through what you got wrong today. It's practice — it doesn't affect the SRS schedule.",
+  "Разобрать ошибки дня · {n}": "Review today's mistakes · {n}",
+  "Разбор ошибок завершён": "Mistake review complete",
+  "Повторено: {n} · сейчас верно {p}%": "Reviewed: {n} · now correct {p}%",
+  "Сегодня ошибок нет — отлично!": "No mistakes today — great!",
+  "Прервать разбор ошибок?": "Stop the mistake review?",
 
   // --- Настройки (⚙) ---
   "Озвучка": "Audio",

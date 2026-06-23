@@ -566,11 +566,13 @@ const Theme = {
     const btn = $("#btn-theme");
     btn.textContent = this.icons[this.pref];
     btn.title = `Тема: ${this.labels[this.pref]} (нажмите, чтобы сменить)`;
+    btn.setAttribute("aria-label", btn.title);     // имя для скринридера = подсказка
     // Кнопка в плеере: показывает «куда переключим» (☾ в светлой, ☀ в тёмной)
     const pbtn = document.getElementById("player-theme");
     if (pbtn) {
       pbtn.textContent = dark ? "☀" : "☾";
       pbtn.title = dark ? "Дневной режим" : "Ночной режим";
+      pbtn.setAttribute("aria-label", pbtn.title);
     }
   },
   toggle() {
@@ -788,6 +790,75 @@ function celebrateOne(a) {
   requestAnimationFrame(frame);
 })();
 
+/* ---------- Доступность модальных оверлеев: focus-trap + изоляция фона ----------
+   Оверлеи (#player/#settings/#confirm/#about/#onboarding) открываются классом
+   .open в разных местах кода. Вместо правок каждого места — наблюдаем за классом
+   через MutationObserver и на открытии: переносим фокус внутрь, запираем Tab в
+   пределах ВЕРХНЕГО оверлея, делаем фон inert (и для клавиатуры, и для
+   скринридера). На закрытии возвращаем фокус инициатору. Стек поддерживает
+   вложенность (about поверх settings, confirm поверх player). */
+const ModalA11y = {
+  SEL: "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled])," +
+       'textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+  _stack: [],
+  bg() { return [document.getElementById("app"), document.querySelector("nav.tabs")]; },
+
+  watch(el) {
+    if (!el) return;
+    new MutationObserver(() => {
+      const open = el.classList.contains("open");
+      if (open === !!el._a11yOpen) return;
+      el._a11yOpen = open;
+      if (open) this._open(el); else this._close(el);
+    }).observe(el, { attributes: true, attributeFilter: ["class"] });
+  },
+
+  _focusables(el) {
+    return [...el.querySelectorAll(this.SEL)].filter(n => n.offsetParent !== null);
+  },
+
+  _top() { return this._stack.length ? this._stack[this._stack.length - 1].el : null; },
+
+  _refresh() {
+    const top = this._top();
+    for (const b of this.bg()) if (b) b.inert = !!top;
+    for (const s of this._stack) s.el.inert = (s.el !== top);   // нижние слои inert
+  },
+
+  _open(el) {
+    this._stack.push({ el, opener: document.activeElement });
+    el._trap = e => this._onKey(e, el);
+    el.addEventListener("keydown", el._trap);
+    this._refresh();
+    // display:flex применяется тем же тиком — фокус переносим в следующем кадре
+    requestAnimationFrame(() => {
+      if (!el.classList.contains("open")) return;
+      (this._focusables(el)[0] || el).focus();
+    });
+  },
+
+  _close(el) {
+    if (el._trap) { el.removeEventListener("keydown", el._trap); el._trap = null; }
+    const i = this._stack.findIndex(s => s.el === el);
+    const entry = i >= 0 ? this._stack.splice(i, 1)[0] : null;
+    el.inert = false;
+    this._refresh();
+    const o = entry && entry.opener;     // вернуть фокус на элемент-инициатор
+    if (o && o.isConnected && o.focus) o.focus();
+  },
+
+  _onKey(e, el) {
+    if (e.key !== "Tab" || this._top() !== el) return;   // запирает только верхний
+    const f = this._focusables(el);
+    if (!f.length) { e.preventDefault(); return; }
+    const first = f[0], last = f[f.length - 1], a = document.activeElement;
+    if (e.shiftKey && (a === first || !el.contains(a))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (a === last || !el.contains(a))) { e.preventDefault(); first.focus(); }
+  },
+};
+["#player", "#settings", "#confirm", "#about", "#onboarding"].forEach(
+  sel => ModalA11y.watch($(sel)));
+
 /* Enter/Space продолжают сессию, когда на экране есть кнопка «Дальше» */
 document.addEventListener("keydown", e => {
   if (e.key !== "Enter" && e.key !== " ") return;
@@ -801,8 +872,11 @@ const view = $("#view");
 const renderers = { today: renderToday, lessons: renderLessons, review: renderReviewTab, stats: renderStats, dict: renderDict };
 
 function show(name) {
-  document.querySelectorAll("nav.tabs button").forEach(b =>
-    b.classList.toggle("active", b.dataset.view === name));
+  document.querySelectorAll("nav.tabs button").forEach(b => {
+    const on = b.dataset.view === name;
+    b.classList.toggle("active", on);
+    if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
   Promise.resolve(renderers[name]()).then(() => animateIn(view));
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>
@@ -978,15 +1052,24 @@ async function renderLessons() {
           ${doneCount === g.lessons.length ? "✓ " : ""}${tr("{a} из {b}", { a: doneCount, b: g.lessons.length })}</span>
       </div>
       <div class="lesson-grid">
-        ${g.lessons.map(l => `
-          <div class="lesson-card ${l.status} ${l.type === "gate_test" ? "gate" : ""}" data-id="${l.id}" data-status="${l.status}">
-            <div class="circle jp c${lessons.indexOf(l) % 6}">${l.icon}</div>
+        ${g.lessons.map(l => {
+          // Карточка урока доступна с клавиатуры (role=button + tabindex): без
+          // этого экран «Путь» был недостижим без мыши (a11y). aria-label несёт
+          // название и статус; декоративные иконка/замок скрыты от скринридера.
+          const statusWord = l.status === "completed" ? tr("пройден")
+            : l.status === "locked" ? tr("закрыто") : tr("доступен");
+          return `
+          <div class="lesson-card ${l.status} ${l.type === "gate_test" ? "gate" : ""}"
+               role="button" tabindex="0" aria-disabled="${l.status === "locked"}"
+               aria-label="${escAttr(`${tr(l.title)}. ${statusWord}`)}"
+               data-id="${l.id}" data-status="${l.status}">
+            <div class="circle jp c${lessons.indexOf(l) % 6}" aria-hidden="true">${l.icon}</div>
             ${l.status === "completed"
               ? `<span class="state done">✓ ${l.score != null ? Math.round(l.score * 100) + "%" : ""}</span>`
-              : l.status === "locked" ? `<span class="state lock">🔒</span>` : ""}
+              : l.status === "locked" ? `<span class="state lock" aria-hidden="true">🔒</span>` : ""}
             <h3>${tr(l.title)}</h3>
             <div class="tag">${tr(l.subtitle)}${l.kana_count ? ` · ${tr("{n} знаков", { n: l.kana_count })}` : ""}${l.locked_hint ? `<br>${tr(l.locked_hint)}` : ""}</div>
-          </div>`).join("")}
+          </div>`;}).join("")}
       </div>`;
     }).join("");
 
@@ -997,10 +1080,16 @@ async function renderLessons() {
         paint();
         animateIn(view);
       }));
-    view.querySelectorAll(".lesson-card").forEach(el =>
-      el.addEventListener("click", () => {
+    view.querySelectorAll(".lesson-card").forEach(el => {
+      const activate = () => {
         if (el.dataset.status !== "locked") startLesson(el.dataset.id);
-      }));
+      };
+      el.addEventListener("click", activate);
+      // Enter/Space активируют карточку (она role=button) — клавиатурный паритет
+      el.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+      });
+    });
   };
 
   paint();
@@ -1033,6 +1122,8 @@ let exerciseCleanup = null;
 function openPlayer(mode) {
   sessionToken++;
   playerMode = mode;
+  const labels = { review: "Повторение", practice: "Работа над ошибками" };
+  player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   setProgress(0);
   Combo.reset();
@@ -1378,7 +1469,7 @@ async function runGrammarCloze(ex, afterAnswer) {
     <div class="cloze-list">${ex.rows.map(rowHtml).join("")}</div>
     <div class="cloze-bank">${ex.bank.map(t =>
       `<button class="bank-tile" data-t="${t}">${t}</button>`).join("")}</div>
-    <div class="feedback" id="fb"></div>
+    <div class="feedback" id="fb" aria-live="polite"></div>
     <div class="spacer"></div>
     <button class="primary" id="check" disabled>${tr("Проверить")}</button>`;
   animateIn(playerBody);
@@ -1458,7 +1549,7 @@ async function runMatch(ex, afterAnswer) {
       <div class="match-col">${shuffle(ex.pairs).map(p => tile(p, p.jp, "jp")).join("")}</div>
       <div class="match-col">${shuffle(ex.pairs).map(p => tile(p, p.ru, "")).join("")}</div>
     </div>
-    <div class="feedback" id="fb"></div>
+    <div class="feedback" id="fb" aria-live="polite"></div>
     <div class="spacer"></div>`;
   animateIn(playerBody);
 
@@ -1532,7 +1623,7 @@ async function runChoice(ex, afterAnswer) {
       ${ex.options.map((o, i) =>
         `<button data-i="${i}" class="${ex.options_are_kana ? "jp" : ""}"><span class="kbd">${i + 1}</span>${tr(o)}</button>`).join("")}
     </div>
-    <div class="feedback" id="fb"></div>
+    <div class="feedback" id="fb" aria-live="polite"></div>
     <div class="spacer"></div>`;
   animateIn(playerBody);
   if (speakOnStart) speak(ex.prompt.tts);
@@ -1577,13 +1668,13 @@ async function runWordBuild(ex, afterAnswer) {
   const quiet = !!ex.speak_after;
   playerBody.innerHTML = `
     <p class="question">${tr(ex.question)}</p>
-    <div class="prompt-text">${ex.prompt.text}</div>
+    <div class="prompt-text">${trBuildPrompt(ex.prompt.text)}</div>
     ${quiet ? "" : ttsButton(ex.prompt.tts)}
     <div class="build-slots" id="slots"></div>
     <div class="tiles" id="tiles">
       ${ex.tiles.map((t, i) => `<button data-i="${i}">${t}</button>`).join("")}
     </div>
-    <div class="feedback" id="fb"></div>
+    <div class="feedback" id="fb" aria-live="polite"></div>
     <div class="spacer"></div>
     <button class="primary" id="check" disabled>${tr("Проверить")}</button>`;
   animateIn(playerBody);
@@ -1669,7 +1760,7 @@ async function runInput(ex, afterAnswer) {
     <input class="text-answer" id="ans" type="text" inputmode="text"
       autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
       placeholder="${tr("каной или ромадзи")}">
-    <div class="feedback" id="fb"></div>
+    <div class="feedback" id="fb" aria-live="polite"></div>
     <div class="spacer"></div>
     <button class="primary" id="check" disabled>${tr("Проверить")}</button>`;
   animateIn(playerBody);
@@ -1718,10 +1809,10 @@ async function runInput(ex, afterAnswer) {
 async function runTracing(ex, afterAnswer) {
   playerBody.innerHTML = `
     <p class="question">${tr(ex.question)}</p>
-    <div class="prompt-text" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${ex.prompt.text}</div>
+    <div class="prompt-text" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${tr(ex.prompt.text)}</div>
     ${ttsButton(ex.prompt.tts)}
     <div id="trace-host"></div>
-    <div class="feedback" id="fb"></div>
+    <div class="feedback" id="fb" aria-live="polite"></div>
     <div class="spacer"></div>`;
   animateIn(playerBody);
   speak(ex.prompt.tts);
@@ -1800,7 +1891,7 @@ async function startLesson(lessonId) {
     try {
       lesson = await api.get(`/api/lessons/${lessonId}`);
     } catch (e) {
-      alert(e.message);
+      toast(e.message, true);
       return;
     }
   }

@@ -59,8 +59,8 @@
       <h1>MICHI</h1>
       <span class="pill" id="streak-pill" style="display:none"></span>
       <span class="spacer"></span>
-      <button class="icon-btn" id="btn-theme" title="Светлая/тёмная тема">☾</button>
-      <button class="icon-btn" id="btn-settings" title="Настройки озвучки">⚙</button>
+      <button class="icon-btn" id="btn-theme" title="Светлая/тёмная тема" aria-label="Светлая/тёмная тема">☾</button>
+      <button class="icon-btn" id="btn-settings" title="Настройки озвучки" aria-label="Настройки">⚙</button>
     </header>
     <main id="view"></main>
   </div>
@@ -74,23 +74,23 @@
   </nav>
 
   <!-- Полноэкранный плеер урока / SRS-сессии -->
-  <div id="player">
+  <div id="player" role="dialog" aria-modal="true" aria-label="Урок">
     <div class="player-top">
-      <button class="close" id="player-close" title="Выйти">✕</button>
+      <button class="close" id="player-close" title="Выйти" aria-label="Выйти">✕</button>
       <div class="progress"><div id="player-progress"></div></div>
       <span id="combo" class="combo" hidden></span>
       <span id="player-counter" class="stat-label"></span>
-      <button class="close" id="player-theme" title="Ночной режим">☾</button>
-      <button class="close" id="player-settings" title="Настройки">⚙</button>
+      <button class="close" id="player-theme" title="Ночной режим" aria-label="Ночной режим">☾</button>
+      <button class="close" id="player-settings" title="Настройки" aria-label="Настройки">⚙</button>
     </div>
     <div class="player-body" id="player-body"></div>
   </div>
 
   <!-- Настройки озвучки -->
-  <div id="settings">
+  <div id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="settings-card">
       <div class="settings-scroll">
-      <h2 data-i18n="Настройки">Настройки</h2>
+      <h2 id="settings-title" data-i18n="Настройки">Настройки</h2>
       <div class="setting">
         <label for="set-lang" data-i18n="Язык">Язык</label>
         <select id="set-lang"></select>
@@ -168,7 +168,7 @@
   </div>
 
   <!-- Подтверждение выхода из сессии -->
-  <div id="confirm">
+  <div id="confirm" role="dialog" aria-modal="true" aria-labelledby="confirm-text">
     <div class="settings-card confirm-card">
       <p id="confirm-text"></p>
       <div class="settings-actions">
@@ -179,20 +179,20 @@
   </div>
 
   <!-- О проекте и приватность -->
-  <div id="about">
+  <div id="about" role="dialog" aria-modal="true" aria-labelledby="about-title">
     <div class="settings-card">
       <div class="settings-scroll about-body">
-        <h2 data-i18n="О проекте">О проекте</h2>
+        <h2 id="about-title" data-i18n="О проекте">О проекте</h2>
         <p data-i18n="MICHI（道, «путь») — бесплатный тренажёр японского с нуля: кана, лексика, кандзи и грамматика уровня JLPT N5. Материал даётся маленькими уроками, а умное интервальное повторение (алгоритм FSRS) само напоминает, что пора освежить выученное.">MICHI（道, «путь») — бесплатный тренажёр японского с нуля: кана, лексика, кандзи и грамматика уровня JLPT N5. Материал даётся маленькими уроками, а умное интервальное повторение (алгоритм FSRS) само напоминает, что пора освежить выученное.</p>
 
         <h3 data-i18n="Приватность">Приватность</h3>
         <p data-i18n="Без регистрации: ни почты, ни пароля. При первом заходе браузеру выдаётся анонимный идентификатор, он хранится в подписанной cookie и привязывает прогресс к этому браузеру. Никакой аналитики и трекеров третьих сторон.">Без регистрации: ни почты, ни пароля. При первом заходе браузеру выдаётся анонимный идентификатор, он хранится в подписанной cookie и привязывает прогресс к этому браузеру. Никакой аналитики и трекеров третьих сторон.</p>
         <p data-i18n="Что хранится на сервере: ваши карточки, журнал ответов, пройденные уроки и настройки — в отдельной базе, привязанной к анонимному идентификатору. Данные не передаются третьим лицам и не используются для рекламы. Весь прогресс можно скачать одним файлом (⚙ → «Скачать копию») и восстановить на другом устройстве.">Что хранится на сервере: ваши карточки, журнал ответов, пройденные уроки и настройки — в отдельной базе, привязанной к анонимному идентификатору. Данные не передаются третьим лицам и не используются для рекламы. Весь прогресс можно скачать одним файлом (⚙ → «Скачать копию») и восстановить на другом устройстве.</p>
-        <p data-i18n="Сторонние запросы: шрифты подгружаются с Google Fonts (при этом Google видит IP-адрес запроса). ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.">Сторонние запросы: шрифты подгружаются с Google Fonts (при этом Google видит IP-адрес запроса). ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.</p>
+        <p data-i18n="Сторонние запросы: интерфейс, шрифты и звуки отдаются с этого же сайта — никаких сторонних шрифтов, CDN или аналитики. ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.">Сторонние запросы: интерфейс, шрифты и звуки отдаются с этого же сайта — никаких сторонних шрифтов, CDN или аналитики. ИИ-разбор ошибок «Сэнсэй» по умолчанию выключен; если владелец сайта его включил, то при нажатии кнопки разбора текст конкретного задания и ваш ответ отправляются провайдеру ИИ (Anthropic или Google) только ради объяснения ошибки. Без ключа ИИ ничего никуда не отправляется.</p>
         <p data-i18n="Удалить данные: на вкладке «Статистика» → «Резервная копия» есть кнопка «Удалить мои данные» — она безвозвратно стирает весь прогресс с сервера и начинает чистую сессию. Можно и просто очистить cookie сайта. Заброшенные пустые сессии сервер удаляет сам.">Удалить данные: на вкладке «Статистика» → «Резервная копия» есть кнопка «Удалить мои данные» — она безвозвратно стирает весь прогресс с сервера и начинает чистую сессию. Можно и просто очистить cookie сайта. Заброшенные пустые сессии сервер удаляет сам.</p>
 
         <h3 data-i18n="Лицензия и благодарности">Лицензия и благодарности</h3>
-        <p data-i18n-html='Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP (Google Fonts).'>Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP (Google Fonts).</p>
+        <p data-i18n-html='Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP.'>Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP.</p>
         <p class="setting-hint" data-i18n="Учебный проект, предоставляется «как есть», без гарантий.">Учебный проект, предоставляется «как есть», без гарантий.</p>
       </div>
       <div class="settings-actions">
