@@ -20,6 +20,11 @@ RUN pip install -r requirements.txt
 COPY app ./app
 COPY static ./static
 
+# Версия Service Worker = хэш оболочки: при деплое с изменённой статикой sw.js
+# меняется сам собой, и браузеры подтягивают свежий JS (иначе залипал бы кэш).
+COPY scripts/stamp_sw.py ./scripts/stamp_sw.py
+RUN python scripts/stamp_sw.py
+
 # Непривилегированный пользователь; /app пишем (data/, tts_cache/, ai_cache/).
 RUN useradd --create-home michi && chown -R michi /app
 
