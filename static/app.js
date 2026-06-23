@@ -260,27 +260,27 @@ function mountExplain(host, ctx) {
   if (!AI.available || !host) return;
   const wrap = document.createElement("div");
   wrap.className = "ai-explain";
-  wrap.innerHTML = `<button class="ghost ai-ask">🧠 Разобрать ошибку</button>
+  wrap.innerHTML = `<button class="ghost ai-ask">${tr("🧠 Разобрать ошибку")}</button>
     <div class="ai-body" hidden></div>`;
   host.appendChild(wrap);
   const btn = $(".ai-ask", wrap);
   const body = $(".ai-body", wrap);
   btn.addEventListener("click", async () => {
     btn.disabled = true;
-    btn.textContent = "Думаю…";
+    btn.textContent = tr("Думаю…");
     try {
       const r = await api.post("/api/ai/explain", ctx);
-      const cat = AI.CAT[r.category] || AI.CAT.other;
+      const cat = tr(AI.CAT[r.category] || AI.CAT.other);
       body.innerHTML = `<span class="ai-cat">${cat}</span>
         <p class="ai-text">${escapeHtml(r.explanation)}</p>
-        <p class="ai-rule"><b>Правило:</b> ${escapeHtml(r.rule)}</p>
-        <p class="ai-ex"><b>Пример:</b> ${escapeHtml(r.counterexample)}</p>`;
+        <p class="ai-rule"><b>${tr("Правило")}:</b> ${escapeHtml(r.rule)}</p>
+        <p class="ai-ex"><b>${tr("Пример")}:</b> ${escapeHtml(r.counterexample)}</p>`;
       body.hidden = false;
       btn.remove();
     } catch {
       btn.disabled = false;
-      btn.textContent = "🧠 Разобрать ошибку";
-      body.innerHTML = `<p class="ai-text">Не получилось получить разбор. Попробуйте ещё раз.</p>`;
+      btn.textContent = tr("🧠 Разобрать ошибку");
+      body.innerHTML = `<p class="ai-text">${tr("Не получилось получить разбор. Попробуйте ещё раз.")}</p>`;
       body.hidden = false;
     }
   });
@@ -647,11 +647,29 @@ const Romaji = {
 };
 Romaji.apply();
 
-/* ---------- Анимация появления экранов ---------- */
-function animateIn(el) {
-  el.classList.remove("anim-in");
+/* ---------- Анимация появления экранов ----------
+   dir: 0 — подъём (по умолчанию, для перерисовок и плеера); +1/-1 — горизонтальный
+   въезд под направление смены вкладки (как в нативных приложениях). */
+function animateIn(el, dir = 0) {
+  const cls = dir > 0 ? "anim-in-right" : dir < 0 ? "anim-in-left" : "anim-in";
+  el.classList.remove("anim-in", "anim-in-left", "anim-in-right");
   void el.offsetWidth; // перезапуск CSS-анимации
-  el.classList.add("anim-in");
+  el.classList.add(cls);
+}
+
+/* ---------- Скелетоны загрузки ----------
+   Мерцающие плейсхолдеры под геометрию экрана вместо текста «Загрузка…»:
+   воспринимается быстрее и не даёт сдвига макета (контент приходит на готовый
+   каркас). Мерцание само замирает при prefers-reduced-motion (глобальное правило). */
+function skeleton(kind) {
+  const card = h => `<div class="skel-card" style="height:${h}px"></div>`;
+  if (kind === "lessons") {
+    return `<div class="skel">
+      <div class="skel-tabs">${"<span></span>".repeat(4)}</div>
+      <div class="skel-grid">${'<div class="skel-tile"></div>'.repeat(6)}</div></div>`;
+  }
+  if (kind === "today") return `<div class="skel">${card(150)}${card(92)}${card(150)}${card(120)}</div>`;
+  return `<div class="skel">${card(140)}${card(116)}${card(116)}</div>`;
 }
 
 /* ---------- Конфетти на вехах (≤2 с, уважает reduced-motion) ---------- */
@@ -883,6 +901,10 @@ const ModalA11y = {
 document.addEventListener("keydown", e => {
   if (e.key !== "Enter" && e.key !== " ") return;
   if (!$("#player").classList.contains("open")) return;
+  // Не перехватывать пробел/Enter, когда фокус в поле свободного ввода: иначе
+  // пробел не печатается, а Enter дублировал бы собственный сабмит поля (N1).
+  const a = document.activeElement;
+  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return;
   const btn = $("#player-body").querySelector("#next, #finish, #check");
   if (btn) { e.preventDefault(); btn.click(); }
 });
@@ -890,14 +912,19 @@ document.addEventListener("keydown", e => {
 /* ---------- Роутер вкладок ---------- */
 const view = $("#view");
 const renderers = { today: renderToday, lessons: renderLessons, review: renderReviewTab, stats: renderStats, dict: renderDict };
+const TAB_ORDER = ["today", "lessons", "review", "stats", "dict"];
+let _curTab = "today";
 
 function show(name) {
+  // Направление перехода между вкладками — для горизонтального въезда контента
+  const dir = Math.sign(TAB_ORDER.indexOf(name) - TAB_ORDER.indexOf(_curTab));
+  _curTab = name;
   document.querySelectorAll("nav.tabs button").forEach(b => {
     const on = b.dataset.view === name;
     b.classList.toggle("active", on);
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
-  Promise.resolve(renderers[name]()).then(() => animateIn(view));
+  Promise.resolve(renderers[name]()).then(() => animateIn(view, dir));
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>
   b.addEventListener("click", () => show(b.dataset.view)));
@@ -922,7 +949,7 @@ function greeting() {
 }
 
 async function renderToday() {
-  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
+  view.innerHTML = skeleton("today");
   const o = await getOverview();
   setStreakPill(o.streak);
   Romaji.syncProgress(o.courses);
@@ -1029,7 +1056,7 @@ const COURSE_LABEL = { all: "Все", hiragana: "Хирагана", katakana: "�
 let lessonFilter = localStorage.getItem("michi_lesson_filter") || "all";
 
 async function renderLessons() {
-  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
+  view.innerHTML = skeleton("lessons");
   const lessons = await api.get("/api/lessons");
 
   // Курсы в порядке появления — для переключателя
@@ -1152,13 +1179,37 @@ let playerMode = "lesson"; // lesson | review — для текста диало
 // нажатие цифры «отвечает» на брошенную карточку (фантомная озвучка + POST)
 let exerciseCleanup = null;
 
+/* Прерываемое ожидание шага. Выход из сессии (closePlayer) должен ЗАВЕРШИТЬ
+   ожидание текущего шага, а не оставить его «висеть»: иначе async-функция
+   упражнения остаётся приостановленной навсегда, удерживая отсоединённый DOM
+   (утечка), и позднее может дорисовать «фантомный» ответ. abortable(executor)
+   ведёт себя как new Promise(executor), но дополнительно резолвится в ABORT,
+   когда вызывается fireAbort(). Набор покрывает и одновременные ожидания
+   (Promise.race в экране проваленных ворот). Каждое упражнение после await
+   проверяет `=== ABORT` и тихо выходит — сессионный цикл затем видит смену
+   токена и завершается. */
+const ABORT = Symbol("abort");
+const _abortWaiters = new Set();
+function abortable(executor) {
+  return new Promise(resolve => {
+    const onAbort = () => resolve(ABORT);
+    _abortWaiters.add(onAbort);
+    executor(value => { _abortWaiters.delete(onAbort); resolve(value); });
+  });
+}
+function fireAbort() {
+  const waiters = [..._abortWaiters];
+  _abortWaiters.clear();
+  for (const w of waiters) w();
+}
+
 function openPlayer(mode) {
   sessionToken++;
   playerMode = mode;
   const labels = { review: "Повторение", practice: "Работа над ошибками" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
-  setProgress(0);
+  resetProgress();
   Combo.reset();
   $("#player-counter").textContent = "";
   return sessionToken;
@@ -1184,6 +1235,7 @@ const Combo = {
 function closePlayer() {
   sessionToken++;
   if (exerciseCleanup) exerciseCleanup();
+  fireAbort();                 // завершить ожидание текущего шага (без зависших фреймов)
   player.classList.remove("open");
   invalidateOverview();        // за сессию изменились серия/XP/очередь — обновить
   show("today");
@@ -1204,8 +1256,16 @@ document.addEventListener("keydown", e => {
   else if (settingsModal.classList.contains("open")) settingsModal.classList.remove("open");
   else if (player.classList.contains("open")) askClosePlayer();
 });
+// Полоса прогресса не едет назад в пределах сессии: при дозагрузке очереди SRS
+// знаменатель растёт и «сырая» доля может уменьшиться — это читалось бы как откат.
+let _progress = 0;
 function setProgress(frac) {
-  $("#player-progress").style.width = `${Math.round(frac * 100)}%`;
+  _progress = Math.max(_progress, Math.min(1, Math.max(0, frac || 0)));
+  $("#player-progress").style.width = `${Math.round(_progress * 100)}%`;
+}
+function resetProgress() {
+  _progress = 0;
+  $("#player-progress").style.width = "0%";
 }
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-tts]");
@@ -1219,13 +1279,14 @@ document.addEventListener("click", e => {
 });
 
 function waitClick(el) {
-  return new Promise(res => el.addEventListener("click", res, { once: true }));
+  return abortable(res => el.addEventListener("click", res, { once: true }));
 }
 
 /* Выбор варианта мышью или клавишами 1–N; обработчик клавиш снимается и при
-   ответе, и при закрытии сессии (exerciseCleanup) */
+   ответе, и при закрытии сессии (exerciseCleanup). На выходе из сессии ожидание
+   резолвится в ABORT (см. abortable) — вызывающий тихо завершает упражнение. */
 function awaitChoice(buttons) {
-  return new Promise(res => {
+  return abortable(res => {
     const cleanup = () => {
       document.removeEventListener("keydown", onKey);
       exerciseCleanup = null;
@@ -1544,7 +1605,7 @@ async function runGrammarCloze(ex, afterAnswer) {
     refresh();
   });
 
-  await waitClick(checkBtn);
+  if (await waitClick(checkBtn) === ABORT) return { correct: false, durationMs: 0, usedHint: false };
   const durationMs = Math.round(performance.now() - t0);
   playerBody.querySelector(".cloze-bank").style.pointerEvents = "none";
   blanks.forEach(b => (b.disabled = true));
@@ -1600,7 +1661,7 @@ async function runMatch(ex, afterAnswer) {
   let matched = 0, mistakes = 0, sel = null, busy = false;
   const t0 = performance.now();
 
-  await new Promise(resolve => {
+  const done = await abortable(resolve => {
     playerBody.querySelector(".match-board").addEventListener("click", e => {
       const b = e.target.closest(".match-tile");
       if (!b || busy || b.classList.contains("matched")) return;
@@ -1631,6 +1692,7 @@ async function runMatch(ex, afterAnswer) {
     });
   });
 
+  if (done === ABORT) return { correct: false, durationMs: 0, usedHint: false };
   const durationMs = Math.round(performance.now() - t0);
   const correct = mistakes === 0;
   if (afterAnswer)
@@ -1673,6 +1735,7 @@ async function runChoice(ex, afterAnswer) {
   const buttons = [...playerBody.querySelectorAll(".options button")];
   const t0 = performance.now();
   const choice = await awaitChoice(buttons);
+  if (choice === ABORT) return { correct: false, durationMs: 0, usedHint: false };
   const durationMs = Math.round(performance.now() - t0);
   const correct = choice === ex.answer;
   buttons.forEach(b => (b.disabled = true));
@@ -1734,7 +1797,7 @@ async function runWordBuild(ex, afterAnswer) {
     checkBtn.disabled = assembled.length !== ex.answer_tokens.length;
   };
 
-  const finished = new Promise(res => {
+  const finished = abortable(res => {
     $("#tiles", playerBody).addEventListener("click", e => {
       const b = e.target.closest("button");
       if (!b || b.disabled) return;
@@ -1753,7 +1816,7 @@ async function runWordBuild(ex, afterAnswer) {
       if (assembled.length === ex.answer_tokens.length) res();
     });
   });
-  await finished;
+  if (await finished === ABORT) return { correct: false, durationMs: 0, usedHint: false };
 
   const durationMs = Math.round(performance.now() - t0);
   const word = assembled.map(a => a.tile).join("");
@@ -1813,11 +1876,12 @@ async function runInput(ex, afterAnswer) {
   input.focus();
   input.addEventListener("input", () => { checkBtn.disabled = !input.value.trim(); });
   const t0 = performance.now();
-  await new Promise(res => {
+  const aborted = await abortable(res => {
     const submit = () => { if (input.value.trim()) res(); };
     checkBtn.addEventListener("click", submit);
     input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
   });
+  if (aborted === ABORT) return { correct: false, durationMs: 0, usedHint: false };
 
   const durationMs = Math.round(performance.now() - t0);
   const correct = ex.accept.includes(normInput(input.value));
@@ -1860,12 +1924,13 @@ async function runTracing(ex, afterAnswer) {
   speak(ex.prompt.tts);
 
   const t0 = performance.now();
-  const result = await new Promise(res =>
+  const result = await abortable(res =>
     Tracing.create($("#trace-host", playerBody), {
       strokes: ex.strokes,
       mode: ex.mode,
       onComplete: res,
     }));
+  if (result === ABORT) return { correct: false, durationMs: 0, usedHint: false };
   const durationMs = Math.round(performance.now() - t0);
   // Трассировка прощает одну помарку, письмо по памяти — нет (6.7, режимы)
   const correct = ex.mode === "trace" ? result.errors <= 1 : result.errors === 0;
@@ -1900,6 +1965,7 @@ async function runTwins(ex, afterAnswer) {
     speak(round.tts);
     const buttons = [...playerBody.querySelectorAll(".options button")];
     const choice = await awaitChoice(buttons);
+    if (choice === ABORT) return { correct: false, durationMs: 0, usedHint: false };
     const ok = choice === round.answer;
     if (!ok) errors++;
     buttons.forEach(b => (b.disabled = true));
@@ -1970,10 +2036,23 @@ async function startLesson(lessonId) {
   }
   if (token !== sessionToken) return;
   setProgress(1);
-  localStorage.removeItem(resumeKey(lessonId));
 
+  // Сначала пишем результат на сервер и только при успехе снимаем точку
+  // возобновления. Иначе обрыв сети на финише терял бы весь урок: прогресс не
+  // дошёл бы до сервера, а resume-ключ был бы уже удалён. /complete идемпотентен
+  // (ON CONFLICT) — повторный заход в урок (resume на i == steps.length) досдаёт.
   const score = total ? correct / total : 1;
-  const done = await api.post(`/api/lessons/${lessonId}/complete`, { score });
+  let done;
+  try {
+    done = await api.post(`/api/lessons/${lessonId}/complete`, { score });
+  } catch {
+    if (token !== sessionToken) return;
+    toast(tr("Нет сети — урок не засчитан. Зайдите снова, прогресс сохранён."), true);
+    closePlayer();
+    return;
+  }
+  if (token !== sessionToken) return;
+  localStorage.removeItem(resumeKey(lessonId));   // успех — точка возобновления больше не нужна
   playerBody.classList.add("center-step");   // итог — по центру
 
   // Ворота юнита провалены: следующий юнит не открывается, предлагаем пересдать
@@ -1990,9 +2069,10 @@ async function startLesson(lessonId) {
       </div>`;
     animateIn(playerBody);
     const choice = await Promise.race([
-      waitClick($("#retry", playerBody)).then(() => "retry"),
-      waitClick($("#finish", playerBody)).then(() => "finish"),
+      waitClick($("#retry", playerBody)).then(v => v === ABORT ? ABORT : "retry"),
+      waitClick($("#finish", playerBody)).then(v => v === ABORT ? ABORT : "finish"),
     ]);
+    if (choice === ABORT) return;        // вышли из плеера — closePlayer уже отработал
     closePlayer();
     if (choice === "retry") startLesson(lessonId);
     return;
@@ -2010,7 +2090,7 @@ async function startLesson(lessonId) {
     </div>`;
   animateIn(playerBody);
   confetti();
-  await waitClick($("#finish", playerBody));
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
   closePlayer();
   await checkAchievements(true);   // мог открыться кандзи/ворота/веха — салютуем
 }
@@ -2021,7 +2101,15 @@ async function startReview() {
   let done = 0, okCount = 0;
 
   while (token === sessionToken) {
-    const data = await api.get("/api/srs/queue?limit=20");
+    let data;
+    try {
+      data = await api.get("/api/srs/queue?limit=20");
+    } catch {
+      if (token !== sessionToken) return;
+      toast(tr("Нет сети — попробуйте позже. Ответы сохранены."), true);
+      closePlayer();
+      return;
+    }
     if (token !== sessionToken) return;
     if (!data.items.length) break;
 
@@ -2033,13 +2121,20 @@ async function startReview() {
       $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(remaining - i, 1) });
 
       const res = await runExercise(item.exercise, async (correct, durationMs, usedHint) => {
-        const verdict = await api.post("/api/srs/answer", {
-          card_id: item.card_id,
-          correct,
-          duration_ms: durationMs,
-          exercise_type: item.exercise.type,
-          used_hint: usedHint,
-        });
+        let verdict;
+        try {
+          verdict = await api.post("/api/srs/answer", {
+            card_id: item.card_id,
+            correct,
+            duration_ms: durationMs,
+            exercise_type: item.exercise.type,
+            used_hint: usedHint,
+          });
+        } catch {
+          // Сеть отпала: ответ не записан, карточка остаётся due и вернётся
+          // в следующей сессии. Сессию не роняем — сообщаем в области вердикта.
+          return tr("Нет сети — ответ не сохранён, карточка вернётся позже.");
+        }
         let extra = `${tr(verdict.rating_label)} · ${tr("следующий показ")} ${humanizeInterval((new Date(verdict.next_due) - Date.now()) / 1000)}`;
         if (!correct && item.info.hint)
           extra += `<br>${item.info.hint}`;
@@ -2068,14 +2163,14 @@ async function startReview() {
     </div>`;
   animateIn(playerBody);
   if (done >= 10) confetti();
-  await waitClick($("#finish", playerBody));
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
   closePlayer();
   await checkAchievements(true);   // повторения могли открыть веху памяти/серии
 }
 
 /* ---------- Вкладка «Повторение» ---------- */
 async function renderReviewTab() {
-  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
+  view.innerHTML = skeleton("review");
   const o = await getOverview();
   setStreakPill(o.streak);
   Romaji.syncProgress(o.courses);
@@ -2137,7 +2232,7 @@ async function startMistakes() {
       <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);
-  await waitClick($("#finish", playerBody));
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
   closePlayer();
 }
 
@@ -2175,11 +2270,13 @@ function mnemoGalleryHtml(courses) {
 }
 
 async function renderDict() {
-  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
+  view.innerHTML = skeleton("dict");
   const data = await api.get("/api/learned");
   if (!data.courses.length) {
-    view.innerHTML = `<div class="dict-wrap"><div class="card"><p class="note center">${
-      tr("Пока пусто — пройдите урок, и выученное появится здесь для повторения.")}</p></div></div>`;
+    view.innerHTML = `<div class="dict-wrap"><div class="card empty-state">
+      <div class="empty-mascot">${Art.mascotTile("wave")}</div>
+      <p class="note center">${tr("Пока пусто — пройдите урок, и выученное появится здесь для повторения.")}</p>
+    </div></div>`;
     return;
   }
   const label = { new: tr("новое"), learning: tr("учится"), review: tr("в памяти") };
@@ -2222,7 +2319,7 @@ function optionList(values, current, label) {
 }
 
 async function renderStats() {
-  view.innerHTML = `<div class="empty">${tr("Загрузка…")}</div>`;
+  view.innerHTML = skeleton("stats");
   const [s, ach] = await Promise.all([
     api.get("/api/stats"), api.get("/api/achievements")]);
   const c = s.cards;
@@ -2453,7 +2550,7 @@ const Onboarding = {
     const opts = [[10, "Лёгкая"], [20, "Обычная"], [40, "Серьёзная"]];
     return `
       <h2 class="ob-title sm">${tr("Выберите дневную цель")}</h2>
-      <p class="ob-body">${tr("Цель в XP на день держит серию 🔥. Повторение +2 XP, урок +20 XP. Поменять можно в ⚙ в любой момент.")}</p>
+      <p class="ob-body">${tr("Дневная цель в XP — личный ориентир на день. Серию 🔥 держит любое занятие. Повторение +2 XP, урок +20 XP. Поменять можно в ⚙ в любой момент.")}</p>
       <div class="ob-goals">
         ${opts.map(([xp, label]) =>
           `<button class="ob-goal ${xp === this.goal ? "sel" : ""}" data-goal="${xp}">

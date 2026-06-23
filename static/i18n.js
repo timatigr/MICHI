@@ -94,8 +94,8 @@ const EN = {
   "Лёгкая — 10 XP": "Light — 10 XP",
   "Обычная — 20 XP": "Normal — 20 XP",
   "Серьёзная — 40 XP": "Serious — 40 XP",
-  "День засчитан в серию, когда набрана цель. XP: повторение +2, урок +20.":
-    "A day counts toward your streak once the goal is met. XP: review +2, lesson +20.",
+  "Серия 🔥 растёт за любой день с занятием. Цель — личный дневной ориентир. XP: повторение +2, урок +20.":
+    "Your 🔥 streak grows on any day you study. The goal is a personal daily target. XP: review +2, lesson +20.",
   "Звук и вибрация при нажатиях": "Sound & vibration on taps",
   "Звук нажатия": "Tap sound",
   "Выберите звук — он сразу проиграется. Звуки Kenney (CC0), не зависят от громкости озвучки слов.":
@@ -186,6 +186,13 @@ const EN = {
     "Stop the review? All answers are already saved.",
   "Выйти из урока? Потом продолжите с этого же места.":
     "Leave the lesson? You'll continue from this spot later.",
+  // --- Сетевые сбои в сессии (мягкая деградация) ---
+  "Нет сети — урок не засчитан. Зайдите снова, прогресс сохранён.":
+    "No connection — the lesson wasn't recorded. Come back and your progress is saved.",
+  "Нет сети — попробуйте позже. Ответы сохранены.":
+    "No connection — try again later. Your answers are saved.",
+  "Нет сети — ответ не сохранён, карточка вернётся позже.":
+    "No connection — answer not saved; the card will come back later.",
 
   // --- ИИ-статус (⚙) ---
   "включён": "enabled",
@@ -200,9 +207,12 @@ const EN = {
   // --- Разбор ошибок «Сэнсэй» (кнопка/панель) ---
   "🧠 Разобрать ошибку": "🧠 Analyze mistake",
   "Думаю…": "Thinking…",
-  "Не получилось разобрать. Попробуйте ещё раз.": "Couldn't analyze. Please try again.",
+  "Не получилось получить разбор. Попробуйте ещё раз.": "Couldn't get an analysis. Please try again.",
   "Правило": "Rule",
   "Пример": "Example",
+  // Категории ошибки «Сэнсэя» (AI.CAT); «Кандзи» уже переведён выше
+  "Частица": "Particle", "Спряжение": "Conjugation", "Лексика": "Vocabulary",
+  "Порядок слов": "Word order", "Орфография каны": "Kana orthography", "Разбор": "Analysis",
 
   // --- Статистика: длинные заметки и графики ---
   "«В долгой памяти» — карточки с интервалом от нескольких дней. Последняя цифра — доля верных ответов на повторениях за неделю (цель — {p}%).":
@@ -251,8 +261,8 @@ const EN = {
     "Kana, words, kanji and N5 grammar — in bite-sized lessons. Smart spaced repetition reminds you when it's time to refresh.",
   "Язык интерфейса": "Interface language",
   "Выберите дневную цель": "Choose a daily goal",
-  "Цель в XP на день держит серию 🔥. Повторение +2 XP, урок +20 XP. Поменять можно в ⚙ в любой момент.":
-    "A daily XP goal keeps your streak going 🔥. Review +2 XP, lesson +20 XP. Change it anytime in ⚙.",
+  "Дневная цель в XP — личный ориентир на день. Серию 🔥 держит любое занятие. Повторение +2 XP, урок +20 XP. Поменять можно в ⚙ в любой момент.":
+    "A daily XP goal is your personal target for the day. Any study keeps your 🔥 streak. Review +2 XP, lesson +20 XP. Change it anytime in ⚙.",
   "Лёгкая": "Light", "Обычная": "Normal", "Серьёзная": "Serious",
   "Послушать голос": "Hear the voice",
   "С чего начнём": "Where we'll start",

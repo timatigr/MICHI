@@ -108,6 +108,11 @@ html[data-theme="dark"] body::before {
   to   { opacity: 1; transform: none; }
 }
 .anim-in { animation: rise .28s cubic-bezier(.21, .8, .36, 1) both; }
+/* Горизонтальный въезд контента под направление смены вкладки (как в нативных) */
+@keyframes slide-from-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+@keyframes slide-from-left  { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: none; } }
+.anim-in-right { animation: slide-from-right .26s cubic-bezier(.21, .8, .36, 1) both; }
+.anim-in-left  { animation: slide-from-left  .26s cubic-bezier(.21, .8, .36, 1) both; }
 
 @keyframes pop {
   0% { transform: scale(1); }
@@ -1164,6 +1169,26 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .mt { margin-top: 14px; }
 /* Лоадер плавно проявляется: при быстрой загрузке вспышка почти не видна */
 .empty { text-align: center; color: var(--muted); padding: 48px 0; font-size: 0.875rem; animation: fadein .3s ease both; }
+
+/* Скелетоны загрузки: мерцающие плейсхолдеры под геометрию экрана (без CLS) */
+.skel { animation: fadein .2s ease both; }
+.skel-card, .skel-tile, .skel-tabs span {
+  background: linear-gradient(100deg,
+    var(--line) 30%, color-mix(in srgb, var(--card) 70%, #fff) 50%, var(--line) 70%);
+  background-size: 300% 100%;
+  border-radius: var(--radius);
+  animation: skel-shimmer 1.3s ease-in-out infinite;
+}
+.skel-card { margin-bottom: 14px; }
+.skel-tabs { display: flex; gap: 8px; margin: 2px 0 16px; }
+.skel-tabs span { height: 36px; flex: 0 0 86px; border-radius: 14px; }
+.skel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.skel-tile { height: 150px; }
+@keyframes skel-shimmer { 0% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
+
+/* Пустое состояние с маскотом (Словарь и т.п.) */
+.card.empty-state { text-align: center; padding: 30px 22px; }
+.card.empty-state .empty-mascot { margin-bottom: 6px; }
 
 @media (max-width: 480px) {
   .big-kana { font-size: 5.25rem; }
