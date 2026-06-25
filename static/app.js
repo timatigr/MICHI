@@ -2275,41 +2275,27 @@ async function renderReviewTab() {
       <p class="note" style="margin-top:0">${tr("Быстрый разбор того, в чём вы сегодня ошиблись. Это практика — на расписание SRS не влияет.")}</p>
       <button class="ghost mt" id="btn-mistakes">${tr("Разобрать ошибки дня · {n}", { n: o.mistakes_today })}</button>
     </div>` : ""}
-    <div class="card">
-      <h2>${tr("Тренировка слуха")}</h2>
-      <p class="note" style="margin-top:0">${tr("Минимальные пары: おばさん／おばあさん, きて／きって. Услышьте разницу в долготе и удвоении — это практика, на SRS не влияет.")}</p>
-      ${TTS.available
-        ? `<button class="ghost mt" id="btn-listen">🎧 ${tr("Различать на слух")}</button>`
-        : `<p class="note mt" style="color:var(--warning)">${tr("Нужен голос — включите озвучку в ⚙ (нейроголос или японский голос системы).")}</p>`}
-    </div>
-    <div class="card">
-      <h2>${tr("Кузница кандзи 鍛冶")}</h2>
-      <p class="note" style="margin-top:0">${tr("Соберите выученный иероглиф из частей-радикалов (木 + 木 = 林). Закрепляет разбор кандзи; это практика, на SRS не влияет.")}</p>
-      <button class="ghost mt" id="btn-forge">🔨 ${tr("Ковать кандзи")}</button>
-    </div>
-    <div class="card">
-      <h2>${tr("Сиритори しりとり")}</h2>
-      <p class="note" style="margin-top:0">${tr("Японская игра в цепочку слов: каждое начинается с последней каны предыдущего (りんご → ごりら). Тренирует чтение каны и активное вспоминание; на SRS не влияет.")}</p>
-      <button class="ghost mt" id="btn-shiritori">🔗 ${tr("Играть в цепочку")}</button>
-    </div>
-    <div class="card">
-      <h2>${tr("Счётные слова 助数詞")}</h2>
-      <p class="note" style="margin-top:0">${tr("В японском разные предметы считают разными словами: 3 кошки — 三匹, 3 книги — 三冊. Угадайте верный счётчик к предмету; это практика, на SRS не влияет.")}</p>
-      <button class="ghost mt" id="btn-counters">🔢 ${tr("Тренировать счётчики")}</button>
-    </div>
-    <div class="card">
-      <h2>${tr("Каллиграфия 書道")}</h2>
-      <p class="note" style="margin-top:0">${tr("Напишите выученный знак кистью — толщина линии следует за рукой. Это не проверка: можно сохранить свою работу картинкой.")}</p>
-      <button class="ghost mt" id="btn-calligraphy">✍️ ${tr("Писать кистью")}</button>
+    <div class="card practice-card">
+      <h2>${tr("Тренировки и игры")}</h2>
+      <p class="note" style="margin-top:0">${tr("Практика и мини-игры — на расписание SRS не влияют.")}</p>
+      <div class="practice-grid">
+        ${TTS.available ? `<button class="practice-tile" data-practice="listen"><span class="pt-ico">🎧</span><span class="pt-label">${tr("Слух")}</span><span class="pt-jp jp">耳</span></button>` : ""}
+        <button class="practice-tile" data-practice="shiritori"><span class="pt-ico">🔗</span><span class="pt-label">${tr("Сиритори")}</span><span class="pt-jp jp">しりとり</span></button>
+        <button class="practice-tile" data-practice="counters"><span class="pt-ico">🔢</span><span class="pt-label">${tr("Счётчики")}</span><span class="pt-jp jp">助数詞</span></button>
+        <button class="practice-tile" data-practice="forge"><span class="pt-ico">🔨</span><span class="pt-label">${tr("Кузница")}</span><span class="pt-jp jp">鍛冶</span></button>
+        <button class="practice-tile" data-practice="calligraphy"><span class="pt-ico">✍️</span><span class="pt-label">${tr("Каллиграфия")}</span><span class="pt-jp jp">書道</span></button>
+      </div>
+      ${!TTS.available ? `<p class="note mt" style="color:var(--warning)">${tr("Тренировка слуха требует голос — включите озвучку в ⚙.")}</p>` : ""}
     </div>
     </div>`;
+  const PRACTICE = { listen: startListening, shiritori: startShiritori,
+                     counters: startCounters, forge: startForge, calligraphy: startCalligraphy };
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
-  $("#btn-listen")?.addEventListener("click", startListening);
-  $("#btn-forge")?.addEventListener("click", startForge);
-  $("#btn-shiritori")?.addEventListener("click", startShiritori);
-  $("#btn-counters")?.addEventListener("click", startCounters);
-  $("#btn-calligraphy")?.addEventListener("click", startCalligraphy);
+  view.querySelector(".practice-grid")?.addEventListener("click", e => {
+    const b = e.target.closest(".practice-tile");
+    if (b) PRACTICE[b.dataset.practice]?.();
+  });
 }
 
 /* ---------- «Разбор ошибок дня»: практика по сегодняшним промахам ----------

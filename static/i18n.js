@@ -243,6 +243,13 @@ const EN = {
   "ворота": "gate", "Открыто": "Open", "Пройдено": "Done", "Закрыто": "Locked",
 
   // --- Повторение (вкладка) ---
+  "Тренировки и игры": "Practice & games",
+  "Практика и мини-игры — на расписание SRS не влияют.":
+    "Practice and mini-games — they don't affect the SRS schedule.",
+  "Слух": "Listening", "Сиритори": "Shiritori", "Счётчики": "Counters",
+  "Кузница": "Forge", "Каллиграфия": "Calligraphy",
+  "Тренировка слуха требует голос — включите озвучку в ⚙.":
+    "Listening practice needs a voice — turn on audio in ⚙.",
   "Очередь на сегодня": "Today's queue",
   "по расписанию": "scheduled",
   "новая": "new", "новые": "new", "новых": "new",
