@@ -96,3 +96,22 @@ def test_third_expansion_units_present():
 def test_vocab_size_grew():
     """После расширения курс достиг объёма MVP — не меньше 400 слов."""
     assert len(WORDS) >= 400, f"слов всего: {len(WORDS)}"
+
+
+# --- Сиритори しりとり: словесная цепочка ---
+
+def test_shiritori_chain_links_are_valid():
+    from app.exercises import _shiri_head, _shiri_tail, shiritori_rounds
+    rounds = shiritori_rounds(WORDS, limit=8)
+    assert rounds, "из всей лексики цепочка сиритори должна строиться"
+    for r in rounds:
+        ans = r["options"][r["answer"]]
+        assert _shiri_head(ans["kana"]) == r["need"]               # ответ продолжает цепочку
+        assert _shiri_tail(r["current"]["kana"]) == r["need"]      # need = хвост текущего
+        kanas = [o["kana"] for o in r["options"]]
+        assert len(set(kanas)) == len(kanas)                       # без дублей-вариантов
+
+
+def test_shiritori_empty_without_words():
+    from app.exercises import shiritori_rounds
+    assert shiritori_rounds([], limit=5) == []

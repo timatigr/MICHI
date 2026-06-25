@@ -1220,7 +1220,8 @@ function openPlayer(mode) {
   playerMode = mode;
   const labels = { review: "Повторение", practice: "Работа над ошибками",
                    freshen: "Упреждающее повторение", listen: "Тренировка слуха",
-                   calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶" };
+                   calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
+                   shiritori: "Сиритори しりとり" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1265,7 +1266,9 @@ async function askClosePlayer() {
           ? tr("Закрыть каллиграфию? Несохранённый рисунок пропадёт.")
           : playerMode === "forge"
             ? tr("Прервать ковку кандзи?")
-            : tr("Прервать повторение? Все ответы уже сохранены.");
+            : playerMode === "shiritori"
+              ? tr("Прервать сиритори?")
+              : tr("Прервать повторение? Все ответы уже сохранены.");
   if (await confirmDialog(msg)) closePlayer();
 }
 $("#player-close").addEventListener("click", askClosePlayer);
@@ -2283,6 +2286,11 @@ async function renderReviewTab() {
       <button class="ghost mt" id="btn-forge">🔨 ${tr("Ковать кандзи")}</button>
     </div>
     <div class="card">
+      <h2>${tr("Сиритори しりとり")}</h2>
+      <p class="note" style="margin-top:0">${tr("Японская игра в цепочку слов: каждое начинается с последней каны предыдущего (りんご → ごりら). Тренирует чтение каны и активное вспоминание; на SRS не влияет.")}</p>
+      <button class="ghost mt" id="btn-shiritori">🔗 ${tr("Играть в цепочку")}</button>
+    </div>
+    <div class="card">
       <h2>${tr("Каллиграфия 書道")}</h2>
       <p class="note" style="margin-top:0">${tr("Напишите выученный знак кистью — толщина линии следует за рукой. Это не проверка: можно сохранить свою работу картинкой.")}</p>
       <button class="ghost mt" id="btn-calligraphy">✍️ ${tr("Писать кистью")}</button>
@@ -2292,6 +2300,7 @@ async function renderReviewTab() {
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
   $("#btn-listen")?.addEventListener("click", startListening);
   $("#btn-forge")?.addEventListener("click", startForge);
+  $("#btn-shiritori")?.addEventListener("click", startShiritori);
   $("#btn-calligraphy")?.addEventListener("click", startCalligraphy);
 }
 
@@ -2519,6 +2528,90 @@ async function forgeRound(r) {
   playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
   if (await waitClick($("#next", playerBody)) === ABORT) return ABORT;
   return correct;
+}
+
+/* ---------- Сиритори しりとり (Sprint: словесная цепочка) ----------
+   Японская игра: каждое слово начинается с последней каны предыдущего. Реальная
+   цепочка из изученных слов приходит с сервера (/api/shiritori). Read-only. */
+async function startShiritori() {
+  const token = openPlayer("shiritori");
+  let data;
+  try { data = await api.get("/api/shiritori/rounds?limit=8"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const rounds = data.rounds;
+  if (!rounds.length) {
+    playerBody.classList.add("center-step");
+    playerBody.innerHTML = `<div class="result"><div class="mark">語</div>
+      <h2>${tr("Пока некого ставить в цепочку")}</h2>
+      <p>${tr("Выучите больше слов — и сможете играть в цепочку каны.")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button></div>`;
+    animateIn(playerBody);
+    if (await waitClick($("#finish", playerBody)) === ABORT) return;
+    closePlayer();
+    return;
+  }
+  const chain = [rounds[0].current.kana];           // растущая видимая цепочка
+  const ribbon = () => `<div class="shiri-chain">${chain.map((k, i) =>
+    `<span class="shiri-link${i === chain.length - 1 ? " last" : ""} jp">${escapeHtml(k)}</span>`
+  ).join('<i class="shiri-arrow">→</i>')}</div>`;
+  let done = 0, okCount = 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (token !== sessionToken) return;
+    const r = rounds[i];
+    setProgress(done / rounds.length);
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(rounds.length - i, 1) });
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      ${ribbon()}
+      <p class="question">${tr("Слово на 「{k}」 — продолжите цепочку", { k: r.need })}</p>
+      <button class="shiri-current jp" data-tts="${r.current.tts}">
+        <span class="sc-kana">${escapeHtml(r.current.kana)}</span>
+        <small>${escapeHtml(tr(r.current.ru))} 🔊</small></button>
+      <div class="options shiri-options">
+        ${r.options.map((o, j) => `<button data-i="${j}" class="shiri-opt">
+          <span class="kbd">${j + 1}</span><span class="so-kana jp">${escapeHtml(o.kana)}</span>
+          <small>${escapeHtml(tr(o.ru))}</small></button>`).join("")}
+      </div>
+      <div class="feedback" id="fb" aria-live="polite"></div>`;
+    animateIn(playerBody);
+    speak(r.current.tts);
+    const buttons = [...playerBody.querySelectorAll(".shiri-options button")];
+    const choice = await awaitChoice(buttons);
+    if (choice === ABORT) return;
+    const correct = choice === r.answer;
+    buttons.forEach(b => (b.disabled = true));
+    buttons[r.answer].classList.add("correct");
+    if (!correct) buttons[choice].classList.add("wrong");
+    const picked = r.options[r.answer];             // в цепочку идёт верное продолжение
+    chain.push(picked.kana);
+    const fb = $("#fb", playerBody);
+    fb.className = `feedback ${correct ? "ok" : "bad"}`;
+    Haptics[correct ? "good" : "bad"]();
+    answerFx(correct, playerBody.querySelector(".shiri-current"));
+    fb.innerHTML = verdict(correct, correct ? tr("Верно")
+      : tr("Цепочку продолжает: {x}", { x: `<span class="jp">${escapeHtml(picked.kana)}</span>` }));
+    speak(picked.tts);
+    done++;
+    if (correct) okCount++;
+    Combo.update(correct);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
+    if (await waitClick($("#next", playerBody)) === ABORT) return;
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `<div class="result">
+      <div class="result-mascot">${Art.mascotTile("cheer")}</div>
+      <h2>${tr("Цепочка собрана!")}</h2>
+      <p>${tr("Слов в цепочке: {n} · точность {p}%", { n: chain.length, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
+      ${ribbon()}
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (done >= 5) confetti();
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
 }
 
 /* ---------- Каллиграфия 書道 (Sprint: Каллиграфия-арт) ----------

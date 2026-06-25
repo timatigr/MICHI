@@ -27,7 +27,7 @@ from .content.registry import (
 )
 from .exercises import (
     _mnemonics_for, item_info, kanji_forge_rounds, make_lesson_steps,
-    minimal_pair_rounds, review_exercise,
+    minimal_pair_rounds, review_exercise, shiritori_rounds,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -578,6 +578,23 @@ def forge_rounds(request: Request, limit: int = 8):
     finally:
         conn.close()
     return {"rounds": kanji_forge_rounds({r["item_id"] for r in rows}, limit)}
+
+
+# ---------- Сиритори しりとり: словесная цепочка (японская игра) ----------
+
+@app.get("/api/shiritori/rounds")
+def shiritori(request: Request, limit: int = 8):
+    """Цепочка сиритори из изученных слов (i+1). Практика, в SRS не пишется."""
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT item_id FROM srs_cards "
+            "WHERE item_type LIKE 'vocab%' AND reps > 0"
+        ).fetchall()
+    finally:
+        conn.close()
+    words = [VOCAB_BY_ID[r["item_id"]] for r in rows if r["item_id"] in VOCAB_BY_ID]
+    return {"rounds": shiritori_rounds(words, limit)}
 
 
 # ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ----------

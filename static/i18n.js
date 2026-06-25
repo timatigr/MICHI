@@ -92,6 +92,20 @@ const EN = {
   "Сегодня ошибок нет — отлично!": "No mistakes today — great!",
   "Прервать разбор ошибок?": "Stop the mistake review?",
 
+  // --- Сиритори しりとり ---
+  "Сиритори しりとり": "Shiritori しりとり",
+  "Японская игра в цепочку слов: каждое начинается с последней каны предыдущего (りんご → ごりら). Тренирует чтение каны и активное вспоминание; на SRS не влияет.":
+    "The Japanese word-chain game: each word starts with the last kana of the previous one (りんご → ごりら). Trains kana reading and active recall; doesn't affect SRS.",
+  "Играть в цепочку": "Play the word chain",
+  "Слово на 「{k}」 — продолжите цепочку": "A word starting with 「{k}」 — continue the chain",
+  "Цепочку продолжает: {x}": "The chain continues with: {x}",
+  "Цепочка собрана!": "Chain complete!",
+  "Слов в цепочке: {n} · точность {p}%": "Words in the chain: {n} · accuracy {p}%",
+  "Пока некого ставить в цепочку": "Nothing to chain yet",
+  "Выучите больше слов — и сможете играть в цепочку каны.":
+    "Learn more words and you'll be able to play the kana chain.",
+  "Прервать сиритори?": "Stop shiritori?",
+
   // --- Кузница кандзи 鍛冶 ---
   "Кузница кандзи 鍛冶": "Kanji forge 鍛冶",
   "Соберите выученный иероглиф из частей-радикалов (木 + 木 = 林). Закрепляет разбор кандзи; это практика, на SRS не влияет.":

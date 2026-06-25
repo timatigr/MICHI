@@ -549,6 +549,93 @@ def minimal_pair_rounds(n=8):
     return rounds
 
 
+# ---------- Сиритори しりとり: словесная цепочка (USP, японская игра) ----------
+# Каждое слово начинается с последней каны предыдущего (りんご→ごりら→…). Строим
+# реальную цепочку из ИЗУЧЕННЫХ слов (i+1), чистая практика — в SRS не пишет.
+# Берём только слова, целиком записанные хираганой: так совпадение «хвост→голова»
+# считается посимвольно без путаницы катакана/хирагана и долготы ー.
+_SHIRI_SMALL = set("ゃゅょぁぃぅぇぉゎっ")
+
+
+def _is_hiragana_word(kana):
+    return bool(kana) and all("ぁ" <= c <= "ゖ" for c in kana)
+
+
+def _shiri_tail(kana):
+    """Кана, на которую слово «заканчивается» для сиритори (или '' — не годится)."""
+    s = (kana or "").rstrip("ー")
+    if not s:
+        return ""
+    c = s[-1]
+    return "" if c in _SHIRI_SMALL else c
+
+
+def _shiri_head(kana):
+    return kana[0] if kana else ""
+
+
+def _shiri_build_chain(start, by_head, limit):
+    chain, used = [start], {start["kana"]}
+    cur = start
+    while len(chain) <= limit:
+        need = _shiri_tail(cur["kana"])
+        cands = [w for w in by_head.get(need, [])
+                 if w["kana"] not in used and _shiri_tail(w["kana"]) and not w["kana"].endswith("ん")]
+        if not cands:
+            break
+        nxt = random.choice(cands)
+        chain.append(nxt)
+        used.add(nxt["kana"])
+        cur = nxt
+    return chain
+
+
+def shiritori_rounds(words, limit=8):
+    """Раунды сиритори: реальная цепочка из изученных слов. Каждый раунд — шаг
+    цепочки: дано текущее слово, выбрать продолжение (на его последнюю кану) из
+    вариантов. Возвращает столько шагов, сколько удалось связать (как мин. пары)."""
+    pool = [w for w in words if _is_hiragana_word(w["kana"])]
+    by_head = {}
+    for w in pool:
+        by_head.setdefault(_shiri_head(w["kana"]), []).append(w)
+    starts = [w for w in pool if _shiri_tail(w["kana"]) and not w["kana"].endswith("ん")]
+    random.shuffle(starts)
+    chain = []
+    for s in starts:                       # ищем стартовое слово с продолжением
+        c = _shiri_build_chain(s, by_head, limit)
+        if len(c) > len(chain):
+            chain = c
+        if len(chain) > limit:
+            break
+    if len(chain) < 2:
+        return []
+    rounds = []
+    for i in range(len(chain) - 1):
+        cur, nxt = chain[i], chain[i + 1]
+        need = _shiri_tail(cur["kana"])
+        distract = [w for w in pool if _shiri_head(w["kana"]) != need
+                    and w["kana"] not in (cur["kana"], nxt["kana"])]
+        random.shuffle(distract)
+        opts, seen = [nxt], {nxt["kana"]}
+        for d in distract:
+            if d["kana"] not in seen:
+                opts.append(d)
+                seen.add(d["kana"])
+            if len(opts) == 4:
+                break
+        if len(opts) < 2:
+            continue
+        random.shuffle(opts)
+        rounds.append({
+            "current": {"kana": cur["kana"], "romaji": cur["romaji"],
+                        "ru": cur["ru"], "tts": cur["kana"]},
+            "need": need,
+            "options": [{"kana": w["kana"], "ru": w["ru"], "tts": w["kana"]} for w in opts],
+            "answer": opts.index(nxt),
+        })
+    return rounds[:limit]
+
+
 def _decomposable_kanji():
     """Кандзи, у которых есть разбор на ≥2 компонента (6.3) — пул для «Кузницы»."""
     return [k for k in KANJI if len(k.get("components") or []) >= 2]
