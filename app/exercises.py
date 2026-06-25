@@ -533,7 +533,8 @@ def minimal_pair_rounds(n=8):
     слово пары, надо выбрать услышанное из двух почти одинаковых. Позиция вариантов
     перемешана, чтобы не была подсказкой; played-слово выбирается случайно."""
     rounds = []
-    for p in random.sample(MINIMAL_PAIRS, min(n, len(MINIMAL_PAIRS))):
+    n = max(0, min(n, len(MINIMAL_PAIRS)))     # отрицательный limit не должен ронять sample
+    for p in random.sample(MINIMAL_PAIRS, n):
         opts = [p["a"], p["b"]]
         random.shuffle(opts)
         target = p[random.choice(["a", "b"])]

@@ -30,6 +30,10 @@ def test_rounds_respects_limit():
     assert len(minimal_pair_rounds(999)) == len(PAIRS)   # не больше, чем есть пар
 
 
+def test_rounds_negative_limit_is_safe():
+    assert minimal_pair_rounds(-1) == []                 # не роняет random.sample
+
+
 def test_endpoint_shape(client):
     body = client.get("/api/listen/pairs?limit=5").json()
     assert "rounds" in body and 1 <= len(body["rounds"]) <= 5
