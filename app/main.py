@@ -26,7 +26,8 @@ from .content.registry import (
     srs_items_for_lesson,
 )
 from .exercises import (
-    _mnemonics_for, item_info, make_lesson_steps, minimal_pair_rounds, review_exercise,
+    _mnemonics_for, item_info, kanji_forge_rounds, make_lesson_steps,
+    minimal_pair_rounds, review_exercise,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -562,6 +563,23 @@ def listen_pairs(limit: int = 8):
     return {"rounds": minimal_pair_rounds(limit)}
 
 
+# ---------- Кузница кандзи: сборка из компонентов (6.3, граф знаний) ----------
+
+@app.get("/api/forge/rounds")
+def forge_rounds(request: Request, limit: int = 8):
+    """Раунды «Кузницы кандзи»: собрать изученный иероглиф из компонентов.
+    Только выученные разложимые кандзи (i+1); практика, в SRS не пишется."""
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT item_id FROM srs_cards "
+            "WHERE item_type LIKE 'kanji%' AND reps > 0"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {"rounds": kanji_forge_rounds({r["item_id"] for r in rows}, limit)}
+
+
 # ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ----------
 
 class ExplainRequest(BaseModel):
@@ -843,7 +861,8 @@ def learned(request: Request):
     try:
         settings = db.get_settings(conn)
         rows = conn.execute(
-            "SELECT item_type, item_id, state, reps, is_leech, fsrs FROM srs_cards ORDER BY id"
+            "SELECT item_type, item_id, state, reps, is_leech, fsrs, "
+            "stability, last_review FROM srs_cards ORDER BY id"
         ).fetchall()
     finally:
         conn.close()

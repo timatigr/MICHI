@@ -3,8 +3,11 @@
 from app.content.registry import (
     COURSES, KANJI, KANJI_BY_CHAR, LESSON_BY_ID, RADICALS, srs_items_for_lesson,
 )
+from collections import Counter
+
 from app.exercises import (
-    item_info, kanji_meaning, kanji_reading, make_lesson_steps, review_exercise,
+    item_info, kanji_forge_rounds, kanji_meaning, kanji_reading, make_lesson_steps,
+    review_exercise,
 )
 
 
@@ -116,3 +119,41 @@ def test_kanji_reading_options_are_unique_and_correct():
         assert len(set(ex["options"])) == len(ex["options"]), \
             f"{k['char']}: повтор в вариантах {ex['options']}"
         assert ex["options"][ex["answer"]] == k["reading"]
+
+
+# --- Кузница кандзи: сборка из компонентов ---
+
+def _decomposable_chars():
+    return {k["char"] for k in KANJI if len(k.get("components") or []) >= 2}
+
+
+def test_forge_empty_without_learned_kanji():
+    assert kanji_forge_rounds(set(), limit=5) == []
+
+
+def test_forge_rounds_only_learned_decomposable():
+    decomp = _decomposable_chars()
+    assert decomp, "в курсе нет разложимых кандзи — «Кузница» осталась бы пустой"
+    rounds = kanji_forge_rounds(decomp, limit=99)
+    assert rounds and len(rounds) <= len(decomp)
+    for r in rounds:
+        assert r["char"] in decomp
+        assert len(r["components"]) >= 2
+
+
+def test_forge_tiles_cover_components_as_multiset():
+    """Плитки содержат все компоненты цели с учётом повторов (林 = 木 + 木)."""
+    rounds = kanji_forge_rounds(_decomposable_chars(), limit=99)
+    for r in rounds:
+        tiles = Counter(t["char"] for t in r["tiles"])
+        need = Counter(c["char"] for c in r["components"])
+        for ch, cnt in need.items():
+            assert tiles[ch] >= cnt, f"{r['char']}: плиток {ch} меньше, чем нужно"
+
+
+def test_forge_respects_i_plus_one():
+    """Не выученный кандзи не попадает в «Кузницу», даже если разложим."""
+    decomp = sorted(_decomposable_chars())
+    learned = set(decomp[:1])                       # выучен только один
+    rounds = kanji_forge_rounds(learned, limit=99)
+    assert {r["char"] for r in rounds} <= learned

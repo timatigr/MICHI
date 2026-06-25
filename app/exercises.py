@@ -549,6 +549,43 @@ def minimal_pair_rounds(n=8):
     return rounds
 
 
+def _decomposable_kanji():
+    """Кандзи, у которых есть разбор на ≥2 компонента (6.3) — пул для «Кузницы»."""
+    return [k for k in KANJI if len(k.get("components") or []) >= 2]
+
+
+def kanji_forge_rounds(learned_chars, limit=8):
+    """Раунды «Кузницы кандзи 鍛冶»: собрать иероглиф из компонентов-радикалов
+    (обратная сторона разбора 6.3, USP «граф знаний»). Только изученные разложимые
+    кандзи (i+1). Чистая практика — в SRS ничего не пишется. Учитывает повторы
+    компонентов (林 = 木 + 木): цель — мультимножество, в плитках столько же копий."""
+    pool = [k for k in _decomposable_kanji() if k["char"] in learned_chars]
+    if not pool:
+        return []
+    # карта «компонент → значение-образ» по всем разложимым кандзи (для дистракторов)
+    comp_meaning = {}
+    for k in _decomposable_kanji():
+        for c in k["components"]:
+            if c.get("char"):
+                comp_meaning.setdefault(c["char"], c.get("meaning", ""))
+    n = max(0, min(limit, len(pool)))
+    rounds = []
+    for k in random.sample(pool, n):
+        comps = [{"char": c["char"], "meaning": c.get("meaning", "")}
+                 for c in k["components"] if c.get("char")]
+        target = {c["char"] for c in comps}
+        extra = [ch for ch in comp_meaning if ch not in target]
+        random.shuffle(extra)
+        tiles = comps + [{"char": ch, "meaning": comp_meaning[ch]} for ch in extra[:3]]
+        random.shuffle(tiles)
+        rounds.append({
+            "char": k["char"], "meaning": k["meaning"],
+            "reading": k.get("reading", ""), "tts": k.get("reading") or k["char"],
+            "components": comps, "tiles": tiles,
+        })
+    return rounds
+
+
 def item_info(item_type, item_id):
     """Карточка-справка для фидбека в SRS-сессии и статистики."""
     if item_type == "kana":
