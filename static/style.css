@@ -1303,6 +1303,27 @@ button.ghost:active { transform: scale(0.94); }
 .ai-pill.on { color: #fff; background: var(--success); }
 .ai-pill.off { color: var(--muted); background: var(--line); }
 
+/* --- Карта памяти (тепловая решётка «силы памяти» FSRS-R) --- */
+.mem-map .mm-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(15px, 1fr));
+  gap: 4px; margin-top: 12px;
+}
+.mm-cell {
+  aspect-ratio: 1; padding: 0; border: none; border-radius: 4px; cursor: pointer;
+  /* hue: слабые (≈35) → красный, крепкие (100) → зелёный; непрерывная шкала */
+  background: hsl(calc((var(--s) - 35) * 2.1deg) 62% 52%);
+  transition: transform .12s;
+}
+html[data-theme="dark"] .mm-cell { background: hsl(calc((var(--s) - 35) * 2.1deg) 52% 46%); }
+.mm-cell:hover { transform: scale(1.3); box-shadow: var(--shadow-sm); }
+.mm-cell:active { transform: scale(0.9); }
+.mm-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+.mm-leg { font-size: 0.75rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.mm-leg::before { content: ""; width: 11px; height: 11px; border-radius: 3px; }
+.mm-leg.strong::before { background: hsl(136deg 62% 52%); }
+.mm-leg.fading::before { background: hsl(53deg 62% 52%); }
+.mm-leg.risk::before   { background: hsl(6deg 62% 52%); }
+
 /* --- Словарь: справочник изученного --- */
 .dict-grid {
   display: grid; gap: 8px;

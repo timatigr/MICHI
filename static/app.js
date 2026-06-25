@@ -1285,8 +1285,8 @@ document.addEventListener("click", e => {
 /* Тач: у столбиков графиков нет hover-подсказки — показываем значение по тапу
    (на устройствах без курсора), на десктопе остаётся нативный title. */
 document.addEventListener("click", e => {
-  const bar = e.target.closest(".bars .bar");
-  if (bar && bar.title && matchMedia("(hover: none)").matches) toast(bar.title);
+  const el = e.target.closest(".bars .bar, .mm-cell");
+  if (el && el.title && matchMedia("(hover: none)").matches) toast(el.title);
 });
 
 function waitClick(el) {
@@ -2334,6 +2334,36 @@ function mnemoGalleryHtml(courses) {
   </div>`;
 }
 
+/* Карта памяти: каждый выученный знак — клетка, цвет = «сила памяти» (FSRS-R,
+   поле strength из /api/learned). Даёт здоровье знаний одним взглядом; тусклые
+   клетки — кандидаты на «Освежить заранее» на «Сегодня». Тап — послушать. */
+function memoryMapHtml(courses) {
+  const items = [];
+  for (const c of courses) for (const it of c.items)
+    if (it.strength != null) items.push(it);
+  if (items.length < 6) return "";          // мало данных — карта неинформативна
+  items.sort((a, b) => a.strength - b.strength);   // слабые вперёд — взгляд цепляется за риск
+  const strong = items.filter(i => i.strength >= 85).length;
+  const fading = items.filter(i => i.strength >= 60 && i.strength < 85).length;
+  const risk = items.filter(i => i.strength < 60).length;
+  const cells = items.map(it => {
+    const mem = tr("Память {p}%", { p: it.strength });
+    return `<button class="mm-cell" style="--s:${it.strength}"${
+      it.tts ? ` data-tts="${escapeHtml(it.tts)}"` : ""}
+      title="${escapeHtml(it.title)} · ${mem}" aria-label="${escapeHtml(it.title)} ${mem}"></button>`;
+  }).join("");
+  return `<div class="card mem-map">
+    <h2>${tr("Карта памяти")} · ${items.length}</h2>
+    <p class="note" style="margin-top:0">${tr("Каждая клетка — выученный знак, цвет = насколько он свеж в памяти. Тусклые освежите на «Сегодня».")}</p>
+    <div class="mm-grid">${cells}</div>
+    <div class="mm-legend">
+      <span class="mm-leg strong">${tr("крепко")} · ${strong}</span>
+      <span class="mm-leg fading">${tr("тускнеет")} · ${fading}</span>
+      <span class="mm-leg risk">${tr("рискует")} · ${risk}</span>
+    </div>
+  </div>`;
+}
+
 async function renderDict() {
   view.innerHTML = skeleton("dict");
   const data = await api.get("/api/learned");
@@ -2345,8 +2375,9 @@ async function renderDict() {
     return;
   }
   const label = { new: tr("новое"), learning: tr("учится"), review: tr("в памяти") };
+  const memMap = memoryMapHtml(data.courses);
   const gallery = LANG === "ru" ? mnemoGalleryHtml(data.courses) : "";
-  view.innerHTML = `<div class="dict-wrap">` + gallery + data.courses.map(c => `
+  view.innerHTML = `<div class="dict-wrap">` + memMap + gallery + data.courses.map(c => `
     <div class="card">
       <h2>${tr(COURSE_LABEL[c.id] || c.title)} · ${c.count}</h2>
       <div class="dict-grid">

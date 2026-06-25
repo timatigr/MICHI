@@ -68,6 +68,11 @@ const EN = {
   "Смотрите, как пишется эта черта": "Watch how this stroke is written",
   "Не похоже — попробуйте ещё раз": "Doesn't match — try again",
   "Память {p}%": "Memory {p}%",
+  // --- Карта памяти (Словарь) ---
+  "Карта памяти": "Memory map",
+  "Каждая клетка — выученный знак, цвет = насколько он свеж в памяти. Тусклые освежите на «Сегодня».":
+    "Each cell is a learned character; color shows how fresh it is in memory. Freshen the dim ones on «Today».",
+  "крепко": "strong", "тускнеет": "fading", "рискует": "at risk",
   // --- Разбор ошибок дня ---
   "Работа над ошибками": "Mistake review",
   "Быстрый разбор того, в чём вы сегодня ошиблись. Это практика — на расписание SRS не влияет.":
