@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from . import ai_tutor, db, gamification, identity, ratelimit, srs_engine, tts
+from .content.seasons import current_sekki
 from .content.registry import (
     COURSES, GATE_PASS, GRAMMAR_BY_ID, GRAMMAR_UNITS, KANA_BY_CHAR, KANJI_BY_CHAR,
     KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_BY_ID, VOCAB_UNITS,
@@ -296,6 +297,7 @@ def overview(request: Request):
             "courses": courses,
             "mistakes_today": mistakes_today,
             "upcoming": srs_engine.upcoming_count(conn),
+            "season": current_sekki(srs_engine.local_today(tz)),
         }
     finally:
         conn.close()

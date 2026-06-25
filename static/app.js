@@ -1004,6 +1004,15 @@ async function renderToday() {
       </div>
     </div>
 
+    ${o.season ? `<div class="card season-card" data-tts="${o.season.reading}" title="${tr("Послушать")}">
+      <span class="se-emoji" aria-hidden="true">${o.season.emoji}</span>
+      <div class="se-text">
+        <div class="se-head"><span class="se-kanji jp">${o.season.kanji}</span><span class="se-reading jp">${o.season.reading}</span></div>
+        <div class="se-ru">${tr(o.season.ru)}</div>
+      </div>
+      <span class="se-tag jp">季節</span>
+    </div>` : ""}
+
     <div class="card">
       <h2>${tr("План на сегодня")}</h2>
       <div class="plan-item ${queueTotal ? "" : "done"}">

@@ -237,6 +237,20 @@ const EN = {
   "Хирагана пройдена — ромадзи скрыт, чтобы вы читали каной.\n       Вернуть можно в ⚙ настройках.":
     "Hiragana complete — romaji is hidden so you read kana.\n       You can bring it back in ⚙ settings.",
 
+  // --- Письма сезонов 二十四節気 ---
+  "малые холода": "minor cold", "большие холода": "major cold",
+  "начало весны": "start of spring", "талые воды": "rainwater / thaw",
+  "пробуждение насекомых": "insects awaken", "весеннее равноденствие": "spring equinox",
+  "ясность и свет": "pure brightness", "дожди для злаков": "grain rains",
+  "начало лета": "start of summer", "всё наливается силой": "lesser fullness",
+  "сев колосовых": "grain in ear", "летнее солнцестояние": "summer solstice",
+  "малая жара": "minor heat", "большая жара": "major heat",
+  "начало осени": "start of autumn", "спад жары": "heat recedes",
+  "белые росы": "white dew", "осеннее равноденствие": "autumn equinox",
+  "холодные росы": "cold dew", "первые заморозки": "first frost",
+  "начало зимы": "start of winter", "малые снега": "minor snow",
+  "большие снега": "major snow", "зимнее солнцестояние": "winter solstice",
+
   // --- Путь (уроки) ---
   "Все": "All", "Хирагана": "Hiragana", "Катакана": "Katakana",
   "Первые слова": "First words", "Кандзи": "Kanji", "Грамматика": "Grammar",

@@ -1065,6 +1065,20 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .practice-tile .pt-label { font-size: 0.8125rem; font-weight: 600; text-align: center; line-height: 1.2; }
 .practice-tile .pt-jp { font-family: var(--jp-font); font-size: 0.65625rem; color: var(--muted); }
 
+/* Письмо сезона 二十四節気 — слим-карточка на «Сегодня» */
+.season-card { display: flex; align-items: center; gap: 14px; padding: 15px 22px; cursor: pointer; }
+.season-card:active { transform: scale(.99); }
+.se-emoji { font-size: 1.75rem; flex-shrink: 0; line-height: 1; }
+.se-text { flex: 1; min-width: 0; }
+.se-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.se-kanji { font-size: 1.1875rem; font-weight: 700; color: var(--title); }
+.se-reading { font-size: 0.75rem; color: var(--muted); }
+.se-ru { font-size: 0.8125rem; color: var(--text); margin-top: 1px; }
+.se-tag {
+  flex-shrink: 0; font-size: 0.6875rem; color: var(--pink); background: var(--pink-soft);
+  border-radius: 10px; padding: 3px 10px; font-weight: 500;
+}
+
 /* Фидбек */
 .feedback { text-align: center; margin: 18px 0 0; font-size: 1rem; font-weight: 700; }
 .feedback.ok, .feedback.bad { animation: rise .22s ease both; }
