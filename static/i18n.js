@@ -193,6 +193,17 @@ const EN = {
     "No connection — try again later. Your answers are saved.",
   "Нет сети — ответ не сохранён, карточка вернётся позже.":
     "No connection — answer not saved; the card will come back later.",
+  "следующий показ": "next in",
+  // --- Упреждающее повторение «Освежить заранее» ---
+  "Освежить заранее": "Freshen up early",
+  "Освежить": "Freshen up",
+  "{n} скоро потускнеют — повторите, пока легко":
+    "{n} will fade soon — review while it's still easy",
+  "Освежили вовремя!": "Freshened in time!",
+  "Пока нечего освежать": "Nothing to freshen yet",
+  "Повторено: {n} · точность {p}%": "Reviewed: {n} · accuracy {p}%",
+  "Загляните позже — подскажем, когда что-то начнёт тускнеть.":
+    "Check back later — we'll nudge you when something starts to fade.",
 
   // --- ИИ-статус (⚙) ---
   "включён": "enabled",

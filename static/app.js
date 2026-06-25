@@ -1026,6 +1026,15 @@ async function renderToday() {
           ? `<button class="mini-btn indigo" id="btn-lesson">${tr("Учить")}</button>`
           : `<span class="pi-done">✓</span>`}
       </div>
+      ${(o.upcoming || 0) ? `
+      <div class="plan-item">
+        <div class="pi-ico jp c1">予</div>
+        <div class="pi-info">
+          <div class="t">${tr("Освежить заранее")}</div>
+          <div class="s">${tr("{n} скоро потускнеют — повторите, пока легко", { n: o.upcoming })}</div>
+        </div>
+        <button class="mini-btn indigo" id="btn-freshen">${tr("Освежить")}</button>
+      </div>` : ""}
     </div>
 
     <div class="card">
@@ -1048,6 +1057,7 @@ async function renderToday() {
   }
   $("#btn-review")?.addEventListener("click", startReview);
   $("#btn-lesson")?.addEventListener("click", () => startLesson(next.id));
+  $("#btn-freshen")?.addEventListener("click", startFreshen);
 }
 
 /* ---------- Путь: регионы и сетка уроков ---------- */
@@ -1206,7 +1216,8 @@ function fireAbort() {
 function openPlayer(mode) {
   sessionToken++;
   playerMode = mode;
-  const labels = { review: "Повторение", practice: "Работа над ошибками" };
+  const labels = { review: "Повторение", practice: "Работа над ошибками",
+                   freshen: "Упреждающее повторение" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -2166,6 +2177,60 @@ async function startReview() {
   if (await waitClick($("#finish", playerBody)) === ABORT) return;
   closePlayer();
   await checkAchievements(true);   // повторения могли открыть веху памяти/серии
+}
+
+/* ---------- Упреждающее повторение: освежить то, что скоро потускнеет ----------
+   Ранний повтор карточек, входящих в «зону забывания» (/api/srs/upcoming).
+   В отличие от «разбора ошибок» ответы идут в обычный /api/srs/answer — это
+   настоящий повтор: FSRS учтёт ранний показ, и карточка не успеет сорваться. */
+async function startFreshen() {
+  const token = openPlayer("freshen");
+  let data;
+  try { data = await api.get("/api/srs/upcoming?limit=20"); }
+  catch { toast(tr("Нет сети — попробуйте позже. Ответы сохранены."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const items = data.items;
+  let done = 0, okCount = 0;
+  for (let i = 0; i < items.length; i++) {
+    if (token !== sessionToken) return;
+    const item = items[i];
+    setProgress(done / Math.max(items.length, 1));
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(items.length - i, 1) });
+    const res = await runExercise(item.exercise, async (correct, durationMs, usedHint) => {
+      let verdict;
+      try {
+        verdict = await api.post("/api/srs/answer", {
+          card_id: item.card_id, correct, duration_ms: durationMs,
+          exercise_type: item.exercise.type, used_hint: usedHint,
+        });
+      } catch {
+        return tr("Нет сети — ответ не сохранён, карточка вернётся позже.");
+      }
+      let extra = `${tr(verdict.rating_label)} · ${tr("следующий показ")} ${humanizeInterval((new Date(verdict.next_due) - Date.now()) / 1000)}`;
+      if (!correct && item.info.hint) extra += `<br>${item.info.hint}`;
+      return extra;
+    });
+    if (token !== sessionToken) return;
+    done++;
+    if (res.correct) okCount++;
+    Combo.update(res.correct);
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `
+    <div class="result">
+      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">予</div>`}
+      <h2>${done ? tr("Освежили вовремя!") : tr("Пока нечего освежать")}</h2>
+      <p>${done ? tr("Повторено: {n} · точность {p}%", { n: done, p: Math.round(okCount / done * 100) })
+                : tr("Загляните позже — подскажем, когда что-то начнёт тускнеть.")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (done >= 10) confetti();
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+  await checkAchievements(true);   // ранние повторения тоже двигают вехи памяти/серии
 }
 
 /* ---------- Вкладка «Повторение» ---------- */

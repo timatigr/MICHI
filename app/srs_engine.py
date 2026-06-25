@@ -267,6 +267,37 @@ def counts(conn, settings, tz_offset_min=None):
     }
 
 
+# Упреждающее повторение (USP «сила памяти»): карточки, которые скоро войдут в
+# «зону забывания» — станут due в ближайшие UPCOMING_WINDOW, но ещё НЕ просрочены
+# (то есть в обычную очередь пока не попадают). Освежить их сейчас дешевле, чем
+# потом переучивать сорвавшуюся «пиявку»; ответы идут через обычный answer_card —
+# это настоящий ранний повтор, FSRS сам учтёт ранний показ (меньший прирост S).
+UPCOMING_WINDOW = timedelta(days=2)
+
+
+def _upcoming_rows(conn, full=False):
+    now = _now()
+    after = (now + LEARNING_LOOKAHEAD).isoformat()   # строго позже обычной очереди
+    until = (now + UPCOMING_WINDOW).isoformat()
+    cols = "*" if full else "item_type, item_id"
+    rows = conn.execute(
+        f"SELECT {cols} FROM srs_cards WHERE reps > 0 AND due_at > ? AND due_at <= ? "
+        "ORDER BY due_at LIMIT 500",
+        (after, until),
+    ).fetchall()
+    return [r for r in rows if item_exists(r["item_type"], r["item_id"])]
+
+
+def upcoming(conn, limit=20):
+    """Карточки для упреждающего повторения (см. UPCOMING_WINDOW), ближайшие к due."""
+    return _upcoming_rows(conn, full=True)[:limit]
+
+
+def upcoming_count(conn):
+    """Сколько карточек скоро войдёт в зону забывания (для подсказки на «Сегодня»)."""
+    return len(_upcoming_rows(conn))
+
+
 def forecast(conn, days=14, tz_offset_min=None):
     """Сколько карточек станет due в каждый из ближайших дней."""
     rows = conn.execute(

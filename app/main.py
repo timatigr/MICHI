@@ -292,6 +292,7 @@ def overview(request: Request):
             ),
             "courses": courses,
             "mistakes_today": mistakes_today,
+            "upcoming": srs_engine.upcoming_count(conn),
         }
     finally:
         conn.close()
@@ -488,6 +489,34 @@ def srs_answer(answer: Answer, request: Request):
             conn, settings, row, answer.correct, answer.duration_ms,
             answer.exercise_type, answer.used_hint, tz,
         )
+    finally:
+        conn.close()
+
+
+# ---------- Упреждающее повторение «Скоро потускнеет» ----------
+
+@app.get("/api/srs/upcoming")
+def srs_upcoming(request: Request, limit: int = 20):
+    """Карточки, которые скоро войдут в зону забывания (см. srs_engine.UPCOMING_WINDOW)
+    — для раннего освежения. В отличие от «разбора ошибок» это НАСТОЯЩИЙ повтор:
+    фронт шлёт ответы в обычный /api/srs/answer, FSRS сам учитывает ранний показ,
+    и карточка не успевает сорваться в пиявку."""
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        rows = srs_engine.upcoming(conn, limit=limit)
+        items = []
+        for r in rows:
+            ex = review_exercise(r["item_type"], r["item_id"], reps=r["reps"])
+            if ex is None:                      # осиротевшая карточка — пропускаем
+                continue
+            items.append({
+                "card_id": r["id"],
+                "is_new": False,
+                "is_leech": bool(r["is_leech"]),
+                "exercise": ex,
+                "info": item_info(r["item_type"], r["item_id"]),
+            })
+        return {"items": items}
     finally:
         conn.close()
 
