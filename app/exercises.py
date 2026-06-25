@@ -11,6 +11,7 @@ import random
 from pathlib import Path
 
 from .content.grammar import PARTICLE_POOL
+from .content.minimal_pairs import PAIRS as MINIMAL_PAIRS
 from .content.verbs import (
     FORM_LABEL as VERB_FORM_LABEL, VERBS, conjugate as conjugate_verb,
     distractors as verb_distractors,
@@ -525,6 +526,26 @@ def verb_conjugation(verb, form):
                               "vars": {"v": verb["ru"], "f": VERB_FORM_LABEL[form]}},
             "options": options, "answer": idx,
             "options_are_kana": True, "answer_tts": answer}
+
+
+def minimal_pair_rounds(n=8):
+    """Раунды дрилла «минимальные пары на слух» (5.5): в каждом проигрывается одно
+    слово пары, надо выбрать услышанное из двух почти одинаковых. Позиция вариантов
+    перемешана, чтобы не была подсказкой; played-слово выбирается случайно."""
+    rounds = []
+    for p in random.sample(MINIMAL_PAIRS, min(n, len(MINIMAL_PAIRS))):
+        opts = [p["a"], p["b"]]
+        random.shuffle(opts)
+        target = p[random.choice(["a", "b"])]
+        rounds.append({
+            "tts": target["kana"],
+            "options": [o["kana"] for o in opts],
+            "romaji": [o["romaji"] for o in opts],
+            "meanings": [o["ru"] for o in opts],
+            "answer": opts.index(target),
+            "kind": p["kind"],
+        })
+    return rounds
 
 
 def item_info(item_type, item_id):

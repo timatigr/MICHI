@@ -83,6 +83,20 @@ const EN = {
   "Сегодня ошибок нет — отлично!": "No mistakes today — great!",
   "Прервать разбор ошибок?": "Stop the mistake review?",
 
+  // --- Тренировка слуха (минимальные пары) ---
+  "Тренировка слуха": "Listening practice",
+  "Минимальные пары: おばさん／おばあさん, きて／きって. Услышьте разницу в долготе и удвоении — это практика, на SRS не влияет.":
+    "Minimal pairs: おばさん／おばあさん, きて／きって. Hear the difference in length and gemination — it's practice, doesn't affect SRS.",
+  "Нужен голос — включите озвучку в ⚙ (нейроголос или японский голос системы).":
+    "Audio needed — turn on a voice in ⚙ (neural voice or a system Japanese voice).",
+  "Различать на слух": "Tell them apart by ear",
+  "Что вы услышали?": "What did you hear?",
+  "Вы выбрали не то слово": "You picked the wrong word",
+  "Слух натренирован": "Ear trained",
+  "Пар на слух: {n} · точность {p}%": "Pairs by ear: {n} · accuracy {p}%",
+  "Прервать тренировку слуха?": "Stop the listening practice?",
+  "Нет сети — попробуйте позже.": "No connection — try again later.",
+
   // --- Настройки (⚙) ---
   "Озвучка": "Audio",
   "Источник": "Source",

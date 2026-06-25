@@ -25,7 +25,9 @@ from .content.registry import (
     KANJI_UNITS, LESSON_BY_ID, LESSON_ORDER, LESSONS, VOCAB_BY_ID, VOCAB_UNITS,
     srs_items_for_lesson,
 )
-from .exercises import _mnemonics_for, item_info, make_lesson_steps, review_exercise
+from .exercises import (
+    _mnemonics_for, item_info, make_lesson_steps, minimal_pair_rounds, review_exercise,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -549,6 +551,15 @@ def review_mistakes(request: Request, limit: int = 30):
         if len(items) >= limit:
             break
     return {"items": items}
+
+
+# ---------- Тренировка слуха: минимальные пары (SRS.md 5.5) ----------
+
+@app.get("/api/listen/pairs")
+def listen_pairs(limit: int = 8):
+    """Раунды дрилла «минимальные пары на слух» (おばさん/おばあさん, きて/きって).
+    Чистый контент — БД не нужна; это практика, в SRS ничего не пишется."""
+    return {"rounds": minimal_pair_rounds(limit)}
 
 
 # ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ----------

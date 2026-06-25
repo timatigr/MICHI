@@ -1217,7 +1217,7 @@ function openPlayer(mode) {
   sessionToken++;
   playerMode = mode;
   const labels = { review: "Повторение", practice: "Работа над ошибками",
-                   freshen: "Упреждающее повторение" };
+                   freshen: "Упреждающее повторение", listen: "Тренировка слуха" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1256,7 +1256,9 @@ async function askClosePlayer() {
     ? tr("Выйти из урока? Потом продолжите с этого же места.")
     : playerMode === "practice"
       ? tr("Прервать разбор ошибок?")
-      : tr("Прервать повторение? Все ответы уже сохранены.");
+      : playerMode === "listen"
+        ? tr("Прервать тренировку слуха?")
+        : tr("Прервать повторение? Все ответы уже сохранены.");
   if (await confirmDialog(msg)) closePlayer();
 }
 $("#player-close").addEventListener("click", askClosePlayer);
@@ -2259,9 +2261,17 @@ async function renderReviewTab() {
       <p class="note" style="margin-top:0">${tr("Быстрый разбор того, в чём вы сегодня ошиблись. Это практика — на расписание SRS не влияет.")}</p>
       <button class="ghost mt" id="btn-mistakes">${tr("Разобрать ошибки дня · {n}", { n: o.mistakes_today })}</button>
     </div>` : ""}
+    <div class="card">
+      <h2>${tr("Тренировка слуха")}</h2>
+      <p class="note" style="margin-top:0">${tr("Минимальные пары: おばさん／おばあさん, きて／きって. Услышьте разницу в долготе и удвоении — это практика, на SRS не влияет.")}</p>
+      ${TTS.available
+        ? `<button class="ghost mt" id="btn-listen">🎧 ${tr("Различать на слух")}</button>`
+        : `<p class="note mt" style="color:var(--warning)">${tr("Нужен голос — включите озвучку в ⚙ (нейроголос или японский голос системы).")}</p>`}
+    </div>
     </div>`;
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
+  $("#btn-listen")?.addEventListener("click", startListening);
 }
 
 /* ---------- «Разбор ошибок дня»: практика по сегодняшним промахам ----------
@@ -2294,6 +2304,75 @@ async function startMistakes() {
       <h2>${tr("Разбор ошибок завершён")}</h2>
       <p>${done ? tr("Повторено: {n} · сейчас верно {p}%", { n: done, p: Math.round(okCount / done * 100) })
                 : tr("Сегодня ошибок нет — отлично!")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+}
+
+/* ---------- Тренировка слуха: минимальные пары (5.5) ----------
+   Read-only практика: проигрываем одно слово пары — выбери, что услышал.
+   Тренирует фонематический слух (долгота гласного, удвоение «っ»). Озвучка
+   обязательна — карточка скрыта без голоса (см. renderReviewTab). */
+async function startListening() {
+  const token = openPlayer("listen");
+  let data;
+  try { data = await api.get("/api/listen/pairs?limit=8"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const rounds = data.rounds;
+  let done = 0, okCount = 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (token !== sessionToken) return;
+    const r = rounds[i];
+    setProgress(done / Math.max(rounds.length, 1));
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(rounds.length - i, 1) });
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      <p class="question">${tr("Что вы услышали?")}</p>
+      <button class="audio-prompt" id="lp-play" title="${tr("Прослушать ещё раз")}">🔊</button>
+      <div class="options">
+        ${r.options.map((o, j) =>
+          `<button data-i="${j}" class="jp"><span class="kbd">${j + 1}</span>${o}</button>`).join("")}
+      </div>
+      <div class="feedback" id="fb" aria-live="polite"></div>
+      <div class="spacer"></div>`;
+    animateIn(playerBody);
+    $("#lp-play", playerBody).addEventListener("click", () => speak(r.tts));
+    speak(r.tts);
+
+    const buttons = [...playerBody.querySelectorAll(".options button")];
+    const choice = await awaitChoice(buttons);
+    if (choice === ABORT) return;
+    const correct = choice === r.answer;
+    buttons.forEach(b => (b.disabled = true));
+    buttons[r.answer].classList.add("correct");
+    if (!correct) buttons[choice].classList.add("wrong");
+    const fb = $("#fb", playerBody);
+    fb.className = `feedback ${correct ? "ok" : "bad"}`;
+    Haptics[correct ? "good" : "bad"]();
+    answerFx(correct, $("#lp-play", playerBody));
+    // Раскрываем ОБА слова с переводом — пара осмысленна только вместе
+    fb.innerHTML = verdict(correct, correct ? tr("Верно") : tr("Вы выбрали не то слово")) +
+      `<div class="lp-reveal">${r.options.map((o, j) =>
+        `<div class="lp-word ${j === r.answer ? "right" : ""}">
+           <span class="jp">${o}</span><small>${r.romaji[j]} · ${tr(r.meanings[j])}</small></div>`).join("")}</div>`;
+    speak(r.tts);
+    done++;
+    if (correct) okCount++;
+    Combo.update(correct);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
+    if (await waitClick($("#next", playerBody)) === ABORT) return;
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `
+    <div class="result">
+      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">耳</div>`}
+      <h2>${tr("Слух натренирован")}</h2>
+      <p>${tr("Пар на слух: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
       <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);
