@@ -61,10 +61,13 @@ def create_cards(conn, item_type, item_ids):
         for item_id in item_ids:
             card = Card()
             cur = conn.execute(
-                "INSERT OR IGNORE INTO srs_cards(item_type, item_id, fsrs, state, due_at) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO srs_cards"
+                "(item_type, item_id, fsrs, state, due_at, stability, last_review) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (item_type, item_id, json.dumps(card.to_dict()),
-                 card.state.value, card.due.isoformat()),
+                 card.state.value, card.due.isoformat(),
+                 card.stability,
+                 card.last_review.isoformat() if card.last_review else None),
             )
             if cur.rowcount:
                 created.append(item_id)
@@ -133,9 +136,12 @@ def answer_card(conn, settings, card_row, correct, duration_ms,
     with conn:
         conn.execute(
             "UPDATE srs_cards SET fsrs=?, state=?, due_at=?, reps=?, lapses=?, "
-            "is_leech=?, introduced_on=? WHERE id=?",
+            "is_leech=?, introduced_on=?, stability=?, last_review=? WHERE id=?",
             (json.dumps(card.to_dict()), card.state.value, card.due.isoformat(),
-             reps, lapses, is_leech, introduced_on, card_row["id"]),
+             reps, lapses, is_leech, introduced_on,
+             card.stability,
+             card.last_review.isoformat() if card.last_review else None,
+             card_row["id"]),
         )
         conn.execute(
             "INSERT INTO reviews(card_id, reviewed_at, rating, state_before, "
@@ -148,7 +154,6 @@ def answer_card(conn, settings, card_row, correct, duration_ms,
         "rating": rating.value,
         "rating_label": {1: "Снова", 2: "Трудно", 3: "Хорошо", 4: "Легко"}[rating.value],
         "next_due": card.due.isoformat(),
-        "interval_human": _humanize(card.due - now),
         "state": card.state.value,
         "is_leech": bool(is_leech),
         "stability": card.stability,
@@ -156,19 +161,21 @@ def answer_card(conn, settings, card_row, correct, duration_ms,
     }
 
 
-def _humanize(delta):
-    secs = max(delta.total_seconds(), 0)
-    if secs < 90:
-        return "через минуту"
-    if secs < 3600:
-        return f"через {round(secs / 60)} мин"
-    if secs < 86400 * 1.5:
-        return f"через {round(secs / 3600)} ч"
-    days = round(secs / 86400)
-    return f"через {days} дн"
-
-
 def _retrievability(scheduler, card_row):
+    # Быстрый путь: считаем R из денормализованных колонок (stability/last_review)
+    # по формуле FSRS-v6 — без парсинга JSON на каждую карточку. Паритет с
+    # библиотекой закреплён тестом (tests/test_srs.py). Приватные _FACTOR/_DECAY
+    # зависят только от параметров модели (не от desired_retention) → константны.
+    keys = card_row.keys()
+    stability = card_row["stability"] if "stability" in keys else None
+    last = card_row["last_review"] if "last_review" in keys else None
+    if stability and last:
+        try:
+            elapsed = max(0, (_now() - datetime.fromisoformat(last)).days)
+            return (1 + scheduler._FACTOR * elapsed / stability) ** scheduler._DECAY
+        except Exception:
+            pass
+    # Фолбэк: старая строка без колонок (до миграции) — разбираем JSON.
     card = Card.from_dict(json.loads(card_row["fsrs"]))
     try:
         return float(scheduler.get_card_retrievability(card))

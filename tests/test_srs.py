@@ -77,3 +77,77 @@ def test_forecast_length_and_shape(conn):
     out = srs_engine.forecast(conn, days=7)
     assert len(out) == 7
     assert all(set(d) == {"date", "count"} for d in out)
+
+
+# --- Денормализация FSRS (A3): быстрый R из колонок == расчёт библиотеки ---
+
+def test_denormalized_columns_written(conn, settings):
+    srs_engine.create_cards(conn, "kana", ["ふ"])
+    new = _row(conn, "ふ")
+    assert new["stability"] is None and new["last_review"] is None  # новая карточка
+    srs_engine.answer_card(conn, settings, new, True, 1500, "kana_recognition")
+    after = _row(conn, "ふ")
+    assert after["stability"] is not None
+    assert after["last_review"] is not None
+
+
+def test_retrievability_matches_library(conn, settings):
+    """Быстрый R из колонок совпадает с py-fsrs (паритет формулы FSRS-v6)."""
+    import json
+
+    from fsrs import Card
+
+    srs_engine.create_cards(conn, "kana", ["ね"])
+    for correct, dur in [(True, 1200), (True, 4000), (False, 1000), (True, 2000)]:
+        srs_engine.answer_card(
+            conn, settings, _row(conn, "ね"), correct, dur, "kana_recognition")
+    row = _row(conn, "ね")
+    assert row["stability"] is not None and row["last_review"] is not None
+    scheduler = srs_engine.make_scheduler(settings)
+    fast = srs_engine._retrievability(scheduler, row)          # путь по колонкам
+    lib = float(scheduler.get_card_retrievability(
+        Card.from_dict(json.loads(row["fsrs"]))))             # путь библиотеки
+    assert abs(fast - lib) < 1e-9
+
+
+def test_migration_backfills_denormalized_columns(tmp_path):
+    """Старая база без колонок: _prepare добавляет их, бэкофиллит из fsrs и
+    штампует user_version (миграция v1→v2, разово)."""
+    import json
+    import sqlite3
+
+    from fsrs import Card, Rating, Scheduler
+
+    from app import db
+
+    p = tmp_path / "old.db"
+    c = sqlite3.connect(p)
+    c.executescript(
+        "CREATE TABLE srs_cards ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT NOT NULL,"
+        " item_id TEXT NOT NULL, fsrs TEXT NOT NULL, state INTEGER NOT NULL,"
+        " due_at TEXT, reps INTEGER NOT NULL DEFAULT 0, lapses INTEGER NOT NULL"
+        " DEFAULT 0, is_leech INTEGER NOT NULL DEFAULT 0, introduced_on TEXT,"
+        " created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+        " UNIQUE(item_type, item_id));")
+    card, _ = Scheduler().review_card(Card(), Rating.Good)
+    d = card.to_dict()
+    c.execute(
+        "INSERT INTO srs_cards(item_type, item_id, fsrs, state, due_at, reps) "
+        "VALUES ('kana','あ',?,?,?,1)",
+        (json.dumps(d), card.state.value, card.due.isoformat()))
+    c.commit()
+    c.close()
+
+    conn = db._prepare(sqlite3.connect(p))
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(srs_cards)")}
+        assert {"stability", "last_review"} <= cols
+        row = conn.execute(
+            "SELECT stability, last_review FROM srs_cards WHERE item_id='あ'"
+        ).fetchone()
+        assert row["stability"] == d["stability"]
+        assert row["last_review"] == d["last_review"]
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
+    finally:
+        conn.close()

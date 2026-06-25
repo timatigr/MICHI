@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS srs_cards (
     lapses      INTEGER NOT NULL DEFAULT 0,
     is_leech    INTEGER NOT NULL DEFAULT 0,
     introduced_on TEXT,                     -- дата первого показа (лимит новых/день)
+    stability   REAL,                       -- денормализовано из fsrs: быстрый расчёт R без JSON
+    last_review TEXT,                        -- денормализовано из fsrs: быстрый расчёт R без JSON
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(item_type, item_id)
 );
@@ -78,11 +80,41 @@ DEFAULT_SETTINGS = {
     "desired_retention": 0.9,
 }
 
+# Версия схемы (PRAGMA user_version). Поднимать при изменении SCHEMA/миграций.
+# Гейтит дорогую инициализацию: схема и миграции прогоняются один раз на файл, а
+# не на каждое соединение (т.е. не на каждый API-запрос) — см. _prepare.
+#   1 — базовая схема (+ ui_prefs)
+#   2 — денормализованные srs_cards.stability/last_review (быстрый R без JSON)
+SCHEMA_VERSION = 2
+
 
 def _user_path(user_id):
     if not _UID_RE.match(user_id or ""):
         raise ValueError(f"некорректный идентификатор пользователя: {user_id!r}")
     return DATA_DIR / f"{user_id}.db"
+
+
+def _migrate(conn):
+    """Точечные миграции существующих баз до SCHEMA_VERSION. Идемпотентны и
+    запускаются один раз на файл (гейтинг по user_version в _prepare)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(srs_cards)")}
+    # v2: денормализованные колонки + бэкофилл из fsrs JSON (разово для старых баз)
+    if "stability" not in cols:
+        conn.execute("ALTER TABLE srs_cards ADD COLUMN stability REAL")
+    if "last_review" not in cols:
+        conn.execute("ALTER TABLE srs_cards ADD COLUMN last_review TEXT")
+    rows = conn.execute(
+        "SELECT id, fsrs FROM srs_cards WHERE reps > 0 AND last_review IS NULL"
+    ).fetchall()
+    for r in rows:
+        try:
+            d = json.loads(r["fsrs"])
+        except (ValueError, TypeError):
+            continue
+        conn.execute(
+            "UPDATE srs_cards SET stability = ?, last_review = ? WHERE id = ?",
+            (d.get("stability"), d.get("last_review"), r["id"]),
+        )
 
 
 def _prepare(conn):
@@ -92,15 +124,20 @@ def _prepare(conn):
     # locked"; busy_timeout даёт записи подождать вместо мгновенной ошибки.
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
-    # Схема идемпотентна (IF NOT EXISTS) — заодно доукомплектовывает базу, заведённую
-    # на более старой версии. Дёшево: пара CREATE/INSERT-IGNORE на крошечных таблицах.
-    with conn:
-        conn.executescript(SCHEMA)
-        for k, v in DEFAULT_SETTINGS.items():
-            conn.execute(
-                "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
-                (k, json.dumps(v)),
-            )
+    # Дорогую инициализацию (схема + миграции + дефолтные настройки) прогоняем
+    # ТОЛЬКО когда версия файла отстаёт — а не на каждом соединении/запросе.
+    # Схема идемпотентна (IF NOT EXISTS); _migrate доукомплектовывает старые базы.
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version < SCHEMA_VERSION:
+        with conn:
+            conn.executescript(SCHEMA)
+            for k, v in DEFAULT_SETTINGS.items():
+                conn.execute(
+                    "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
+                    (k, json.dumps(v)),
+                )
+            _migrate(conn)
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     return conn
 
 
