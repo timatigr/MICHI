@@ -980,10 +980,12 @@ async function renderToday() {
         <div class="hero-mascot">${Art.mascotTile("wave")}</div>
       </div>
       <div class="hero-stats">
+        ${o.streak > 0 ? `<div class="hs hs-streak"><b>🔥 ${o.streak}</b><span>${tr("серия дней")}</span></div>` : ""}
         <div class="hs"><b>${o.today.reviews}</b><span>${tr("повторено сегодня")}</span></div>
         <div class="hs"><b>${o.today.accuracy !== null ? o.today.accuracy + "%" : "—"}</b><span>${tr("точность сегодня")}</span></div>
       </div>
     </div>
+    ${o.streak > 0 && o.today.reviews === 0 ? `<div class="streak-nudge">🔥 ${tr("Серия {n} дн. — позанимайтесь сегодня, чтобы не прервать её", { n: o.streak })}</div>` : ""}
 
     <div class="card gami">
       <div class="level-badge">
@@ -1217,7 +1219,8 @@ function openPlayer(mode) {
   sessionToken++;
   playerMode = mode;
   const labels = { review: "Повторение", practice: "Работа над ошибками",
-                   freshen: "Упреждающее повторение", listen: "Тренировка слуха" };
+                   freshen: "Упреждающее повторение", listen: "Тренировка слуха",
+                   calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1258,7 +1261,11 @@ async function askClosePlayer() {
       ? tr("Прервать разбор ошибок?")
       : playerMode === "listen"
         ? tr("Прервать тренировку слуха?")
-        : tr("Прервать повторение? Все ответы уже сохранены.");
+        : playerMode === "calligraphy"
+          ? tr("Закрыть каллиграфию? Несохранённый рисунок пропадёт.")
+          : playerMode === "forge"
+            ? tr("Прервать ковку кандзи?")
+            : tr("Прервать повторение? Все ответы уже сохранены.");
   if (await confirmDialog(msg)) closePlayer();
 }
 $("#player-close").addEventListener("click", askClosePlayer);
@@ -2149,7 +2156,9 @@ async function startReview() {
           return tr("Нет сети — ответ не сохранён, карточка вернётся позже.");
         }
         let extra = `${tr(verdict.rating_label)} · ${tr("следующий показ")} ${humanizeInterval((new Date(verdict.next_due) - Date.now()) / 1000)}`;
-        if (!correct && item.info.hint)
+        // hint приходит с сервера по-русски (item_info); для не-RU не показываем —
+        // как и мнемо-напоминание (см. mountMnemoReminder), чтобы не было русских вкраплений
+        if (!correct && item.info.hint && LANG === "ru")
           extra += `<br>${item.info.hint}`;
         if (verdict.is_leech)
           extra += `<br>${tr("Эта карточка даётся тяжело — присмотритесь к подсказке")}`;
@@ -2209,7 +2218,7 @@ async function startFreshen() {
         return tr("Нет сети — ответ не сохранён, карточка вернётся позже.");
       }
       let extra = `${tr(verdict.rating_label)} · ${tr("следующий показ")} ${humanizeInterval((new Date(verdict.next_due) - Date.now()) / 1000)}`;
-      if (!correct && item.info.hint) extra += `<br>${item.info.hint}`;
+      if (!correct && item.info.hint && LANG === "ru") extra += `<br>${item.info.hint}`;
       return extra;
     });
     if (token !== sessionToken) return;
@@ -2268,10 +2277,22 @@ async function renderReviewTab() {
         ? `<button class="ghost mt" id="btn-listen">🎧 ${tr("Различать на слух")}</button>`
         : `<p class="note mt" style="color:var(--warning)">${tr("Нужен голос — включите озвучку в ⚙ (нейроголос или японский голос системы).")}</p>`}
     </div>
+    <div class="card">
+      <h2>${tr("Кузница кандзи 鍛冶")}</h2>
+      <p class="note" style="margin-top:0">${tr("Соберите выученный иероглиф из частей-радикалов (木 + 木 = 林). Закрепляет разбор кандзи; это практика, на SRS не влияет.")}</p>
+      <button class="ghost mt" id="btn-forge">🔨 ${tr("Ковать кандзи")}</button>
+    </div>
+    <div class="card">
+      <h2>${tr("Каллиграфия 書道")}</h2>
+      <p class="note" style="margin-top:0">${tr("Напишите выученный знак кистью — толщина линии следует за рукой. Это не проверка: можно сохранить свою работу картинкой.")}</p>
+      <button class="ghost mt" id="btn-calligraphy">✍️ ${tr("Писать кистью")}</button>
+    </div>
     </div>`;
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
   $("#btn-listen")?.addEventListener("click", startListening);
+  $("#btn-forge")?.addEventListener("click", startForge);
+  $("#btn-calligraphy")?.addEventListener("click", startCalligraphy);
 }
 
 /* ---------- «Разбор ошибок дня»: практика по сегодняшним промахам ----------
@@ -2380,6 +2401,178 @@ async function startListening() {
   closePlayer();
 }
 
+/* ---------- Кузница кандзи 鍛冶 (Sprint: Кузница) ----------
+   Собрать выученный иероглиф из компонентов-радикалов (木 + 木 = 林) — обратная
+   сторона разбора кандзи (6.3). Read-only практика: в SRS не пишет. Учитывает
+   повторы компонентов (мультимножество). */
+async function startForge() {
+  const token = openPlayer("forge");
+  let data;
+  try { data = await api.get("/api/forge/rounds?limit=8"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const rounds = data.rounds;
+  if (!rounds.length) {
+    playerBody.classList.add("center-step");
+    playerBody.innerHTML = `<div class="result"><div class="mark">鍛</div>
+      <h2>${tr("Пока нечего ковать")}</h2>
+      <p>${tr("Выучите кандзи с разбором на части (林, 明, 男…) — и соберёте их здесь.")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button></div>`;
+    animateIn(playerBody);
+    if (await waitClick($("#finish", playerBody)) === ABORT) return;
+    closePlayer();
+    return;
+  }
+  let done = 0, okCount = 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (token !== sessionToken) return;
+    setProgress(done / rounds.length);
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(rounds.length - i, 1) });
+    const res = await forgeRound(rounds[i]);
+    if (res === ABORT || token !== sessionToken) return;
+    done++;
+    if (res) okCount++;
+    Combo.update(res);
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `<div class="result">
+      <div class="result-mascot">${Art.mascotTile("cheer")}</div>
+      <h2>${tr("Кузница остыла")}</h2>
+      <p>${tr("Сковано: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (done >= 5) confetti();
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+}
+
+async function forgeRound(r) {
+  playerBody.classList.remove("center-step");
+  if (window.__noPrefWrite) window.__forgeRound = r;   // тест-хук для headless-проверки
+  const need = r.components.length;
+  playerBody.innerHTML = `
+    <p class="question">${tr("Соберите кандзи из частей")}</p>
+    <div class="forge-clue">
+      <div class="forge-meaning">${tr(r.meaning)}</div>
+      <button class="forge-reading jp" data-tts="${r.tts}">🔊 ${r.reading}</button>
+    </div>
+    <div class="build-slots forge-slots" id="fslots"></div>
+    <div class="tiles forge-tiles" id="ftiles">
+      ${r.tiles.map((t, i) => `<button class="forge-tile" data-i="${i}">
+        <span class="ft-char jp">${t.char}</span><small>${tr(t.meaning)}</small></button>`).join("")}
+    </div>
+    <div class="feedback" id="fb" aria-live="polite"></div>
+    <button class="primary" id="forge" disabled>${tr("Сковать")}</button>`;
+  animateIn(playerBody);
+  speak(r.tts);
+
+  const slots = $("#fslots", playerBody);
+  const forgeBtn = $("#forge", playerBody);
+  const assembled = [];                       // [{char, btn}]
+  const renderSlots = () => {
+    slots.innerHTML = assembled.map((a, i) =>
+      `<span data-pos="${i}" class="jp" title="${tr("Убрать")}">${a.char}</span>`).join("");
+    forgeBtn.disabled = assembled.length !== need;
+  };
+
+  const finished = abortable(res => {
+    $("#ftiles", playerBody).addEventListener("click", e => {
+      const b = e.target.closest(".forge-tile");
+      if (!b || b.disabled || assembled.length >= need) return;
+      b.disabled = true;
+      assembled.push({ char: b.querySelector(".ft-char").textContent, btn: b });
+      renderSlots();
+    });
+    slots.addEventListener("click", e => {
+      const s = e.target.closest("span");
+      if (!s) return;
+      const [rm] = assembled.splice(+s.dataset.pos, 1);
+      rm.btn.disabled = false;
+      renderSlots();
+    });
+    forgeBtn.addEventListener("click", () => { if (assembled.length === need) res(); });
+  });
+  if (await finished === ABORT) return ABORT;
+
+  // Сверка по мультимножеству (учёт повторов: 林 = 木 + 木)
+  const got = assembled.map(a => a.char).sort();
+  const want = r.components.map(c => c.char).sort();
+  const correct = got.length === want.length && got.every((c, i) => c === want[i]);
+
+  $("#ftiles", playerBody).style.pointerEvents = "none";
+  slots.style.pointerEvents = "none";
+  const fb = $("#fb", playerBody);
+  fb.className = `feedback ${correct ? "ok" : "bad"}`;
+  Haptics[correct ? "good" : "bad"]();
+  answerFx(correct, slots);
+  const parts = r.components.map(c =>
+    `<span class="part jp">${c.char}<small>${tr(c.meaning)}</small></span>`).join(`<i class="op">+</i>`);
+  fb.innerHTML = verdict(correct, correct ? tr("Сковано!") : tr("Не сошлось — вот верный разбор"))
+    + `<div class="kanji-parts forge-assembled">${parts}<i class="op">=</i>`
+    + `<span class="part whole jp">${r.char}</span></div>`;
+  speak(r.tts);
+
+  forgeBtn.remove();
+  playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
+  if (await waitClick($("#next", playerBody)) === ABORT) return ABORT;
+  return correct;
+}
+
+/* ---------- Каллиграфия 書道 (Sprint: Каллиграфия-арт) ----------
+   Выразительное письмо кистью поверх готового движка прописей. Не тест: ничего
+   не пишет в SRS. Выбираем выученный знак (кана/кандзи) → пишем кистью → можно
+   сохранить свою работу картинкой (Tracing.calligraphy). */
+async function startCalligraphy() {
+  const token = openPlayer("calligraphy");
+  let data;
+  try { data = await api.get("/api/learned"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const chars = [];
+  const seen = new Set();
+  for (const c of data.courses) {
+    if (!["hiragana", "katakana", "kanji"].includes(c.id)) continue;
+    for (const it of c.items) {
+      if ([...it.title].length === 1 && !seen.has(it.title)) {
+        seen.add(it.title);
+        chars.push({ char: it.title, reading: it.tts || "", sub: it.sub });
+      }
+    }
+  }
+  const pick = () => {
+    playerBody.classList.add("center-step");
+    if (!chars.length) {
+      playerBody.innerHTML = `<div class="result"><div class="mark">書</div>
+        <h2>${tr("Пока нечего писать")}</h2>
+        <p>${tr("Выучите кану или кандзи — и сможете написать их кистью.")}</p></div>`;
+      animateIn(playerBody);
+      return;
+    }
+    playerBody.innerHTML = `
+      <p class="question">${tr("Выберите знак для каллиграфии")}</p>
+      <div class="cal-pick">${chars.map((c, i) =>
+        `<button class="cal-pick-item jp" data-i="${i}">${escapeHtml(c.char)}</button>`).join("")}</div>`;
+    animateIn(playerBody);
+    playerBody.querySelectorAll(".cal-pick-item").forEach(b =>
+      b.addEventListener("click", () => draw(chars[+b.dataset.i])));
+  };
+  const draw = (c) => {
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      <p class="question">${tr("Напишите красиво — кистью")}</p>
+      <div id="cal-host"></div>
+      <button class="ghost mt" id="cal-back">← ${tr("Выбрать другой знак")}</button>`;
+    animateIn(playerBody);
+    Tracing.calligraphy($("#cal-host", playerBody), { char: c.char, reading: c.reading });
+    speak(c.reading || c.char);
+    $("#cal-back", playerBody).addEventListener("click", pick);
+  };
+  pick();
+}
+
 /* ---------- Словарь: справочник изученного ----------
    Всё, что попало в SRS (введено на уроках), сгруппировано по курсам. Клик по
    элементу с озвучкой — проигрывает (глобальный [data-tts]-обработчик). */
@@ -2425,6 +2618,14 @@ function memoryMapHtml(courses) {
   const strong = items.filter(i => i.strength >= 85).length;
   const fading = items.filter(i => i.strength >= 60 && i.strength < 85).length;
   const risk = items.filter(i => i.strength < 60).length;
+  // Сад (8/USP): дерево сакуры — цветущих бутонов = крепких знаков, бледных =
+  // тускнеющих, опадающих лепестков = рискующих. Эмоциональный «снимок» здоровья
+  // знаний; тепловая решётка ниже даёт ту же картину детально, поэлементно.
+  const caption = risk > 0
+    ? tr("Несколько знаков вянут — освежите их на «Сегодня»")
+    : (fading <= strong * 0.3
+        ? tr("Сад в полном цвету 🌸")
+        : tr("Сад растёт — так держать!"));
   const cells = items.map(it => {
     const mem = tr("Память {p}%", { p: it.strength });
     return `<button class="mm-cell" style="--s:${it.strength}"${
@@ -2432,7 +2633,9 @@ function memoryMapHtml(courses) {
       title="${escapeHtml(it.title)} · ${mem}" aria-label="${escapeHtml(it.title)} ${mem}"></button>`;
   }).join("");
   return `<div class="card mem-map">
-    <h2>${tr("Карта памяти")} · ${items.length}</h2>
+    <h2>${tr("Сад памяти")} · ${items.length}</h2>
+    <div class="mem-garden">${Art.garden(strong, fading, risk)}</div>
+    <p class="garden-caption">${caption}</p>
     <p class="note" style="margin-top:0">${tr("Каждая клетка — выученный знак, цвет = насколько он свеж в памяти. Тусклые освежите на «Сегодня».")}</p>
     <div class="mm-grid">${cells}</div>
     <div class="mm-legend">
@@ -2456,21 +2659,78 @@ async function renderDict() {
   const label = { new: tr("новое"), learning: tr("учится"), review: tr("в памяти") };
   const memMap = memoryMapHtml(data.courses);
   const gallery = LANG === "ru" ? mnemoGalleryHtml(data.courses) : "";
-  view.innerHTML = `<div class="dict-wrap">` + memMap + gallery + data.courses.map(c => `
-    <div class="card">
-      <h2>${tr(COURSE_LABEL[c.id] || c.title)} · ${c.count}</h2>
-      <div class="dict-grid">
-        ${c.items.map(it => `
-          <button class="dict-item st-${it.state}${it.leech ? " leech" : ""}"${
-            it.tts ? ` data-tts="${escapeHtml(it.tts)}"` : ""}>
-            <span class="di-title jp">${escapeHtml(it.title)}</span>
-            ${it.extra ? `<span class="di-extra jp">${escapeHtml(it.extra)}</span>` : ""}
-            <span class="di-sub">${escapeHtml(it.sub ? tr(it.sub) : "")}</span>
-            <span class="di-state">${label[it.state]}</span>
-            ${it.strength != null ? `<span class="di-strength" style="--s:${it.strength}" title="${tr("Память {p}%", { p: it.strength })}" aria-label="${tr("Память {p}%", { p: it.strength })}"></span>` : ""}
-          </button>`).join("")}
-      </div>
-    </div>`).join("") + `</div>`;
+
+  // Поиск + фильтр по состоянию (B1): словарь может быть 700+ элементов — найти
+  // нужный знак прокруткой тяжело. data-s — строка поиска (знак/перевод/чтение).
+  const STATES = [["all", "Все"], ["learning", "Учится"],
+                  ["review", "В памяти"], ["leech", "Трудные"]];
+  const controls = `
+    <div class="dict-search">
+      <input id="dict-q" type="search" inputmode="search" autocomplete="off"
+        spellcheck="false" placeholder="${tr("Поиск: знак, чтение или перевод")}"
+        aria-label="${tr("Поиск по словарю")}">
+    </div>
+    <div class="course-tabs dict-filters">${STATES.map(([k, v], i) =>
+      `<button class="course-tab ${i === 0 ? "active" : ""}" data-st="${k}">${tr(v)}</button>`).join("")}</div>`;
+
+  const itemHtml = it => {
+    const s = [it.title, it.sub ? tr(it.sub) : "", it.extra || ""].join(" ").toLowerCase();
+    return `<button class="dict-item st-${it.state}${it.leech ? " leech" : ""}" data-s="${escAttr(s)}"${
+      it.tts ? ` data-tts="${escapeHtml(it.tts)}"` : ""}>
+      <span class="di-title jp">${escapeHtml(it.title)}</span>
+      ${it.extra ? `<span class="di-extra jp">${escapeHtml(it.extra)}</span>` : ""}
+      <span class="di-sub">${escapeHtml(it.sub ? tr(it.sub) : "")}</span>
+      <span class="di-state">${label[it.state]}</span>
+      ${it.strength != null ? `<span class="di-strength" style="--s:${it.strength}" title="${tr("Память {p}%", { p: it.strength })}" aria-label="${tr("Память {p}%", { p: it.strength })}"></span>` : ""}
+    </button>`;
+  };
+
+  view.innerHTML = `<div class="dict-wrap">`
+    + controls
+    + `<div class="dict-aggregate">` + memMap + gallery + `</div>`
+    + `<p class="dict-empty note center" hidden>${tr("Ничего не найдено")}</p>`
+    + data.courses.map(c => `
+      <div class="card dict-course">
+        <h2>${tr(COURSE_LABEL[c.id] || c.title)} · <span class="dc-count">${c.count}</span></h2>
+        <div class="dict-grid">${c.items.map(itemHtml).join("")}</div>
+      </div>`).join("")
+    + `</div>`;
+
+  // Фильтрация по месту (без перерисовки): прячем не подходящие элементы и пустые
+  // карточки; агрегаты (Сад/галерея) скрываем, пока активен поиск/фильтр.
+  const qInput = $("#dict-q", view);
+  let stFilter = "all";
+  const apply = () => {
+    const query = qInput.value.trim().toLowerCase();
+    let found = 0;
+    view.querySelectorAll(".dict-course").forEach(card => {
+      let shown = 0;
+      card.querySelectorAll(".dict-item").forEach(el => {
+        const okQ = !query || el.dataset.s.includes(query);
+        const okSt = stFilter === "all"
+          || (stFilter === "leech" ? el.classList.contains("leech")
+              : el.classList.contains("st-" + stFilter));
+        const show = okQ && okSt;
+        el.classList.toggle("hide", !show);
+        if (show) shown++;
+      });
+      const cnt = card.querySelector(".dc-count");
+      if (cnt) cnt.textContent = shown;
+      card.classList.toggle("hide", shown === 0);
+      found += shown;
+    });
+    const filtering = !!query || stFilter !== "all";
+    view.querySelector(".dict-aggregate")?.classList.toggle("hide", filtering);
+    view.querySelector(".dict-empty").hidden = found > 0;
+  };
+  qInput.addEventListener("input", apply);
+  view.querySelectorAll(".dict-filters .course-tab").forEach(b =>
+    b.addEventListener("click", () => {
+      stFilter = b.dataset.st;
+      view.querySelectorAll(".dict-filters .course-tab").forEach(
+        x => x.classList.toggle("active", x === b));
+      apply();
+    }));
 }
 
 /* ---------- Статистика ---------- */

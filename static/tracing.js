@@ -342,5 +342,169 @@ const Tracing = (() => {
     })(start);
   }
 
-  return { create, preview };
+  /* calligraphy(host, {char, reading}) — выразительный режим «кисти» (書道):
+     свободное письмо поверх бледного глифа-образца, толщина линии зависит от
+     скорости (медленно — толсто, как настоящая кисть). Не тест: ничего не
+     проверяет и не пишет в SRS. Кнопка «Сохранить» отдаёт PNG со своей работой
+     (васи-фон + красная печать 落款 + чтение) — момент гордости, можно поделиться. */
+  function calligraphy(host, opts) {
+    const size = Math.min(320, Math.max(232, window.innerWidth - 56));
+    const dpr = window.devicePixelRatio || 1;
+    const dark = document.documentElement.dataset.theme === "dark";
+    const PAPER = dark ? "#262130" : "#FBF6EC";
+    const INK = dark ? "#F0EAF7" : "#332A38";
+    const GUIDE = dark ? "rgba(240,234,247,.13)" : "rgba(51,42,56,.12)";
+    const SEAL = "#C44A4A";
+    const maxW = size * 0.045, minW = size * 0.012;
+
+    host.innerHTML = `
+      <div class="trace-wrap calligraphy">
+        <canvas width="${size * dpr}" height="${size * dpr}"
+                style="width:${size}px;height:${size}px"></canvas>
+        <div class="trace-tools">
+          <button class="ghost small" data-act="guide" aria-pressed="true">${tr("Образец")}</button>
+          <button class="ghost small" data-act="clear">${tr("Стереть")}</button>
+          <button class="ghost small" data-act="save">💾 ${tr("Сохранить")}</button>
+        </div>
+        <div class="trace-msg"></div>
+      </div>`;
+    const canvas = host.querySelector("canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.lineCap = ctx.lineJoin = "round";
+    const msg = host.querySelector(".trace-msg");
+
+    let showGuide = true;
+    const strokes = [];            // [[{x,y,w}, ...], ...] — для перерисовки/экспорта
+    let cur = null, last = null, lastT = 0;
+
+    function drawGuide(c, S) {
+      if (!showGuide) return;
+      c.fillStyle = GUIDE;
+      c.font = `700 ${S * 0.72}px "Noto Sans JP", sans-serif`;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText(opts.char, S / 2, S / 2 + S * 0.02);
+    }
+
+    function base() {                // фон + образец (ink рисуется поверх, без clear)
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(0, 0, size, size);
+      drawGuide(ctx, size);
+    }
+
+    function repaint() {             // полная перерисовка (после «Стереть»/тоггла образца)
+      base();
+      for (const st of strokes) {
+        for (let i = 1; i < st.length; i++) {
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = st[i].w;
+          ctx.beginPath();
+          ctx.moveTo(st[i - 1].x, st[i - 1].y);
+          ctx.lineTo(st[i].x, st[i].y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    base();
+
+    const pos = e => {
+      const r = canvas.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    canvas.style.touchAction = "none";
+    canvas.addEventListener("pointerdown", e => {
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* нет активного указателя */ }
+      const [x, y] = pos(e);
+      cur = [{ x, y, w: maxW * 0.7 }];
+      strokes.push(cur);
+      last = [x, y]; lastT = performance.now();
+    });
+    canvas.addEventListener("pointermove", e => {
+      if (!cur) return;
+      const [x, y] = pos(e);
+      const now = performance.now();
+      const d = Math.hypot(x - last[0], y - last[1]);
+      const v = d / Math.max(now - lastT, 1);          // px/ms
+      const w = Math.max(minW, Math.min(maxW, maxW - v * size * 0.05));
+      ctx.strokeStyle = INK; ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(x, y); ctx.stroke();
+      cur.push({ x, y, w });
+      last = [x, y]; lastT = now;
+    });
+    const end = () => { cur = null; };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+
+    host.querySelector('[data-act="clear"]').addEventListener("click", () => {
+      strokes.length = 0; repaint(); msg.textContent = "";
+    });
+    const gbtn = host.querySelector('[data-act="guide"]');
+    gbtn.addEventListener("click", () => {
+      showGuide = !showGuide;
+      gbtn.setAttribute("aria-pressed", String(showGuide));
+      gbtn.classList.toggle("off", !showGuide);
+      repaint();
+    });
+
+    // Экспорт: чистая перерисовка в 2× + красная печать 落款 + чтение под знаком
+    function exportPNG() {
+      const S = 640, m = S / size;
+      const off = document.createElement("canvas");
+      off.width = off.height = S + 64;
+      const o = off.getContext("2d");
+      o.fillStyle = PAPER; o.fillRect(0, 0, off.width, off.height);
+      o.translate(32, 24);
+      o.lineCap = o.lineJoin = "round";
+      for (const st of strokes) {
+        for (let i = 1; i < st.length; i++) {
+          o.strokeStyle = INK; o.lineWidth = st[i].w * m;
+          o.beginPath();
+          o.moveTo(st[i - 1].x * m, st[i - 1].y * m);
+          o.lineTo(st[i].x * m, st[i].y * m);
+          o.stroke();
+        }
+      }
+      // печать 落款 — красный квадрат со знаком в углу
+      const sz = 64;
+      o.fillStyle = SEAL;
+      roundRect(o, S - sz, S - sz, sz, sz, 8); o.fill();
+      o.fillStyle = "#FBF6EC";
+      o.font = `700 ${sz * 0.62}px "Noto Sans JP", sans-serif`;
+      o.textAlign = "center"; o.textBaseline = "middle";
+      o.fillText(opts.char, S - sz / 2, S - sz / 2 + 2);
+      o.translate(-32, -24);
+      if (opts.reading) {
+        o.fillStyle = INK; o.globalAlpha = 0.7;
+        o.font = `500 26px "Noto Sans JP", sans-serif`;
+        o.textAlign = "center"; o.textBaseline = "alphabetic";
+        o.fillText(opts.reading, off.width / 2, off.height - 18);
+      }
+      return off.toDataURL("image/png");
+    }
+    function roundRect(c, x, y, w, h, r) {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.arcTo(x + w, y, x + w, y + h, r);
+      c.arcTo(x + w, y + h, x, y + h, r);
+      c.arcTo(x, y + h, x, y, r);
+      c.arcTo(x, y, x + w, y, r);
+      c.closePath();
+    }
+    host.querySelector('[data-act="save"]').addEventListener("click", () => {
+      if (!strokes.length) { msg.textContent = tr("Сначала напишите знак"); return; }
+      const a = document.createElement("a");
+      a.href = exportPNG();
+      a.download = `michi-shodo-${opts.char}.png`;
+      a.click();
+      msg.className = "trace-msg ok";
+      msg.textContent = tr("Сохранено как картинку");
+    });
+
+    // тест-хук: дёрнуть несколько штрихов и получить data URL (для headless-проверки)
+    canvas.__cal = { strokes, exportPNG };
+  }
+
+  return { create, preview, calligraphy };
 })();

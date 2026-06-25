@@ -68,7 +68,16 @@ const EN = {
   "Смотрите, как пишется эта черта": "Watch how this stroke is written",
   "Не похоже — попробуйте ещё раз": "Doesn't match — try again",
   "Память {p}%": "Memory {p}%",
-  // --- Карта памяти (Словарь) ---
+  // --- Сад памяти / Карта памяти (Словарь) ---
+  "Сад памяти": "Memory garden",
+  "Поиск: знак, чтение или перевод": "Search: character, reading or meaning",
+  "Поиск по словарю": "Search the dictionary",
+  "Ничего не найдено": "Nothing found",
+  "Учится": "Learning", "В памяти": "Memorized", "Трудные": "Tricky",
+  "Сад в полном цвету 🌸": "Your garden is in full bloom 🌸",
+  "Сад растёт — так держать!": "Your garden is growing — keep it up!",
+  "Несколько знаков вянут — освежите их на «Сегодня»":
+    "A few characters are wilting — freshen them on «Today»",
   "Карта памяти": "Memory map",
   "Каждая клетка — выученный знак, цвет = насколько он свеж в памяти. Тусклые освежите на «Сегодня».":
     "Each cell is a learned character; color shows how fresh it is in memory. Freshen the dim ones on «Today».",
@@ -82,6 +91,39 @@ const EN = {
   "Повторено: {n} · сейчас верно {p}%": "Reviewed: {n} · now correct {p}%",
   "Сегодня ошибок нет — отлично!": "No mistakes today — great!",
   "Прервать разбор ошибок?": "Stop the mistake review?",
+
+  // --- Кузница кандзи 鍛冶 ---
+  "Кузница кандзи 鍛冶": "Kanji forge 鍛冶",
+  "Соберите выученный иероглиф из частей-радикалов (木 + 木 = 林). Закрепляет разбор кандзи; это практика, на SRS не влияет.":
+    "Build a learned kanji from its radical parts (木 + 木 = 林). Reinforces kanji breakdown; it's practice, doesn't affect SRS.",
+  "Ковать кандзи": "Forge kanji",
+  "Соберите кандзи из частей": "Build the kanji from its parts",
+  "Сковать": "Forge",
+  "Сковано!": "Forged!",
+  "Не сошлось — вот верный разбор": "Not quite — here's the correct breakdown",
+  "Кузница остыла": "The forge has cooled",
+  "Сковано: {n} · точность {p}%": "Forged: {n} · accuracy {p}%",
+  "Пока нечего ковать": "Nothing to forge yet",
+  "Выучите кандзи с разбором на части (林, 明, 男…) — и соберёте их здесь.":
+    "Learn kanji that break into parts (林, 明, 男…) and you'll forge them here.",
+  "Прервать ковку кандзи?": "Stop forging kanji?",
+
+  // --- Каллиграфия 書道 ---
+  "Каллиграфия 書道": "Calligraphy 書道",
+  "Напишите выученный знак кистью — толщина линии следует за рукой. Это не проверка: можно сохранить свою работу картинкой.":
+    "Write a learned character with a brush — line width follows your hand. Not a test: you can save your artwork as an image.",
+  "Писать кистью": "Write with a brush",
+  "Выберите знак для каллиграфии": "Pick a character for calligraphy",
+  "Напишите красиво — кистью": "Write it beautifully — with a brush",
+  "Выбрать другой знак": "Pick another character",
+  "Пока нечего писать": "Nothing to write yet",
+  "Выучите кану или кандзи — и сможете написать их кистью.":
+    "Learn kana or kanji — then you can write them with a brush.",
+  "Закрыть каллиграфию? Несохранённый рисунок пропадёт.":
+    "Close calligraphy? Your unsaved drawing will be lost.",
+  "Образец": "Guide", "Сохранить": "Save",
+  "Сохранено как картинку": "Saved as an image",
+  "Сначала напишите знак": "Write the character first",
 
   // --- Тренировка слуха (минимальные пары) ---
   "Тренировка слуха": "Listening practice",
@@ -136,6 +178,9 @@ const EN = {
   "Добрый вечер": "Good evening",
   "повторено сегодня": "reviewed today",
   "точность сегодня": "accuracy today",
+  "серия дней": "day streak",
+  "Серия {n} дн. — позанимайтесь сегодня, чтобы не прервать её":
+    "{n}-day streak — study today so you don't break it",
   "Уровень {n}": "Level {n}",
   "{a} / {b} XP · всего {c}": "{a} / {b} XP · {c} total",
   "цель!": "goal!",

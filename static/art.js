@@ -232,6 +232,50 @@ const Art = {
       ${this._face(50, 47, .95)}`;
   },
 
+  /* ---------- Сад памяти (Sprint 2): дерево сакуры из «силы памяти» FSRS ----------
+     Кавай-SVG в едином стиле проекта. Цветущих бутонов = крепких знаков (R высок),
+     бледных бутонов = тускнеющих, опадающих лепестков = рискующих забыться.
+     Детерминированные слоты → стабильная картинка между перерисовками. */
+  GARDEN_SLOTS: [
+    [150, 38], [112, 48], [188, 50], [132, 60], [170, 60], [88, 70], [212, 70],
+    [150, 72], [104, 88], [196, 88], [128, 92], [172, 92], [76, 86], [224, 86],
+    [148, 50], [110, 66], [190, 66], [150, 100],
+  ],
+
+  garden(strong, fading, risk) {
+    const slots = this.GARDEN_SLOTS;
+    const s = Math.max(0, Math.min(strong, slots.length));
+    const f = Math.max(0, Math.min(fading, slots.length - s));
+    let blooms = "", buds = "";
+    for (let i = 0; i < s; i++) blooms += this._sakuraMini(slots[i][0], slots[i][1], 1.15);
+    for (let i = 0; i < f; i++) {
+      const [x, y] = slots[s + i];
+      buds += `<circle cx="${x}" cy="${y}" r="3.6" fill="#F3DCE7"
+        stroke="#DCAEC5" stroke-width="1.1"/>`;
+    }
+    const RP = [[118, 120], [142, 134], [166, 124], [186, 140], [150, 150], [128, 146]];
+    let fall = "";
+    for (let i = 0; i < Math.min(risk, RP.length); i++) {
+      const [x, y] = RP[i];
+      fall += `<ellipse cx="${x}" cy="${y}" rx="3.2" ry="5" fill="#F3B6CE"
+        stroke="#E78FB0" stroke-width=".8" transform="rotate(${i * 47 - 30} ${x} ${y})"/>`;
+    }
+    return `<svg class="garden-svg" viewBox="0 0 300 170"
+        preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <ellipse cx="150" cy="159" rx="92" ry="8" fill="#4A4458" opacity=".08"/>
+      <path d="M143,156 Q147,120 139,96 L161,96 Q153,120 157,156 Z"
+        fill="#C08A5B" stroke="#4A4458" stroke-width="2.4" stroke-linejoin="round"/>
+      <path d="M150,122 L126,104 M150,114 L174,98" stroke="#C08A5B"
+        stroke-width="5" stroke-linecap="round"/>
+      <g fill="#CDE9D4" stroke="#A6D2B0" stroke-width="2">
+        <ellipse cx="150" cy="62" rx="76" ry="50"/>
+        <ellipse cx="102" cy="78" rx="44" ry="33"/>
+        <ellipse cx="198" cy="78" rx="44" ry="33"/>
+      </g>
+      ${buds}${blooms}${fall}
+    </svg>`;
+  },
+
   /* ---------- Маскот «Кицунэ-моти» (личность приложения) ----------
      Кавай-лисёнок под палитру. Drop-in: положи static/img/mascot.png —
      перекроет SVG (как у достижений). mood: wave (обычный) | cheer (радость). */

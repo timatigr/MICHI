@@ -253,8 +253,9 @@ html[data-theme="dark"] .hero {
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
 }
 .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.hero-jp { font-size: 1.875rem; font-weight: 700; cursor: pointer; }
-.hero-ru { font-size: 0.8125rem; opacity: 0.85; margin-top: 3px; }
+.hero-jp { font-size: 1.875rem; font-weight: 700; cursor: pointer; text-shadow: 0 1px 3px rgba(60, 40, 95, 0.30); }
+/* Мелкий белый текст на светлом (розовом) конце градиента — лёгкая тень держит WCAG AA */
+.hero-ru { font-size: 0.8125rem; opacity: 0.95; margin-top: 3px; text-shadow: 0 1px 2px rgba(60, 40, 95, 0.32); }
 .hero-streak {
   background: rgba(255, 255, 255, 0.16); border-radius: 14px;
   padding: 9px 14px; text-align: center; backdrop-filter: blur(4px);
@@ -266,8 +267,17 @@ html[data-theme="dark"] .hero {
   flex: 1; background: rgba(255, 255, 255, 0.13); border-radius: 14px;
   padding: 12px 14px;
 }
-.hs b { font-size: 1.5rem; font-weight: 700; }
-.hs span { display: block; font-size: 0.71875rem; opacity: 0.85; margin-top: 2px; line-height: 1.35; }
+.hs b { font-size: 1.5rem; font-weight: 700; text-shadow: 0 1px 2px rgba(60, 40, 95, 0.28); }
+.hs span { display: block; font-size: 0.71875rem; opacity: 0.92; margin-top: 2px; line-height: 1.35; text-shadow: 0 1px 2px rgba(60, 40, 95, 0.28); }
+.hs-streak b { letter-spacing: -0.5px; }
+
+/* Нудж «не потеряй серию» — показываем под героем, если сегодня ещё не занимались */
+.streak-nudge {
+  margin: -2px 0 14px; padding: 11px 16px; border-radius: 14px;
+  background: var(--pink-soft); color: var(--pink); font-weight: 600;
+  font-size: 0.84375rem; text-align: center; line-height: 1.45;
+  animation: rise .28s cubic-bezier(.21, .8, .36, 1) both;
+}
 
 /* --- Геймификация: уровень + дневная цель --- */
 .card.gami { display: flex; align-items: center; gap: 18px; }
@@ -541,8 +551,11 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
   padding: 8px 20px 32px; display: flex; flex-direction: column;
   /* Шаги-упражнения тяготеют к верху со стабильным отступом: так под ответом
      можно дорисовать вердикт/кнопку, не сдвигая вопрос и варианты (без «прыжка»
-     макета), и верх длинного контента не обрезается — низ просто скроллится. */
-  justify-content: flex-start; padding-top: clamp(18px, 7vh, 68px);
+     макета), и верх длинного контента не обрезается — низ просто скроллится.
+     Отступ масштабируется с высотой экрана (vh): на высоких экранах вопрос+варианты
+     уходят к оптическому центру (меньше «пустоты» снизу), на низких остаётся плотным.
+     Сам отступ статичен в пределах шага → top вариантов до/после ответа не меняется. */
+  justify-content: flex-start; padding-top: clamp(16px, 8vh, 84px);
 }
 /* Вступления и финальный экран — по центру: контента достаточно, смотрится
    собранно. «safe» не обрезает верх, если контент выше экрана. */
@@ -551,6 +564,10 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 /* Кнопка действия упражнения (Проверить/Дальше) — отбита от вердикта/контента.
    Только прямые дети плеера: кнопки внутри .result отбиваются своими правилами. */
 .player-body > button.primary { margin-top: 16px; }
+/* В упражнениях (не center-step) кнопка действия прижата к низу экрана: контент
+   остаётся вверху (варианты не «прыгают» — CLS=0), а CTA попадает в зону большого
+   пальца, и пустота между контентом и кнопкой читается намеренной (как в Duolingo). */
+.player-body:not(.center-step) > button.primary { margin-top: auto; }
 
 /* --- Шаги урока --- */
 /* Вступительный экран урока: по центру, с иконкой-кругом */
@@ -939,6 +956,45 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .trace-msg.warn { color: var(--warning); }
 .trace-msg.ok { color: var(--success); }
 
+/* Каллиграфия 書道: пикер знака + холст-кисть */
+#cal-host { display: flex; justify-content: center; margin-top: 8px; }
+.trace-tools .ghost.small.off { opacity: .5; }
+.cal-pick {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  gap: 10px; margin: 20px 0 0;
+}
+.cal-pick-item {
+  aspect-ratio: 1; font-size: 1.75rem; color: var(--title); cursor: pointer;
+  background: linear-gradient(180deg, var(--card-top), var(--card-bot));
+  border: 1.5px solid var(--card-edge); border-radius: 14px;
+  box-shadow: var(--shadow-sm), var(--card-hi);
+  transition: transform .12s, border-color .14s, box-shadow .16s;
+}
+.cal-pick-item:hover { border-color: var(--pink); transform: translateY(-2px); }
+.cal-pick-item:active { transform: scale(.94); }
+
+/* Кузница кандзи 鍛冶: подсказка-цель, плитки-компоненты, сборка */
+.forge-clue { text-align: center; margin: 16px 0 0; }
+.forge-meaning { font-size: 1.375rem; font-weight: 700; color: var(--title); }
+.forge-reading {
+  margin: 8px auto 0; background: var(--card); border: none; border-radius: 20px;
+  padding: 7px 16px; cursor: pointer; font-size: 0.9375rem; color: var(--indigo);
+  box-shadow: var(--shadow-sm); transition: color .15s;
+}
+.forge-reading:hover { color: var(--pink); }
+.forge-tiles .forge-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--card); border: 1.5px solid var(--card-edge); border-radius: 16px;
+  padding: 9px 14px; cursor: pointer; color: var(--title); box-shadow: var(--shadow-sm);
+  transition: transform .1s, border-color .14s, opacity .15s;
+}
+.forge-tiles .forge-tile .ft-char { font-family: var(--jp-font); font-size: 1.75rem; line-height: 1.1; }
+.forge-tiles .forge-tile small { font-size: 0.625rem; color: var(--muted); max-width: 76px; }
+.forge-tiles .forge-tile:hover { border-color: var(--pink); }
+.forge-tiles .forge-tile:active { transform: scale(.92); }
+.forge-tiles .forge-tile:disabled { opacity: .28; cursor: default; }
+.forge-assembled { margin-top: 12px; }
+
 /* Фидбек */
 .feedback { text-align: center; margin: 18px 0 0; font-size: 1rem; font-weight: 700; }
 .feedback.ok, .feedback.bad { animation: rise .22s ease both; }
@@ -1218,6 +1274,7 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
      рядам — нет дыры под низкой карточкой и пустых ячеек. Герой — на всю ширину. */
   .today { columns: 2; column-gap: 14px; }
   .today > .hero { column-span: all; margin-bottom: 14px; }
+  .today > .streak-nudge { column-span: all; }
   .today > .card { break-inside: avoid; margin-bottom: 14px; }
   .today > .note { break-inside: avoid; }
   /* Текстовые экраны (статистика/повторение) не растягиваем во всю ширину */
@@ -1314,6 +1371,14 @@ button.ghost:active { transform: scale(0.94); }
 .ai-pill.on { color: #fff; background: var(--success); }
 .ai-pill.off { color: var(--muted); background: var(--line); }
 
+/* --- Сад памяти (Sprint 2): дерево сакуры из «силы памяти» FSRS-R) --- */
+.mem-garden { width: 100%; max-width: 320px; margin: 2px auto 0; }
+.garden-svg { width: 100%; height: auto; display: block; animation: fadein .4s ease both; }
+.garden-caption {
+  text-align: center; font-size: 0.875rem; font-weight: 600; color: var(--title);
+  margin: 2px 0 10px;
+}
+
 /* --- Карта памяти (тепловая решётка «силы памяти» FSRS-R) --- */
 .mem-map .mm-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(15px, 1fr));
@@ -1334,6 +1399,22 @@ html[data-theme="dark"] .mm-cell { background: hsl(calc((var(--s) - 35) * 2.1deg
 .mm-leg.strong::before { background: hsl(136deg 62% 52%); }
 .mm-leg.fading::before { background: hsl(53deg 62% 52%); }
 .mm-leg.risk::before   { background: hsl(6deg 62% 52%); }
+
+/* --- Словарь: поиск и фильтр (B1) --- */
+.hide { display: none !important; }
+.dict-search { margin: 2px 0 10px; }
+.dict-search input {
+  width: 100%; padding: 12px 16px; border: 1.5px solid var(--line);
+  border-radius: 14px; background: var(--card); color: var(--title);
+  font: inherit; font-size: 0.9375rem;
+  transition: border-color .15s, box-shadow .15s;
+}
+.dict-search input::placeholder { color: var(--muted); }
+.dict-search input:focus {
+  outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-soft);
+}
+.dict-filters { margin-bottom: 10px; }
+.dict-empty { padding: 32px 0; }
 
 /* --- Словарь: справочник изученного --- */
 .dict-grid {
