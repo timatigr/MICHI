@@ -12,6 +12,7 @@
 import asyncio
 import hashlib
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -105,6 +106,13 @@ def _prepare(text: str) -> str:
     return text
 
 
+def _tmp_for(path: Path) -> Path:
+    """Уникальный временный файл рядом с целью: два одновременных запроса на одну
+    и ту же фразу пишут в РАЗНЫЕ tmp и атомарно replace-ят (общий .tmp мог
+    повредиться при гонке)."""
+    return path.with_name(f"{path.stem}.{os.getpid()}.{time.time_ns()}.tmp")
+
+
 async def synthesize(text: str, voice: str):
     """Вернуть (путь к файлу, media_type); синтез при отсутствии в кэше."""
     voice = LEGACY_IDS.get(voice, voice)
@@ -122,7 +130,7 @@ async def synthesize(text: str, voice: str):
                     f"/audio_query?text={urllib.parse.quote(text)}&speaker={speaker}")
                 return _vv_post(f"/synthesis?speaker={speaker}", query)
             wav = await asyncio.to_thread(synth)
-            tmp = path.with_suffix(".tmp")
+            tmp = _tmp_for(path)
             tmp.write_bytes(wav)
             tmp.replace(path)
         return path, "audio/wav"
@@ -131,7 +139,7 @@ async def synthesize(text: str, voice: str):
     key = hashlib.sha1(f"{v['id']}|{text}".encode("utf-8")).hexdigest()
     path = CACHE_DIR / f"{key}.mp3"
     if not path.exists():
-        tmp = path.with_suffix(".tmp")
+        tmp = _tmp_for(path)
         await edge_tts.Communicate(
             text, v["voice"], pitch=v["pitch"], rate=v["rate"]).save(str(tmp))
         tmp.replace(path)
