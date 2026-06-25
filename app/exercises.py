@@ -10,6 +10,7 @@ import json
 import random
 from pathlib import Path
 
+from .content.counters import COUNTERS
 from .content.grammar import PARTICLE_POOL
 from .content.minimal_pairs import PAIRS as MINIMAL_PAIRS
 from .content.verbs import (
@@ -545,6 +546,31 @@ def minimal_pair_rounds(n=8):
             "meanings": [o["ru"] for o in opts],
             "answer": opts.index(target),
             "kind": p["kind"],
+        })
+    return rounds
+
+
+# ---------- Счётные суффиксы 助数詞: какой счётчик к какому предмету ----------
+
+def counter_rounds(limit=8):
+    """Раунды «счётных суффиксов»: дан предмет (эмодзи × N) — выбрать верное
+    счётное слово из 4. Чистая практика (как минимальные пары), без БД/SRS."""
+    pairs = [(c, n) for c in COUNTERS for n in c["nouns"]]
+    random.shuffle(pairs)
+    n = max(0, min(limit, len(pairs)))
+    rounds = []
+    for c, noun in pairs[:n]:
+        others = [x for x in COUNTERS if x["counter"] != c["counter"]]
+        random.shuffle(others)
+        opts = [c] + others[:3]
+        random.shuffle(opts)
+        rounds.append({
+            "noun": {"kana": noun["kana"], "ru": noun["ru"],
+                     "emoji": noun["emoji"], "tts": noun["kana"]},
+            "count": random.randint(2, 5),
+            "options": [{"counter": o["counter"], "reading": o["reading"],
+                         "meaning": o["meaning"]} for o in opts],
+            "answer": opts.index(c),
         })
     return rounds
 

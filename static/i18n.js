@@ -106,6 +106,32 @@ const EN = {
     "Learn more words and you'll be able to play the kana chain.",
   "Прервать сиритори?": "Stop shiritori?",
 
+  // --- Счётные слова 助数詞 ---
+  "Счётные слова 助数詞": "Counters 助数詞",
+  "В японском разные предметы считают разными словами: 3 кошки — 三匹, 3 книги — 三冊. Угадайте верный счётчик к предмету; это практика, на SRS не влияет.":
+    "Japanese counts different things with different words: 3 cats — 三匹, 3 books — 三冊. Guess the right counter for the object; it's practice, doesn't affect SRS.",
+  "Тренировать счётчики": "Practice counters",
+  "Каким счётным словом их сосчитать?": "Which counter do you use for them?",
+  "Счётчики освоены": "Counters mastered",
+  "Предметов сосчитано: {n} · точность {p}%": "Items counted: {n} · accuracy {p}%",
+  "Прервать тренировку счётных слов?": "Stop the counters practice?",
+  // категории-образы
+  "люди": "people", "мелкие животные": "small animals",
+  "длинные тонкие предметы": "long thin objects",
+  "плоские тонкие предметы": "flat thin objects",
+  "книги и тетради": "books and notebooks",
+  "машины и техника": "vehicles and machines",
+  "мелкие предметы": "small objects", "чашки и стаканы": "cups and glasses",
+  // предметы
+  "студент": "student", "учитель": "teacher", "ребёнок": "child",
+  "кошка": "cat", "собака": "dog", "рыба": "fish",
+  "карандаш": "pencil", "зонт": "umbrella", "банан": "banana",
+  "бумага": "paper", "рубашка": "shirt", "билет": "ticket",
+  "книга": "book", "тетрадь": "notebook", "журнал": "magazine",
+  "машина": "car", "компьютер": "computer", "телевизор": "TV",
+  "яблоко": "apple", "яйцо": "egg", "мяч": "ball",
+  "кофе": "coffee", "чай": "tea", "пиво": "beer",
+
   // --- Кузница кандзи 鍛冶 ---
   "Кузница кандзи 鍛冶": "Kanji forge 鍛冶",
   "Соберите выученный иероглиф из частей-радикалов (木 + 木 = 林). Закрепляет разбор кандзи; это практика, на SRS не влияет.":

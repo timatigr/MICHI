@@ -1221,7 +1221,7 @@ function openPlayer(mode) {
   const labels = { review: "Повторение", practice: "Работа над ошибками",
                    freshen: "Упреждающее повторение", listen: "Тренировка слуха",
                    calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
-                   shiritori: "Сиритори しりとり" };
+                   shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1268,7 +1268,9 @@ async function askClosePlayer() {
             ? tr("Прервать ковку кандзи?")
             : playerMode === "shiritori"
               ? tr("Прервать сиритори?")
-              : tr("Прервать повторение? Все ответы уже сохранены.");
+              : playerMode === "counters"
+                ? tr("Прервать тренировку счётных слов?")
+                : tr("Прервать повторение? Все ответы уже сохранены.");
   if (await confirmDialog(msg)) closePlayer();
 }
 $("#player-close").addEventListener("click", askClosePlayer);
@@ -2291,6 +2293,11 @@ async function renderReviewTab() {
       <button class="ghost mt" id="btn-shiritori">🔗 ${tr("Играть в цепочку")}</button>
     </div>
     <div class="card">
+      <h2>${tr("Счётные слова 助数詞")}</h2>
+      <p class="note" style="margin-top:0">${tr("В японском разные предметы считают разными словами: 3 кошки — 三匹, 3 книги — 三冊. Угадайте верный счётчик к предмету; это практика, на SRS не влияет.")}</p>
+      <button class="ghost mt" id="btn-counters">🔢 ${tr("Тренировать счётчики")}</button>
+    </div>
+    <div class="card">
       <h2>${tr("Каллиграфия 書道")}</h2>
       <p class="note" style="margin-top:0">${tr("Напишите выученный знак кистью — толщина линии следует за рукой. Это не проверка: можно сохранить свою работу картинкой.")}</p>
       <button class="ghost mt" id="btn-calligraphy">✍️ ${tr("Писать кистью")}</button>
@@ -2301,6 +2308,7 @@ async function renderReviewTab() {
   $("#btn-listen")?.addEventListener("click", startListening);
   $("#btn-forge")?.addEventListener("click", startForge);
   $("#btn-shiritori")?.addEventListener("click", startShiritori);
+  $("#btn-counters")?.addEventListener("click", startCounters);
   $("#btn-calligraphy")?.addEventListener("click", startCalligraphy);
 }
 
@@ -2606,6 +2614,73 @@ async function startShiritori() {
       <h2>${tr("Цепочка собрана!")}</h2>
       <p>${tr("Слов в цепочке: {n} · точность {p}%", { n: chain.length, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
       ${ribbon()}
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (done >= 5) confetti();
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+}
+
+/* ---------- Счётные суффиксы 助数詞 (Sprint: счётные слова) ----------
+   Японский считает разные предметы разными словами (3匹 / 3冊 / 3台). Дано
+   N предметов — выбрать верное счётное слово. Чистая практика, в SRS не пишет. */
+async function startCounters() {
+  const token = openPlayer("counters");
+  let data;
+  try { data = await api.get("/api/counters/rounds?limit=8"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const rounds = data.rounds;
+  let done = 0, okCount = 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (token !== sessionToken) return;
+    const r = rounds[i];
+    setProgress(done / Math.max(rounds.length, 1));
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(rounds.length - i, 1) });
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      <div class="cnt-objects" aria-hidden="true">${(r.noun.emoji + " ").repeat(r.count).trim()}</div>
+      <button class="cnt-noun jp" data-tts="${r.noun.tts}">
+        <span class="cn-kana">${escapeHtml(r.noun.kana)}</span>
+        <small>${escapeHtml(tr(r.noun.ru))} × ${r.count} 🔊</small></button>
+      <p class="question">${tr("Каким счётным словом их сосчитать?")}</p>
+      <div class="options cnt-options">
+        ${r.options.map((o, j) => `<button data-i="${j}" class="cnt-opt">
+          <span class="kbd">${j + 1}</span><span class="co-char jp">${o.counter}</span>
+          <small>${o.reading}</small></button>`).join("")}
+      </div>
+      <div class="feedback" id="fb" aria-live="polite"></div>`;
+    animateIn(playerBody);
+    speak(r.noun.tts);
+    const buttons = [...playerBody.querySelectorAll(".cnt-options button")];
+    const choice = await awaitChoice(buttons);
+    if (choice === ABORT) return;
+    const correct = choice === r.answer;
+    buttons.forEach(b => (b.disabled = true));
+    buttons[r.answer].classList.add("correct");
+    if (!correct) buttons[choice].classList.add("wrong");
+    const right = r.options[r.answer];
+    const fb = $("#fb", playerBody);
+    fb.className = `feedback ${correct ? "ok" : "bad"}`;
+    Haptics[correct ? "good" : "bad"]();
+    answerFx(correct, playerBody.querySelector(".cnt-noun"));
+    fb.innerHTML = verdict(correct, correct ? tr("Верно")
+      : tr("Правильно: {x}", { x: `<span class="jp">${right.counter}</span>` }))
+      + `<div class="cnt-why"><span class="jp">${right.counter}</span> <b>${right.reading}</b> — ${tr(right.meaning)}</div>`;
+    done++;
+    if (correct) okCount++;
+    Combo.update(correct);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
+    if (await waitClick($("#next", playerBody)) === ABORT) return;
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `<div class="result">
+      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">数</div>`}
+      <h2>${tr("Счётчики освоены")}</h2>
+      <p>${tr("Предметов сосчитано: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
       <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);

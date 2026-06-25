@@ -26,7 +26,7 @@ from .content.registry import (
     srs_items_for_lesson,
 )
 from .exercises import (
-    _mnemonics_for, item_info, kanji_forge_rounds, make_lesson_steps,
+    _mnemonics_for, counter_rounds, item_info, kanji_forge_rounds, make_lesson_steps,
     minimal_pair_rounds, review_exercise, shiritori_rounds,
 )
 
@@ -561,6 +561,14 @@ def listen_pairs(limit: int = 8):
     """Раунды дрилла «минимальные пары на слух» (おばさん/おばあさん, きて/きって).
     Чистый контент — БД не нужна; это практика, в SRS ничего не пишется."""
     return {"rounds": minimal_pair_rounds(limit)}
+
+
+# ---------- Счётные суффиксы 助数詞 (пара «предмет → счётное слово») ----------
+
+@app.get("/api/counters/rounds")
+def counters(limit: int = 8):
+    """Раунды мини-игры про счётные суффиксы. Чистый контент — БД не нужна."""
+    return {"rounds": counter_rounds(limit)}
 
 
 # ---------- Кузница кандзи: сборка из компонентов (6.3, граф знаний) ----------
