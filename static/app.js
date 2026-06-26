@@ -330,7 +330,7 @@ function ttsButton(text) {
 const Haptics = {
   prefs: {
     enabled: true,
-    tapSound: "drop_003",
+    tapSound: "off",          // звук нажатия по умолчанию выключен (раздражает); вибрация и вердикт-звуки остаются. Можно включить в ⚙
     ...JSON.parse(localStorage.getItem("michi_haptics") || "{}"),
   },
   // имя файла -> подпись для селектора (порядок = порядок в списке)
@@ -396,7 +396,7 @@ const Haptics = {
   tap() {
     if (!this.prefs.enabled) return;
     if (this.prefs.tapSound && this.prefs.tapSound !== "off")
-      this.play(this.prefs.tapSound, 0.4);
+      this.play(this.prefs.tapSound, 0.28);   // мягче, чем было (0.4), если пользователь включил
     this.vibrate(8);
   },
   good() {                       // мягкий «подтверждающий» звук на верный ответ
@@ -1052,7 +1052,7 @@ async function renderToday() {
       <h2>${tr("Прогресс курсов")}</h2>
       ${o.courses.map(c => `
       <div class="course-row">
-        <span class="cr-title">${c.title}</span>
+        <span class="cr-title">${tr(COURSE_LABEL[c.id] || c.title)}</span>
         <div class="progress"><div style="width:${Math.round(c.lessons_completed / c.lessons_total * 100)}%"></div></div>
         <span class="cr-num">${c.lessons_completed}/${c.lessons_total}</span>
       </div>`).join("")}
