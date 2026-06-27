@@ -426,6 +426,30 @@ const EN = {
     'Code is licensed under MIT. Stroke-order data — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Interface sounds — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Fonts — Inter and Noto Sans JP.',
   "Учебный проект, предоставляется «как есть», без гарантий.":
     "An educational project, provided «as is», without any warranty.",
+
+  // --- «Свиток истории» 物語 ---
+  "Свиток": "Scroll",
+  "Свиток истории": "Story scroll",
+  "К главам": "Back to chapters",
+  "Закрыть свиток?": "Close the scroll?",
+  "Свиток ещё закрыт": "The scroll is still closed",
+  "Пройдите первые уроки лексики — и откроется первая глава истории.":
+    "Complete the first vocabulary lessons to open the story's first chapter.",
+  // главы
+  "Встреча": "Meeting", "Числа и дни": "Numbers and days", "За столом": "At the table",
+  // сцены
+  "Здравствуйте.": "Hello.",
+  "Я студент.": "I'm a student.",
+  "Вы учитель?": "Are you a teacher?",
+  "Да, я учитель японского.": "Yes, I'm a Japanese teacher.",
+  "Спасибо.": "Thank you.",
+  "Сегодня понедельник.": "Today is Monday.",
+  "Сейчас утро.": "It's morning now.",
+  "Завтра вторник.": "Tomorrow is Tuesday.",
+  "Один, два, три.": "One, two, three.",
+  "Ем рис.": "I eat rice.",
+  "Пью воду.": "I drink water.",
+  "Вкусно, правда?": "Delicious, isn't it?",
 };
 
 // Индекс по «схлопнутым» пробелам: ключи в словаре можно писать одной строкой,

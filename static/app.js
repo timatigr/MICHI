@@ -1252,7 +1252,8 @@ function openPlayer(mode) {
   const labels = { review: "Повторение", practice: "Работа над ошибками",
                    freshen: "Упреждающее повторение", listen: "Тренировка слуха",
                    calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
-                   shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞" };
+                   shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞",
+                   story: "Свиток истории 物語" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1299,8 +1300,10 @@ async function askClosePlayer() {
             ? tr("Прервать ковку кандзи?")
             : playerMode === "shiritori"
               ? tr("Прервать сиритори?")
-              : playerMode === "counters"
-                ? tr("Прервать тренировку счётных слов?")
+              : playerMode === "story"
+                ? tr("Закрыть свиток?")
+                : playerMode === "counters"
+                  ? tr("Прервать тренировку счётных слов?")
                 : tr("Прервать повторение? Все ответы уже сохранены.");
   if (await confirmDialog(msg)) closePlayer();
 }
@@ -2310,6 +2313,7 @@ async function renderReviewTab() {
       <h2>${tr("Тренировки и игры")}</h2>
       <p class="note" style="margin-top:0">${tr("Практика и мини-игры — на расписание SRS не влияют.")}</p>
       <div class="practice-grid">
+        <button class="practice-tile story-tile" data-practice="story"><span class="pt-ico">📜</span><span class="pt-label">${tr("Свиток")}</span><span class="pt-jp jp">物語</span></button>
         ${TTS.available ? `<button class="practice-tile" data-practice="listen"><span class="pt-ico">🎧</span><span class="pt-label">${tr("Слух")}</span><span class="pt-jp jp">耳</span></button>` : ""}
         <button class="practice-tile" data-practice="shiritori"><span class="pt-ico">🔗</span><span class="pt-label">${tr("Сиритори")}</span><span class="pt-jp jp">しりとり</span></button>
         <button class="practice-tile" data-practice="counters"><span class="pt-ico">🔢</span><span class="pt-label">${tr("Счётчики")}</span><span class="pt-jp jp">助数詞</span></button>
@@ -2319,7 +2323,7 @@ async function renderReviewTab() {
       ${!TTS.available ? `<p class="note mt" style="color:var(--warning)">${tr("Тренировка слуха требует голос — включите озвучку в ⚙.")}</p>` : ""}
     </div>
     </div>`;
-  const PRACTICE = { listen: startListening, shiritori: startShiritori,
+  const PRACTICE = { story: startStory, listen: startListening, shiritori: startShiritori,
                      counters: startCounters, forge: startForge, calligraphy: startCalligraphy };
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
@@ -2755,6 +2759,63 @@ async function startCalligraphy() {
     speak(c.reading || c.char);
     $("#cal-back", playerBody).addEventListener("click", pick);
   };
+  pick();
+}
+
+/* ---------- «Свиток истории» 物語 (обучение через контекст) ----------
+   Растущая история: главы открываются по мере прохождения уроков и собраны
+   только из изученных слов (i+1, проверяется на сервере). Это чтение, не тест —
+   в SRS ничего не пишется. Picker глав → ридер сцен (тап по строке = озвучка). */
+async function startStory() {
+  const token = openPlayer("story");
+  let data;
+  try { data = await api.get("/api/story"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const chapters = data.chapters;
+  const unlockedCount = chapters.filter(c => c.unlocked).length;
+
+  const pick = () => {
+    if (!unlockedCount) {
+      playerBody.classList.add("center-step");
+      playerBody.innerHTML = `<div class="result"><div class="mark">巻</div>
+        <h2>${tr("Свиток ещё закрыт")}</h2>
+        <p>${tr("Пройдите первые уроки лексики — и откроется первая глава истории.")}</p>
+        <button class="primary" id="finish">${tr("Готово")}</button></div>`;
+      animateIn(playerBody);
+      waitClick($("#finish", playerBody)).then(v => { if (v !== ABORT) closePlayer(); });
+      return;
+    }
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      <p class="question">${tr("Свиток истории")} 物語</p>
+      <div class="story-chapters">${chapters.map((c, i) => `
+        <button class="story-chapter ${c.unlocked ? "" : "locked"}" data-i="${i}" ${c.unlocked ? "" : "disabled"}>
+          <span class="sc-num jp">${i + 1}</span>
+          <span class="sc-meta"><span class="sc-jp jp">${escapeHtml(c.jp)}</span><span class="sc-title">${escapeHtml(tr(c.title))}</span></span>
+          <span class="sc-state">${c.unlocked ? "›" : "🔒"}</span>
+        </button>`).join("")}</div>`;
+    animateIn(playerBody);
+    playerBody.querySelectorAll(".story-chapter:not(.locked)").forEach(b =>
+      b.addEventListener("click", () => read(chapters[+b.dataset.i])));
+  };
+
+  const read = (ch) => {
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      <div class="story-read">
+        <div class="story-head"><span class="sh-jp jp">${escapeHtml(ch.jp)}</span><h2>${escapeHtml(tr(ch.title))}</h2></div>
+        <div class="story-scenes">${ch.scenes.map(s => `
+          <div class="story-scene">
+            <button class="story-jp jp" data-tts="${escAttr(s.tts)}">${escapeHtml(s.jp)} <span class="sj-spk">🔊</span></button>
+            <div class="story-ru">${escapeHtml(tr(s.ru))}</div>
+          </div>`).join("")}</div>
+        <button class="ghost mt" id="story-back">← ${tr("К главам")}</button>
+      </div>`;
+    animateIn(playerBody);
+    $("#story-back", playerBody).addEventListener("click", pick);
+  };
+
   pick();
 }
 

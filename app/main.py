@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from . import ai_tutor, db, gamification, identity, ratelimit, srs_engine, tts
+from .content import story as story_content
 from .content.seasons import current_sekki
 from .content.registry import (
     COURSES, GATE_PASS, GRAMMAR_BY_ID, GRAMMAR_UNITS, KANA_BY_CHAR, KANJI_BY_CHAR,
@@ -615,6 +616,23 @@ def shiritori(request: Request, limit: int = 8):
         conn.close()
     words = [VOCAB_BY_ID[r["item_id"]] for r in rows if r["item_id"] in VOCAB_BY_ID]
     return {"rounds": shiritori_rounds(words, limit)}
+
+
+# ---------- «Свиток истории» 物語 (обучение через контекст, i+1) ----------
+
+@app.get("/api/story")
+def story(request: Request):
+    """Главы истории с их статусом: глава открыта, когда пройдены её уроки
+    (requires), и собрана только из изученных слов (i+1). Сцены раскрываются
+    только у открытых глав. Чистый контент: БД нужна лишь чтобы узнать пройденные
+    уроки; в SRS ничего не пишется."""
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        statuses = _lesson_statuses(conn)
+    finally:
+        conn.close()
+    completed = {lid for lid, st in statuses.items() if st["status"] == "completed"}
+    return {"chapters": story_content.chapters_for(completed)}
 
 
 # ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ----------
