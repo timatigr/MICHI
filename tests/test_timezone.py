@@ -26,6 +26,25 @@ def test_day_sql_buckets_by_user_local_midnight(conn):
     assert day(-60) == "2026-06-19"      # UTC-1 — ещё 22:30 того же дня
 
 
+def test_hour_sql_buckets_by_user_local_time(conn):
+    # Повтор в 02:00 UTC — «ночь» только в поясах около UTC; для UTC+4 это утро.
+    # Подпирает «ночную сову» и «XP за сегодня» в геймификации (per-user TZ).
+    conn.execute("INSERT INTO srs_cards(item_type,item_id,fsrs,state) "
+                 "VALUES('kana','あ','{}',1)")
+    conn.execute("INSERT INTO reviews(card_id,reviewed_at,rating) "
+                 "VALUES(1,'2026-06-19T02:00:00+00:00',3)")
+
+    def hour(tz):
+        return conn.execute(
+            f"SELECT CAST({srs_engine.hour_sql('reviewed_at', tz)} AS INTEGER) AS h "
+            "FROM reviews"
+        ).fetchone()["h"]
+
+    assert hour(0) == 2          # UTC — 02:00 (ночь)
+    assert hour(240) == 6        # UTC+4 — 06:00 (уже утро)
+    assert hour(-180) == 23      # UTC-3 — 23:00 предыдущего дня
+
+
 def test_local_today_modes():
     assert srs_engine.local_today() == dt.datetime.now().date()   # None → серверные сутки
     assert isinstance(srs_engine.local_today(180), dt.date)       # со смещением — тоже дата

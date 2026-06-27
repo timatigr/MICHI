@@ -79,12 +79,22 @@ def _secret_key_warning():
     return None
 
 
+def _enforce_secret_key():
+    """Fail-fast: в прод-режиме (MICHI_COOKIE_SECURE=1) без явного MICHI_SECRET_KEY
+    сервер не стартует. Раньше это был лишь WARNING, но цена тихого пропуска
+    слишком велика: при потере тома (data/secret.key) или рестарте на read-only ФС
+    (эфемерный ключ процесса) подпись cookie меняется — и ВСЕ пользователи разом
+    теряют доступ к своему прогрессу. Лучше громко не подняться, чем молча
+    разлогинить всех."""
+    msg = _secret_key_warning()
+    if msg:
+        raise RuntimeError(msg)
+
+
 @asynccontextmanager
 async def lifespan(_app):
+    _enforce_secret_key()   # прод без секрета подписи cookie — отказ старта (см. выше)
     db.init_db()
-    warning = _secret_key_warning()
-    if warning:
-        log.warning(warning)
     task = asyncio.create_task(_cleanup_loop()) if _CLEANUP_ENABLED else None
     try:
         yield
@@ -283,7 +293,7 @@ def overview(request: Request):
         return {
             "srs": c,
             "streak": _streak(conn, tz),
-            "xp": gamification.xp_summary(conn),
+            "xp": gamification.xp_summary(conn, tz),
             "today": {
                 "reviews": today_row["total"],
                 "accuracy": round(today_row["correct"] / today_row["total"] * 100)
@@ -833,10 +843,11 @@ def prefs_set(patch: dict[str, str | None], request: Request):
 
 @app.get("/api/achievements")
 def achievements(request: Request):
+    tz = _tz_offset_min(request)
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
-        data = gamification.achievements(conn, _streak(conn, _tz_offset_min(request)))
-        data["xp"] = gamification.xp_summary(conn)
+        data = gamification.achievements(conn, _streak(conn, tz), tz)
+        data["xp"] = gamification.xp_summary(conn, tz)
         return data
     finally:
         conn.close()

@@ -57,3 +57,18 @@ def test_achievements_streak_predicate(conn):
     by = {i["id"]: i["unlocked"] for i in a["items"]}
     assert by["streak_3"] and by["streak_7"]
     assert not by["streak_30"]
+
+
+def test_night_owl_uses_user_timezone(conn):
+    # Повтор в 02:00 UTC: «ночь» (<5 ч) только в поясах около UTC; для UTC+4 —
+    # уже 06:00. Достижение «ночная сова» должно считаться по дню пользователя,
+    # а не сервера (F1: рассинхрон TZ в геймификации).
+    with conn:
+        cur = conn.execute(
+            "INSERT INTO srs_cards(item_type,item_id,fsrs,state,reps) "
+            "VALUES('kana','あ','{}',2,1)")
+        conn.execute(
+            "INSERT INTO reviews(card_id,reviewed_at,rating,correct) "
+            "VALUES(?, '2026-06-19T02:00:00+00:00', 3, 1)", (cur.lastrowid,))
+    assert gamification._stats(conn, 0, tz_offset_min=0)["night_review"] is True
+    assert gamification._stats(conn, 0, tz_offset_min=240)["night_review"] is False

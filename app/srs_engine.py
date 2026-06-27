@@ -50,6 +50,15 @@ def day_sql(col, tz_offset_min=None):
     return f"date({col}, '{int(tz_offset_min):+d} minutes')"
 
 
+def hour_sql(col, tz_offset_min=None):
+    """SQLite-выражение «час столбца (UTC ISO) по локальному времени пользователя»
+    (строка '00'–'23'). Симметрично day_sql — для «ночных» предикатов
+    геймификации, чтобы «ночная сова» считалась по местной ночи, а не серверной."""
+    if tz_offset_min is None:
+        return f"strftime('%H', {col}, 'localtime')"
+    return f"strftime('%H', {col}, '{int(tz_offset_min):+d} minutes')"
+
+
 def make_scheduler(settings):
     return Scheduler(desired_retention=float(settings.get("desired_retention", 0.9)))
 

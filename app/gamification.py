@@ -8,6 +8,7 @@
 """
 import math
 
+from . import srs_engine
 from .content.registry import COURSES
 
 XP_PER_REVIEW = 2     # повторение SRS (8.1: за повторения не меньше, чем за новое)
@@ -19,8 +20,12 @@ def _scalar(conn, sql, params=()):
     return row[0] if row and row[0] is not None else 0
 
 
-def _stats(conn, streak):
-    """Сводка по журналам — основа и для XP, и для предикатов достижений."""
+def _stats(conn, streak, tz_offset_min=None):
+    """Сводка по журналам — основа и для XP, и для предикатов достижений.
+
+    Дневные предикаты («лучшая точность за день», «ночная сова») считаются по
+    локальным суткам пользователя (tz_offset_min из X-TZ-Offset) — как стрик и
+    очередь SRS; иначе на публичном хостинге они жили бы по дню сервера (UTC)."""
     last = {c["id"]: (c["lesson_ids"][-1] if c["lesson_ids"] else None) for c in COURSES}
 
     def done(lid):
@@ -28,9 +33,11 @@ def _stats(conn, streak):
             conn, "SELECT COUNT(*) FROM lesson_progress WHERE lesson_id=? "
                   "AND status='completed'", (lid,))
 
+    rev_day = srs_engine.day_sql("reviewed_at", tz_offset_min)
+    rev_hour = srs_engine.hour_sql("reviewed_at", tz_offset_min)
     best_acc = _scalar(conn,
         "SELECT COALESCE(MAX(acc),0) FROM (SELECT SUM(correct)*100.0/COUNT(*) AS acc "
-        "FROM reviews GROUP BY date(reviewed_at,'localtime') HAVING COUNT(*) >= 20)")
+        f"FROM reviews GROUP BY {rev_day} HAVING COUNT(*) >= 20)")
     return {
         "lessons_completed": _scalar(conn,
             "SELECT COUNT(*) FROM lesson_progress WHERE status='completed'"),
@@ -48,8 +55,7 @@ def _stats(conn, streak):
             "WHERE item_type LIKE 'vocab%' AND reps>0"),
         "best_day_accuracy": round(best_acc),
         "night_review": _scalar(conn,
-            "SELECT COUNT(*) FROM reviews WHERE CAST(strftime('%H',reviewed_at,'localtime') "
-            "AS INTEGER) < 5") > 0,
+            f"SELECT COUNT(*) FROM reviews WHERE CAST({rev_hour} AS INTEGER) < 5") > 0,
         "hiragana_done": done(last.get("hiragana")),
         "katakana_done": done(last.get("katakana")),
         "streak": streak,
@@ -66,14 +72,20 @@ def _level(total_xp):
             "percent": round((total_xp - floor_xp) / span * 100) if span else 0}
 
 
-def xp_summary(conn):
-    today = "date(reviewed_at,'localtime') = date('now','localtime')"
+def xp_summary(conn, tz_offset_min=None):
+    # «Сегодня» — по локальным суткам пользователя (как стрик/очередь SRS), иначе
+    # на публичном хостинге дневная цель и XP за день жили бы по дню сервера (UTC)
+    # и расходились бы с «повторено сегодня» на главном экране.
+    today_iso = srs_engine.local_today(tz_offset_min).isoformat()
+    rev_day = srs_engine.day_sql("reviewed_at", tz_offset_min)
+    comp_day = srs_engine.day_sql("completed_at", tz_offset_min)
     reviews = _scalar(conn, "SELECT COUNT(*) FROM reviews")
-    reviews_today = _scalar(conn, f"SELECT COUNT(*) FROM reviews WHERE {today}")
+    reviews_today = _scalar(
+        conn, f"SELECT COUNT(*) FROM reviews WHERE {rev_day} = ?", (today_iso,))
     lessons = _scalar(conn, "SELECT COUNT(*) FROM lesson_progress WHERE status='completed'")
-    lessons_today = _scalar(conn,
-        "SELECT COUNT(*) FROM lesson_progress WHERE status='completed' "
-        "AND date(completed_at,'localtime') = date('now','localtime')")
+    lessons_today = _scalar(
+        conn, "SELECT COUNT(*) FROM lesson_progress WHERE status='completed' "
+        f"AND {comp_day} = ?", (today_iso,))
     total = reviews * XP_PER_REVIEW + lessons * XP_PER_LESSON
     today_xp = reviews_today * XP_PER_REVIEW + lessons_today * XP_PER_LESSON
     return {"total": total, "today": today_xp, **_level(total)}
@@ -111,9 +123,9 @@ ACHIEVEMENTS = [
 ]
 
 
-def achievements(conn, streak):
-    s = _stats(conn, streak)
-    s["level"] = xp_summary(conn)["level"]
+def achievements(conn, streak, tz_offset_min=None):
+    s = _stats(conn, streak, tz_offset_min)
+    s["level"] = xp_summary(conn, tz_offset_min)["level"]
     items = [{"id": aid, "title": title, "desc": desc, "icon": icon,
               "tier": _TIER[tier], "unlocked": bool(pred(s))}
              for aid, title, desc, icon, tier, pred in ACHIEVEMENTS]
