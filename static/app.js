@@ -2298,7 +2298,7 @@ async function renderReviewTab() {
         <div><b>${o.srs.reviews_done_today}</b><span>${tr("повторено сегодня")}</span></div>
       </div>
       ${total
-        ? `<button class="primary mt" id="btn-start">${tr("Начать сессию · {n} · ≈{m} мин", { n: total, m: estMin })}</button>`
+        ? `<button class="primary mt cta-glow" id="btn-start">${tr("Начать сессию · {n} · ≈{m} мин", { n: total, m: estMin })}</button>`
         : `<p class="note center mt">${tr("Очередь пуста — всё повторено! Новые карточки появятся\n           после уроков, повторения — по расписанию FSRS.")}</p>`}
     </div>
     ${o.mistakes_today ? `<div class="card">
