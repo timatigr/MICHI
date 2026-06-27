@@ -657,6 +657,19 @@ function animateIn(el, dir = 0) {
   el.classList.add(cls);
 }
 
+/* Плавный счёт числа 0→to (ease-out cubic). Под reduced-motion — конечное сразу. */
+function countUp(el, to, dur = 650) {
+  if (!el) return;
+  to = +to || 0;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = to; return; }
+  const t0 = performance.now();
+  (function f(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(f);
+  })(t0);
+}
+
 /* ---------- Скелетоны загрузки ----------
    Мерцающие плейсхолдеры под геометрию экрана вместо текста «Загрузка…»:
    воспринимается быстрее и не даёт сдвига макета (контент приходит на готовый
@@ -970,7 +983,7 @@ async function renderToday() {
   if (romajiNote) localStorage.setItem("michi_romaji_note", "1");
 
   view.innerHTML = `
-    <div class="today">
+    <div class="today stagger">
     <div class="hero">
       <div class="hero-top">
         <div>
@@ -1066,6 +1079,15 @@ async function renderToday() {
     localStorage.setItem("michi_goal_day", todayKey);
     confetti();
   }
+  // Награда-анимация: уровень-бар заливается, кольцо цели «свайпит», XP считается.
+  // Запускаем на следующем кадре, выставив старт из 0 → CSS-переходы оживают.
+  requestAnimationFrame(() => {
+    const bar = view.querySelector(".lvl-bar > div");
+    if (bar) { const w = bar.style.width; bar.style.width = "0%"; void bar.offsetWidth; bar.style.width = w; }
+    const ring = view.querySelector(".goal-ring");
+    if (ring && !goalMet) { ring.style.setProperty("--p", "0"); void ring.offsetWidth; ring.style.setProperty("--p", goalPct); }
+    if (!goalMet) countUp(view.querySelector(".goal-inner b"), todayXp);
+  });
   $("#btn-review")?.addEventListener("click", startReview);
   $("#btn-lesson")?.addEventListener("click", () => startLesson(next.id));
   $("#btn-freshen")?.addEventListener("click", startFreshen);
@@ -2267,7 +2289,7 @@ async function renderReviewTab() {
   const total = o.srs.due + o.srs.new_available;
   const estMin = Math.max(1, Math.round(total * 0.15));
   view.innerHTML = `
-    <div class="review-wrap">
+    <div class="review-wrap stagger">
     <div class="card">
       <h2>${tr("Очередь на сегодня")}</h2>
       <div class="stat-trio">
@@ -2848,7 +2870,7 @@ async function renderDict() {
     </button>`;
   };
 
-  view.innerHTML = `<div class="dict-wrap">`
+  view.innerHTML = `<div class="dict-wrap stagger">`
     + controls
     + `<div class="dict-aggregate">` + memMap + gallery + `</div>`
     + `<p class="dict-empty note center" hidden>${tr("Ничего не найдено")}</p>`
@@ -2923,7 +2945,7 @@ async function renderStats() {
   const c = s.cards;
   const hasActivity = s.activity.some(d => d.reviews > 0);
   view.innerHTML = `
-    <div class="stats-wrap">
+    <div class="stats-wrap stagger">
     <div class="card">
       <h2>${tr("Мои карточки")}</h2>
       <div class="stat-trio">
