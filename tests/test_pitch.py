@@ -55,3 +55,27 @@ def test_drop_within_mora_range():
 def test_coverage_is_substantial():
     """Покрытие должно быть значимым (иначе матчинг сломался)."""
     assert len(PITCH) >= 200, f"слишком мало слов с акцентом: {len(PITCH)}"
+
+
+def test_pitch_rounds_shape_and_answer():
+    from app.exercises import _PITCH_PATTERNS, pitch_rounds
+    rounds = pitch_rounds(limit=8)
+    assert 1 <= len(rounds) <= 8
+    for r in rounds:
+        assert r["kana"] and r["tts"] and r["ru"]
+        assert set(r["options"]) == set(_PITCH_PATTERNS)        # все 4 варианта
+        assert r["options"][r["answer"]] == r["pitch"]["pattern"]  # ответ верен
+        assert r["pitch"]["moras"] and "highs" in r["pitch"]    # контур для показа
+
+
+def test_pitch_rounds_limit_respected():
+    from app.exercises import pitch_rounds
+    assert len(pitch_rounds(limit=3)) <= 3
+
+
+def test_pitch_drill_endpoint(client):
+    r = client.get("/api/pitch/rounds?limit=5")
+    assert r.status_code == 200
+    rounds = r.json()["rounds"]
+    assert 1 <= len(rounds) <= 5
+    assert all(r0["options"][r0["answer"]] == r0["pitch"]["pattern"] for r0 in rounds)

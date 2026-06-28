@@ -1253,7 +1253,7 @@ function openPlayer(mode) {
                    freshen: "Упреждающее повторение", listen: "Тренировка слуха",
                    calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
                    shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞",
-                   story: "Свиток истории 物語" };
+                   pitch: "Высотное ударение 高低", story: "Свиток истории 物語" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1302,6 +1302,8 @@ async function askClosePlayer() {
               ? tr("Прервать сиритори?")
               : playerMode === "story"
                 ? tr("Закрыть свиток?")
+                : playerMode === "pitch"
+                  ? tr("Прервать тренировку тона?")
                 : playerMode === "counters"
                   ? tr("Прервать тренировку счётных слов?")
                 : tr("Прервать повторение? Все ответы уже сохранены.");
@@ -2343,6 +2345,7 @@ async function renderReviewTab() {
       <div class="practice-grid">
         <button class="practice-tile story-tile" data-practice="story"><span class="pt-ico">📜</span><span class="pt-label">${tr("Свиток")}</span><span class="pt-jp jp">物語</span></button>
         ${TTS.available ? `<button class="practice-tile" data-practice="listen"><span class="pt-ico">🎧</span><span class="pt-label">${tr("Слух")}</span><span class="pt-jp jp">耳</span></button>` : ""}
+        <button class="practice-tile" data-practice="pitch"><span class="pt-ico">📈</span><span class="pt-label">${tr("Тон")}</span><span class="pt-jp jp">高低</span></button>
         <button class="practice-tile" data-practice="shiritori"><span class="pt-ico">🔗</span><span class="pt-label">${tr("Сиритори")}</span><span class="pt-jp jp">しりとり</span></button>
         <button class="practice-tile" data-practice="counters"><span class="pt-ico">🔢</span><span class="pt-label">${tr("Счётчики")}</span><span class="pt-jp jp">助数詞</span></button>
         <button class="practice-tile" data-practice="forge"><span class="pt-ico">🔨</span><span class="pt-label">${tr("Кузница")}</span><span class="pt-jp jp">鍛冶</span></button>
@@ -2352,7 +2355,8 @@ async function renderReviewTab() {
     </div>
     </div>`;
   const PRACTICE = { story: startStory, listen: startListening, shiritori: startShiritori,
-                     counters: startCounters, forge: startForge, calligraphy: startCalligraphy };
+                     counters: startCounters, forge: startForge, calligraphy: startCalligraphy,
+                     pitch: startPitch };
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
   view.querySelector(".practice-grid")?.addEventListener("click", e => {
@@ -2730,6 +2734,73 @@ async function startCounters() {
       ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">数</div>`}
       <h2>${tr("Счётчики освоены")}</h2>
       <p>${tr("Предметов сосчитано: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (done >= 5) confetti();
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+}
+
+/* ---------- Дрилл высотного ударения 高低 (USP: произношение) ----------
+   Дано слово (кана + озвучка) — выбрать тип акцента из 4 (平板/頭高/中高/尾高).
+   Контур показывается ПОСЛЕ ответа (активное распознавание, не подсказка).
+   Практика — в SRS ничего не пишет. */
+async function startPitch() {
+  const token = openPlayer("pitch");
+  let data;
+  try { data = await api.get("/api/pitch/rounds?limit=8"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const rounds = data.rounds;
+  let done = 0, okCount = 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (token !== sessionToken) return;
+    const r = rounds[i];
+    setProgress(done / Math.max(rounds.length, 1));
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(rounds.length - i, 1) });
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      <div class="big-kana small" data-tts="${escAttr(r.tts)}">${escapeHtml(r.kana)}</div>
+      <div class="word-ru">${tr(r.ru)}</div>
+      ${ttsButton(r.tts)}
+      <p class="question">${tr("Какой у слова тон?")}</p>
+      <div class="options pitch-options">
+        ${r.options.map((o, j) => `<button data-i="${j}" class="cnt-opt pi-opt">
+          <span class="kbd">${j + 1}</span><span class="co-char jp">${PITCH_JP[o]}</span>
+          <small>${tr(PITCH_DESC[o])}</small></button>`).join("")}
+      </div>
+      <div class="feedback" id="fb" aria-live="polite"></div>`;
+    animateIn(playerBody);
+    speak(r.tts);
+    const buttons = [...playerBody.querySelectorAll(".pitch-options button")];
+    const choice = await awaitChoice(buttons);
+    if (choice === ABORT) return;
+    const correct = choice === r.answer;
+    buttons.forEach(b => (b.disabled = true));
+    buttons[r.answer].classList.add("correct");
+    if (!correct) buttons[choice].classList.add("wrong");
+    const fb = $("#fb", playerBody);
+    fb.className = `feedback ${correct ? "ok" : "bad"}`;
+    Haptics[correct ? "good" : "bad"]();
+    answerFx(correct, playerBody.querySelector(".big-kana"));
+    // Раскрываем контур слова — главное обучающее звено: связать тип со звучанием
+    fb.innerHTML = verdict(correct, correct ? tr("Верно")
+      : tr("Правильно: {x}", { x: PITCH_JP[r.options[r.answer]] }))
+      + pitchHtml(r.pitch);
+    done++;
+    if (correct) okCount++;
+    Combo.update(correct);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
+    if (await waitClick($("#next", playerBody)) === ABORT) return;
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `<div class="result">
+      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">高</div>`}
+      <h2>${tr("Тон освоен")}</h2>
+      <p>${tr("Слов разобрано: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
       <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);

@@ -433,6 +433,13 @@ const EN = {
   "спад в начале": "drop at start",
   "спад в середине": "drop in middle",
   "спад в конце": "drop at end",
+  // дрилл «Тон»
+  "Тон": "Pitch",
+  "Высотное ударение 高低": "Pitch accent 高低",
+  "Какой у слова тон?": "What's the word's pitch?",
+  "Прервать тренировку тона?": "Stop the pitch drill?",
+  "Тон освоен": "Pitch mastered",
+  "Слов разобрано: {n} · точность {p}%": "Words covered: {n} · accuracy {p}%",
 
   // --- «Свиток истории» 物語 ---
   "Свиток": "Scroll",

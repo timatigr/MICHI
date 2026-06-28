@@ -30,7 +30,7 @@ from .content.registry import (
 )
 from .exercises import (
     _mnemonics_for, counter_rounds, item_info, kanji_forge_rounds, make_lesson_steps,
-    minimal_pair_rounds, review_exercise, shiritori_rounds,
+    minimal_pair_rounds, pitch_rounds, review_exercise, shiritori_rounds,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -583,6 +583,12 @@ def listen_pairs(limit: int = 8):
 def counters(limit: int = 8):
     """Раунды мини-игры про счётные суффиксы. Чистый контент — БД не нужна."""
     return {"rounds": counter_rounds(limit)}
+
+
+@app.get("/api/pitch/rounds")
+def pitch_drill(limit: int = 8):
+    """Раунды дрилла высотного ударения 高低. Чистый контент — БД не нужна."""
+    return {"rounds": pitch_rounds(limit)}
 
 
 # ---------- Кузница кандзи: сборка из компонентов (6.3, граф знаний) ----------

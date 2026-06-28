@@ -604,6 +604,32 @@ async def main():
             await cdp.js("document.querySelector('#player').classList.remove('open')")
             await settle(150)
 
+            # --- Дрилл «Тон 高低»: реальный startPitch с подменённым api.get ---
+            await cdp.js(
+                "window.__realApiGet2=api.get;"
+                "api.get=async p=>p.indexOf('/api/pitch/rounds')===0?({rounds:["
+                "{kana:'あなた',romaji:'anata',ru:'ты, вы',tts:'あなた',"
+                "pitch:{drop:2,pattern:'nakadaka',moras:['あ','な','た'],"
+                "highs:[false,true,false],particle_high:false},"
+                "options:['heiban','nakadaka','atamadaka','odaka'],answer:1}]})"
+                ":window.__realApiGet2(p)")
+            await cdp.fire("startPitch()")
+            await settle(800)
+            await cdp.shot("m_pitch_drill")
+            pd_opts = await cdp.js("document.querySelectorAll('#player-body .pitch-options button').length")
+            print(f"pitch drill: options={pd_opts}")
+            if pd_opts != 4:
+                problems.append(f"дрилл тона: вариантов {pd_opts} (ждали 4)")
+            await cdp.js("document.querySelectorAll('#player-body .pitch-options button')[1].click()")
+            await settle(500)
+            pd_reveal = await cdp.js("!!document.querySelector('#player-body .feedback .pitch')")
+            print(f"pitch drill reveal contour after answer: {pd_reveal}")
+            if not pd_reveal:
+                problems.append("после ответа в дрилле тона не раскрылся контур")
+            await cdp.js("api.get=window.__realApiGet2;"
+                         "document.querySelector('#player').classList.remove('open')")
+            await settle(150)
+
             # --- Combo-счётчик серии в шапке плеера ---
             await cdp.js("openPlayer('review');Combo.update(true);Combo.update(true);Combo.update(true)")
             await settle(150)

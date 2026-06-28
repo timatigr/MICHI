@@ -14,6 +14,7 @@ from .content.counters import COUNTERS
 from .content.grammar import PARTICLE_POOL
 from .content.minimal_pairs import PAIRS as MINIMAL_PAIRS
 from .content.pitch import pitch_for
+from .content.pitch_data import PITCH
 from .content.verbs import (
     FORM_LABEL as VERB_FORM_LABEL, VERBS, conjugate as conjugate_verb,
     distractors as verb_distractors,
@@ -573,6 +574,32 @@ def counter_rounds(limit=8):
                          "meaning": o["meaning"]} for o in opts],
             "answer": opts.index(c),
         })
+    return rounds
+
+
+_PITCH_PATTERNS = ["heiban", "atamadaka", "nakadaka", "odaka"]
+
+
+def pitch_rounds(limit=8):
+    """Раунды дрилла высотного ударения 高低: дано слово (кана + озвучка) — выбрать
+    его тип акцента из четырёх (平板/頭高/中高/尾高). Контур отдаётся для показа
+    ПОСЛЕ ответа. Только слова с надёжными данными акцента; практика, не SRS."""
+    ids = [wid for wid in PITCH if wid in VOCAB_BY_ID]
+    random.shuffle(ids)
+    rounds = []
+    for wid in ids:
+        p = pitch_for(wid)
+        if not p:
+            continue
+        w = VOCAB_BY_ID[wid]
+        opts = _PITCH_PATTERNS[:]
+        random.shuffle(opts)
+        rounds.append({
+            "kana": w["kana"], "romaji": w["romaji"], "ru": w["ru"], "tts": w["kana"],
+            "pitch": p, "options": opts, "answer": opts.index(p["pattern"]),
+        })
+        if len(rounds) >= limit:
+            break
     return rounds
 
 
