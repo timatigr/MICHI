@@ -4,7 +4,7 @@
 Pitch-акцент (高低アクセント) лексики N5: word_id -> позиция спада тона
 (номер моры, после которой тон падает; 0 = 平板 heiban, без спада).
 Источник — открытый датасет kanjium; взяты только однозначные по чтению
-слова. Покрытие: 262/401.
+слова. Покрытие: 285/428.
 """
 PITCH = {
     'konnichiwa': 5,
@@ -269,4 +269,27 @@ PITCH = {
     'daisuki': 1,
     'taisetsu': 0,
     'kantan': 0,
+    'shakai': 1,
+    'yakusoku': 0,
+    'yoyaku': 0,
+    'setsumei': 0,
+    'shoukai': 0,
+    'keiken': 0,
+    'shuukan': 0,
+    'tsutaeru': 0,
+    'kuraberu': 0,
+    'mitsukaru': 0,
+    'maniau': 3,
+    'tetsudau': 3,
+    'sagasu': 0,
+    'todokeru': 3,
+    'naosu': 2,
+    'fukuzatsu': 0,
+    'anzen': 0,
+    'teinei': 1,
+    'tokubetsu': 0,
+    'tatoeba': 2,
+    'tokuni': 1,
+    'kyuuni': 0,
+    'yappari': 3,
 }
