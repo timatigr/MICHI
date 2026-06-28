@@ -1597,6 +1597,7 @@ button.ghost:active { transform: scale(0.94); }
 }
 .ai-pill.on { color: #fff; background: var(--success); }
 .ai-pill.off { color: #574d70; background: var(--line); }
+html[data-theme="dark"] .ai-pill.off { color: #B3A9C6; }   /* светлее под тёмный --line (AA) */
 
 /* --- Сад памяти (Sprint 2): дерево сакуры из «силы памяти» FSRS-R) --- */
 .mem-garden { width: 100%; max-width: 320px; margin: 2px auto 0; }

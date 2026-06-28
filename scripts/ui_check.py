@@ -757,17 +757,26 @@ async def main():
                         problems.append(f"a11y [{label}] {v['id']} ({v['impact']}) ×{v['n']}")
                 return viol
 
+            async def axe_all(suffix):
+                # Одна навигация (грузит тему из localStorage), дальше — вкладки
+                # SPA без перезагрузки, поэтому тема держится весь проход.
+                await cdp.send("Page.navigate", url=ORIGIN + "/"); await settle(1500)
+                await axe_scan("today" + suffix)
+                await cdp.js("document.querySelector('nav.tabs button[data-view=lessons]').click()")
+                await settle(900); await axe_scan("lessons" + suffix)
+                await cdp.js("openSettings()"); await settle(600); await axe_scan("settings" + suffix)
+                await cdp.js("document.getElementById('set-close').click()"); await settle(300)
+                await cdp.js("document.querySelector('nav.tabs button[data-view=dict]').click()")
+                await settle(900); await axe_scan("dict" + suffix)
+                await cdp.js("document.querySelector('nav.tabs button[data-view=stats]').click()")
+                await settle(900); await axe_scan("stats" + suffix)
+
             await cdp.metrics(390, 844, dpr=2, mobile=True)
-            await cdp.send("Page.navigate", url=ORIGIN + "/"); await settle(1500)
-            await axe_scan("today")
-            await cdp.js("document.querySelector('nav.tabs button[data-view=lessons]').click()")
-            await settle(900); await axe_scan("lessons")
-            await cdp.js("openSettings()"); await settle(600); await axe_scan("settings")
-            await cdp.js("document.getElementById('set-close').click()"); await settle(300)
-            await cdp.js("document.querySelector('nav.tabs button[data-view=dict]').click()")
-            await settle(900); await axe_scan("dict")
-            await cdp.js("document.querySelector('nav.tabs button[data-view=stats]').click()")
-            await settle(900); await axe_scan("stats")
+            await cdp.js("localStorage.setItem('michi_theme','light')")
+            await axe_all("")
+            await cdp.js("localStorage.setItem('michi_theme','dark')")
+            await axe_all(" (dark)")
+            await cdp.js("localStorage.setItem('michi_theme','light')")   # вернуть тему
 
             # --- Десктоп today ---
             await cdp.metrics(1100, 860, dpr=1, mobile=False)
