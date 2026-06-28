@@ -40,12 +40,19 @@ def shell_files(sw_text):
 
 
 def compute_version(sw_text):
-    """12-символьный hex-хэш по именам и содержимому файлов оболочки."""
+    """12-символьный hex-хэш по именам и содержимому файлов оболочки.
+
+    Концы строк нормализуются (CRLF/CR → LF) перед хэшированием: на Windows
+    autocrlf переписывает рабочую копию в CRLF при checkout, а прод-Docker (Linux)
+    держит LF — без нормализации один и тот же контент давал бы разный хэш, и
+    версия «съезжала» бы при переключении веток. Поведение JS/CSS от концов строк
+    не зависит, поэтому из-за них незачем сбрасывать кэш."""
     h = hashlib.sha256()
     for f in shell_files(sw_text):
         h.update(f.name.encode("utf-8"))
         h.update(b"\0")
-        h.update(f.read_bytes())
+        data = f.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        h.update(data)
         h.update(b"\0")
     return h.hexdigest()[:12]
 
