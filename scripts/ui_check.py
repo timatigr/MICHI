@@ -619,6 +619,56 @@ async def main():
                 problems.append("галерея личных ассоциаций не показалась")
             await cdp.js("localStorage.removeItem('michi_mnemo_custom')")
 
+            # --- «Свиток истории» 物語: рендер ОТКРЫТОЙ главы ---
+            # Эндпоинт и данные открытой главы покрыты юнит-тестами; здесь
+            # проверяем именно фронт-рендер (пикер + ридер + озвучка) — гоняем
+            # реальный startStory(), подменив api.get синтетическим ответом с
+            # одной открытой и одной закрытой главой (в БД ничего не пишем).
+            await cdp.js(
+                "window.__realApiGet=api.get;"
+                "api.get=async p=>p==='/api/story'?({chapters:["
+                "{id:'ch1',jp:'であい',title:'Встреча',unlocked:true,scenes:["
+                "{jp:'こんにちは。',reading:'こんにちは。',ru:'Здравствуйте.',tts:'こんにちは。'},"
+                "{jp:'わたしはがくせいです。',reading:'わたしはがくせいです。',ru:'Я студент.',tts:'わたしはがくせいです。'}]},"
+                "{id:'ch2',jp:'すうじ',title:'Числа и дни',unlocked:false,scenes:[]}]})"
+                ":window.__realApiGet(p)")
+            await cdp.fire("startStory()")
+            await settle(900)
+            await cdp.shot("m_story_pick")
+            st_chs = await cdp.js("document.querySelectorAll('#player-body .story-chapter').length")
+            st_unl = await cdp.js("document.querySelectorAll('#player-body .story-chapter:not(.locked)').length")
+            print(f"story picker: chapters={st_chs} unlocked={st_unl}")
+            if st_chs != 2 or st_unl != 1:
+                problems.append(f"пикер истории: глав={st_chs}, открытых={st_unl} (ждали 2/1)")
+            # вход в открытую главу → ридер сцен
+            await cdp.js("document.querySelector('#player-body .story-chapter:not(.locked)').click()")
+            await settle(700)
+            await cdp.shot("m_story_read")
+            st_scenes = await cdp.js("document.querySelectorAll('#player-body .story-scene').length")
+            st_jp = await cdp.js("(document.querySelector('#player-body .story-jp')||{}).textContent||''")
+            st_tts = await cdp.js("!!document.querySelector('#player-body .story-jp[data-tts]')")
+            st_spk = await cdp.js("!!document.querySelector('#player-body .story-jp .sj-spk')")
+            no_latin = not any("a" <= c.lower() <= "z" for c in st_jp)
+            print(f"story reader: scenes={st_scenes} firstjp={st_jp!r} tts={st_tts} spk={st_spk}")
+            if st_scenes != 2:
+                problems.append(f"ридер истории: сцен={st_scenes} (ждали 2)")
+            if not (st_tts and st_spk):
+                problems.append("в сцене истории нет озвучки (data-tts/🔊)")
+            if not st_jp.strip() or not no_latin:
+                problems.append(f"японская строка сцены пустая/с латиницей-id: {st_jp!r}")
+            info_st = json.loads(await cdp.js(OVERFLOW_JS))
+            print(f"overflow (story read): vw={info_st['vw']} scrollWidth={info_st['scroll']}")
+            for b in info_st["bad"]:
+                problems.append(f"overflow story <{b['tag']}.{b['cls']}> "
+                                f"left={b['left']} right={b['right']}")
+            errs_st = json.loads(await cdp.js("JSON.stringify(window.__errs||[])"))
+            if errs_st:
+                problems.append(f"JS errors (story): {errs_st}")
+            print(f"JS errors (story): {errs_st if errs_st else '(none)'}")
+            await cdp.js("api.get=window.__realApiGet;"
+                         "document.querySelector('#player').classList.remove('open')")
+            await settle(200)
+
             # --- Десктоп today ---
             await cdp.metrics(1100, 860, dpr=1, mobile=False)
             await cdp.send("Page.navigate", url=ORIGIN + "/")
