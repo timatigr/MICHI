@@ -631,6 +631,49 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
    прячем крупную транскрипцию-«костыль» на экранах знакомства; стимулы
    самих упражнений (выбор чтения) остаются. */
 [data-romaji="off"] .romaji-big { display: none; }
+
+/* Контур высотного ударения (高低アクセント). Цвет кодирует тип спада:
+   ровный/начало/середина/конец. Надчёркивание = высокий тон; вертикали на
+   границах = подъём (слева) и спад (справа); ○ = тон следующей частицы. */
+.pitch {
+  --pi: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 10px; flex-wrap: wrap; margin: 12px 0 2px;
+}
+.pitch.heiban    { --pi: #2f9e6f; }
+.pitch.atamadaka { --pi: #df5e7c; }
+.pitch.nakadaka  { --pi: #d99412; }
+.pitch.odaka     { --pi: #7b6cf0; }
+.pi-line {
+  display: inline-flex; align-items: flex-end;
+  font-family: var(--jp-font); font-size: 1.5rem; line-height: 1; padding-top: 4px;
+}
+.pi-mora {
+  position: relative; padding: 4px 2px 1px;
+  border-top: 2px solid transparent;          /* низкий тон — место под линию */
+}
+.pi-mora.hi { border-top-color: var(--pi); }  /* высокий тон — надчёркивание */
+.pi-mora.drop::after, .pi-mora.rise::before {
+  content: ""; position: absolute; top: -2px; height: 100%;
+  border-left: 2px solid var(--pi);
+}
+.pi-mora.drop::after { right: -1px; }          /* спад — стенка справа */
+.pi-mora.rise::before { left: -1px; }          /* подъём — стенка слева */
+.pi-part {
+  font-size: 0.7em; opacity: 0.5; padding: 4px 1px 1px; margin-left: 1px;
+  border-top: 2px solid transparent; align-self: flex-end;
+}
+.pi-part.hi { border-top-color: var(--pi); opacity: 0.65; }
+.pi-badge {
+  font-size: 0.72rem; font-weight: 700; color: var(--pi);
+  border: 1.5px solid var(--pi); border-radius: 0.55rem; padding: 0.1rem 0.42rem;
+}
+.pi-desc { font-size: 0.8rem; color: var(--muted); }
+/* Компактный вариант для карточек словаря */
+.pitch.compact { gap: 5px; margin: 2px 0 0; }
+.pitch.compact .pi-line { font-size: 1.0625rem; }
+.pitch.compact .pi-badge { font-size: 0.62rem; padding: 0.02rem 0.3rem; border-width: 1px; }
+
 .mnemonic {
   background: var(--card); border-radius: 16px; box-shadow: var(--shadow-sm);
   padding: 15px 17px; margin: 18px 0 0; font-size: 0.90625rem; line-height: 1.55;

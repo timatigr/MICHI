@@ -427,6 +427,13 @@ const EN = {
   "Учебный проект, предоставляется «как есть», без гарантий.":
     "An educational project, provided «as is», without any warranty.",
 
+  // --- Высотное ударение 高低アクセント ---
+  "Высотное ударение: {d}": "Pitch accent: {d}",
+  "ровный тон": "flat",
+  "спад в начале": "drop at start",
+  "спад в середине": "drop in middle",
+  "спад в конце": "drop at end",
+
   // --- «Свиток истории» 物語 ---
   "Свиток": "Scroll",
   "Свиток истории": "Story scroll",

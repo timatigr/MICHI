@@ -5,7 +5,7 @@
    только сеть (динамика, cookie-сессия). Версия CACHE инвалидирует кэш на деплое. */
 "use strict";
 
-const VERSION = "bcbd3257400f";
+const VERSION = "1b8e527ab1d7";
 const CACHE = `michi-${VERSION}`;
 // Минимальная оболочка приложения (EN-оверлей контента и звуки кэшируются лениво
 // по факту обращения через stale-while-revalidate — не раздуваем precache).

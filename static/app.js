@@ -1514,10 +1514,38 @@ async function showIntroKana(step) {
   await waitClick($("#next", playerBody));
 }
 
+/* Контур высотного ударения 高低アクセント: моры с надчёркиванием высокого тона
+   и «стенкой» на спаде + маркер тона следующей частицы (○) — он отличает 平板
+   (частица высокая) от 尾高 (спад приходится на частицу). Чисто визуальная
+   справка о произношении, не SRS-карточка. compact — мелкий вариант для словаря. */
+const PITCH_JP = { heiban: "平板", atamadaka: "頭高", nakadaka: "中高", odaka: "尾高" };
+const PITCH_DESC = { heiban: "ровный тон", atamadaka: "спад в начале",
+                     nakadaka: "спад в середине", odaka: "спад в конце" };
+function pitchHtml(p, compact) {
+  if (!p) return "";
+  const h = p.highs;
+  const cells = p.moras.map((m, i) => {
+    const hi = h[i];
+    const nextHi = i + 1 < h.length ? h[i + 1] : p.particle_high;
+    const cls = [hi ? "hi" : "lo"];
+    if (hi && !nextHi) cls.push("drop");                 // спад справа от моры
+    if (hi && i > 0 && !h[i - 1]) cls.push("rise");      // подъём слева
+    return `<span class="pi-mora ${cls.join(" ")}">${escapeHtml(m)}</span>`;
+  }).join("");
+  const part = `<span class="pi-part ${p.particle_high ? "hi" : "lo"}" aria-hidden="true">○</span>`;
+  const aria = tr("Высотное ударение: {d}", { d: tr(PITCH_DESC[p.pattern]) });
+  return `<div class="pitch ${p.pattern}${compact ? " compact" : ""}" role="img" aria-label="${escAttr(aria)}">
+    <span class="pi-line">${cells}${part}</span>
+    <span class="pi-badge">${PITCH_JP[p.pattern]}</span>
+    ${compact ? "" : `<span class="pi-desc">${tr(PITCH_DESC[p.pattern])}</span>`}
+  </div>`;
+}
+
 async function showIntroWord(step) {
   playerBody.innerHTML = `
     <div class="big-kana small" data-tts="${step.tts}">${step.kana}</div>
     <div class="romaji-big">${step.romaji}</div>
+    ${pitchHtml(step.pitch)}
     <div class="word-ru">${tr(step.ru)}</div>
     ${ttsButton(step.tts)}
     ${step.note ? `<p class="note center">${step.note}</p>` : ""}
@@ -2925,6 +2953,7 @@ async function renderDict() {
       it.tts ? ` data-tts="${escapeHtml(it.tts)}"` : ""}>
       <span class="di-title jp">${escapeHtml(it.title)}</span>
       ${it.extra ? `<span class="di-extra jp">${escapeHtml(it.extra)}</span>` : ""}
+      ${it.pitch ? pitchHtml(it.pitch, true) : ""}
       <span class="di-sub">${escapeHtml(it.sub ? tr(it.sub) : "")}</span>
       <span class="di-state">${label[it.state]}</span>
       ${it.strength != null ? `<span class="di-strength" style="--s:${it.strength}" title="${tr("Память {p}%", { p: it.strength })}" aria-label="${tr("Память {p}%", { p: it.strength })}"></span>` : ""}

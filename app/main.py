@@ -21,6 +21,7 @@ from starlette.background import BackgroundTask
 
 from . import ai_tutor, db, gamification, identity, ratelimit, srs_engine, tts
 from .content import story as story_content
+from .content.pitch import pitch_for
 from .content.seasons import current_sekki
 from .content.registry import (
     COURSES, GATE_PASS, GRAMMAR_BY_ID, GRAMMAR_UNITS, KANA_BY_CHAR, KANJI_BY_CHAR,
@@ -898,7 +899,8 @@ def _learned_display(item_type, item_id):
         w = VOCAB_BY_ID.get(item_id)
         if w:
             return "n5", {"title": w["kana"], "sub": w["ru"],
-                          "tts": w["kana"], "extra": w["romaji"]}
+                          "tts": w["kana"], "extra": w["romaji"],
+                          "pitch": pitch_for(item_id)}
     elif item_type == "grammar":
         p = GRAMMAR_BY_ID.get(item_id)
         if p:

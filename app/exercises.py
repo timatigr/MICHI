@@ -13,6 +13,7 @@ from pathlib import Path
 from .content.counters import COUNTERS
 from .content.grammar import PARTICLE_POOL
 from .content.minimal_pairs import PAIRS as MINIMAL_PAIRS
+from .content.pitch import pitch_for
 from .content.verbs import (
     FORM_LABEL as VERB_FORM_LABEL, VERBS, conjugate as conjugate_verb,
     distractors as verb_distractors,
@@ -810,7 +811,8 @@ def _vocab_lesson_steps(lesson):
         for w in chunk:
             steps.append({"type": "intro_word", "kana": w["kana"],
                           "romaji": w["romaji"], "ru": w["ru"],
-                          "tts": w["kana"], "note": w.get("note")})
+                          "tts": w["kana"], "note": w.get("note"),
+                          "pitch": pitch_for(w["id"])})
         quiz = [vocab_choice(w) for w in chunk]
         random.shuffle(quiz)
         steps.extend({"type": "exercise", "exercise": e} for e in quiz)

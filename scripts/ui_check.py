@@ -579,6 +579,31 @@ async def main():
             await cdp.js("document.querySelector('#player').classList.remove('open')")
             await settle(200)
 
+            # --- Высотное ударение 高低: контур в карточке слова (intro_word) ---
+            # あなた [2] 中高: низкая-высокая-низкая, спад после 2-й моры.
+            await cdp.fire(
+                "document.querySelector('#player').classList.add('open');"
+                "playerBody.classList.remove('center-step');"
+                "showIntroWord({kana:'あなた',romaji:'anata',ru:'ты, вы',tts:'あなた',"
+                "pitch:{drop:2,pattern:'nakadaka',moras:['あ','な','た'],"
+                "highs:[false,true,false],particle_high:false}})")
+            await settle(700)
+            await cdp.shot("m_pitch")
+            pi = await cdp.js("!!document.querySelector('#player-body .pitch')")
+            pi_moras = await cdp.js("document.querySelectorAll('#player-body .pi-mora').length")
+            pi_hi = await cdp.js("document.querySelectorAll('#player-body .pi-mora.hi').length")
+            pi_drop = await cdp.js("document.querySelectorAll('#player-body .pi-mora.drop').length")
+            pi_badge = await cdp.js("(document.querySelector('#player-body .pi-badge')||{}).textContent||''")
+            print(f"pitch contour: present={pi} moras={pi_moras} high={pi_hi} "
+                  f"drop={pi_drop} badge={pi_badge!r}")
+            if not (pi and pi_moras == 3 and pi_hi == 1 and pi_drop == 1 and pi_badge == "中高"):
+                problems.append(f"контур pitch неверный: present={pi} moras={pi_moras} "
+                                f"hi={pi_hi} drop={pi_drop} badge={pi_badge!r}")
+            for b in json.loads(await cdp.js(OVERFLOW_JS))["bad"]:
+                problems.append(f"overflow pitch <{b['tag']}.{b['cls']}>")
+            await cdp.js("document.querySelector('#player').classList.remove('open')")
+            await settle(150)
+
             # --- Combo-счётчик серии в шапке плеера ---
             await cdp.js("openPlayer('review');Combo.update(true);Combo.update(true);Combo.update(true)")
             await settle(150)
