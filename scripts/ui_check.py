@@ -646,6 +646,36 @@ async def main():
                          "document.querySelector('#player').classList.remove('open')")
             await settle(150)
 
+            # --- Радар путаницы: рендер вкладки + дрилл-различение ---
+            # Вкладка «Повторение» дёргает /api/confusions (у нового пользователя
+            # пусто → карточки радара нет, но путь рендера должен отработать).
+            await cdp.js("document.querySelector('nav.tabs button[data-view=review]').click()")
+            await settle(900)
+            if not await cdp.js("!!document.querySelector('.practice-grid')"):
+                problems.append("вкладка «Повторение» не отрисовалась")
+            # Дрилл различения: реальный startConfusionDrill с подменённым api.get
+            await cdp.js(
+                "window.__realApiGet3=api.get;"
+                "api.get=async p=>p.indexOf('/api/confusions/rounds')===0?({rounds:["
+                "{prompt:'a',tts:'あ',options:['お','あ'],answer:1}]})"
+                ":window.__realApiGet3(p)")
+            await cdp.fire("startConfusionDrill()")
+            await settle(700)
+            await cdp.shot("m_confusion")
+            cf_opts = await cdp.js("document.querySelectorAll('#player-body .options button').length")
+            print(f"confusion drill: options={cf_opts}")
+            if cf_opts != 2:
+                problems.append(f"дрилл различения: вариантов {cf_opts} (ждали 2)")
+            await cdp.js("document.querySelectorAll('#player-body .options button')[1].click()")
+            await settle(400)
+            cf_fb = await cdp.js("(document.querySelector('#player-body .feedback')||{}).className||''")
+            print(f"confusion drill feedback: {cf_fb!r}")
+            if "ok" not in cf_fb:
+                problems.append("дрилл различения: верный ответ не засчитан")
+            await cdp.js("api.get=window.__realApiGet3;"
+                         "document.querySelector('#player').classList.remove('open')")
+            await settle(150)
+
             # --- Combo-счётчик серии в шапке плеера ---
             await cdp.js("openPlayer('review');Combo.update(true);Combo.update(true);Combo.update(true)")
             await settle(150)

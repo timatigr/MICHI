@@ -1159,6 +1159,16 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .practice-tile.story-tile { border-color: var(--indigo); background:
   linear-gradient(180deg, var(--pink-soft) 0%, var(--card) 70%); }
 
+/* Радар путаницы: чипы спутанных пар «знак ↔ знак ×N» */
+.radar-pairs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.radar-pair {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--pink-soft); border-radius: 12px; padding: 5px 11px;
+}
+.radar-pair b { font-family: var(--jp-font); font-weight: 600; color: var(--title); font-size: 1.0625rem; }
+.radar-pair i { color: var(--pink-ink); font-style: normal; }
+.radar-pair em { font-style: normal; color: var(--muted); font-size: 0.75rem; }
+
 /* --- «Свиток истории» 物語: список глав + ридер сцен --- */
 .story-chapters { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
 .story-chapter {

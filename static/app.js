@@ -1253,7 +1253,8 @@ function openPlayer(mode) {
                    freshen: "Упреждающее повторение", listen: "Тренировка слуха",
                    calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
                    shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞",
-                   pitch: "Высотное ударение 高低", story: "Свиток истории 物語" };
+                   pitch: "Высотное ударение 高低", story: "Свиток истории 物語",
+                   confusion: "Радар путаницы 🎯" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1304,6 +1305,8 @@ async function askClosePlayer() {
                 ? tr("Закрыть свиток?")
                 : playerMode === "pitch"
                   ? tr("Прервать тренировку тона?")
+                : playerMode === "confusion"
+                  ? tr("Прервать тренировку различения?")
                 : playerMode === "counters"
                   ? tr("Прервать тренировку счётных слов?")
                 : tr("Прервать повторение? Все ответы уже сохранены.");
@@ -1839,7 +1842,12 @@ async function runChoice(ex, afterAnswer) {
     tr("Правильно: {x}", { x: `<span class="jp">${tr(ex.options[ex.answer])}</span>` }));
   speak(ex.prompt.tts || ex.answer_tts);
 
-  if (afterAnswer) fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false)}</div>`;
+  if (afterAnswer) {
+    // Радар путаницы: при ошибке в выборе из кана-вариантов передаём выбранный
+    // неверный знак — сервер копит пары «путаю X с Y» для точечных дриллов.
+    const confusedWith = (!correct && ex.options_are_kana) ? ex.options[choice] : null;
+    fb.innerHTML += `<div class="srs-toast">${await afterAnswer(correct, durationMs, false, confusedWith)}</div>`;
+  }
 
   if (correct) {
     await new Promise(r => setTimeout(r, 900));
@@ -2209,7 +2217,7 @@ async function startReview() {
       setProgress(done / Math.max(done + remaining, 1));
       $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(remaining - i, 1) });
 
-      const res = await runExercise(item.exercise, async (correct, durationMs, usedHint) => {
+      const res = await runExercise(item.exercise, async (correct, durationMs, usedHint, confusedWith) => {
         let verdict;
         try {
           verdict = await api.post("/api/srs/answer", {
@@ -2218,6 +2226,7 @@ async function startReview() {
             duration_ms: durationMs,
             exercise_type: item.exercise.type,
             used_hint: usedHint,
+            confused_with: confusedWith || null,
           });
         } catch {
           // Сеть отпала: ответ не записан, карточка остаётся due и вернётся
@@ -2317,6 +2326,7 @@ async function startFreshen() {
 async function renderReviewTab() {
   view.innerHTML = skeleton("review");
   const o = await getOverview();
+  const conf = await api.get("/api/confusions?limit=6").catch(() => ({ pairs: [] }));
   setStreakPill(o.streak);
   Romaji.syncProgress(o.courses);
   const total = o.srs.due + o.srs.new_available;
@@ -2339,6 +2349,13 @@ async function renderReviewTab() {
       <p class="note" style="margin-top:0">${tr("Быстрый разбор того, в чём вы сегодня ошиблись. Это практика — на расписание SRS не влияет.")}</p>
       <button class="ghost mt" id="btn-mistakes">${tr("Разобрать ошибки дня · {n}", { n: o.mistakes_today })}</button>
     </div>` : ""}
+    ${conf.pairs.length ? `<div class="card radar-card">
+      <h2>${tr("Радар путаницы")} 🎯</h2>
+      <p class="note" style="margin-top:0">${tr("Знаки, которые вы чаще путаете на повторениях. Точечная отработка — на расписание SRS не влияет.")}</p>
+      <div class="radar-pairs">${conf.pairs.map(p => `
+        <span class="radar-pair"><b class="jp">${escapeHtml(p.a)}</b><i>↔</i><b class="jp">${escapeHtml(p.b)}</b><em>×${p.count}</em></span>`).join("")}</div>
+      <button class="ghost mt" id="btn-confusion">${tr("Отработать различение")}</button>
+    </div>` : ""}
     <div class="card practice-card">
       <h2>${tr("Тренировки и игры")}</h2>
       <p class="note" style="margin-top:0">${tr("Практика и мини-игры — на расписание SRS не влияют.")}</p>
@@ -2359,6 +2376,7 @@ async function renderReviewTab() {
                      pitch: startPitch };
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
+  $("#btn-confusion")?.addEventListener("click", startConfusionDrill);
   view.querySelector(".practice-grid")?.addEventListener("click", e => {
     const b = e.target.closest(".practice-tile");
     if (b) PRACTICE[b.dataset.practice]?.();
@@ -2801,6 +2819,79 @@ async function startPitch() {
       ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">高</div>`}
       <h2>${tr("Тон освоен")}</h2>
       <p>${tr("Слов разобрано: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (done >= 5) confetti();
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+}
+
+/* ---------- Радар путаницы: дрилл-различение по личным ошибкам 🎯 ----------
+   Берём пары, которые ученик реально путал на повторениях (db.confusions), и
+   гоняем различение: дано чтение — выбрать верный знак из двух спутанных.
+   Практика — в SRS не пишет. */
+async function startConfusionDrill() {
+  const token = openPlayer("confusion");
+  let data;
+  try { data = await api.get("/api/confusions/rounds?limit=10"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const rounds = data.rounds;
+  if (!rounds.length) {
+    playerBody.classList.add("center-step");
+    playerBody.innerHTML = `<div class="result"><div class="mark">🎯</div>
+      <h2>${tr("Путаниц пока нет")}</h2>
+      <p>${tr("Здесь появятся знаки, которые вы путаете на повторениях.")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button></div>`;
+    animateIn(playerBody);
+    waitClick($("#finish", playerBody)).then(v => { if (v !== ABORT) closePlayer(); });
+    return;
+  }
+  let done = 0, okCount = 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (token !== sessionToken) return;
+    const r = rounds[i];
+    setProgress(done / Math.max(rounds.length, 1));
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(rounds.length - i, 1) });
+    playerBody.classList.remove("center-step");
+    playerBody.innerHTML = `
+      <p class="question">${tr("Какой знак читается так?")}</p>
+      <div class="romaji-big">${escapeHtml(r.prompt)}</div>
+      ${ttsButton(r.tts)}
+      <div class="options">
+        ${r.options.map((o, j) => `<button data-i="${j}" class="jp"><span class="kbd">${j + 1}</span>${escapeHtml(o)}</button>`).join("")}
+      </div>
+      <div class="feedback" id="fb" aria-live="polite"></div>`;
+    animateIn(playerBody);
+    speak(r.tts);
+    const buttons = [...playerBody.querySelectorAll(".options button")];
+    const choice = await awaitChoice(buttons);
+    if (choice === ABORT) return;
+    const correct = choice === r.answer;
+    buttons.forEach(b => (b.disabled = true));
+    buttons[r.answer].classList.add("correct");
+    if (!correct) buttons[choice].classList.add("wrong");
+    const fb = $("#fb", playerBody);
+    fb.className = `feedback ${correct ? "ok" : "bad"}`;
+    Haptics[correct ? "good" : "bad"]();
+    answerFx(correct, playerBody.querySelector(".romaji-big"));
+    fb.innerHTML = verdict(correct, correct ? tr("Верно")
+      : tr("Правильно: {x}", { x: `<span class="jp">${escapeHtml(r.options[r.answer])}</span>` }));
+    speak(r.tts);
+    done++;
+    if (correct) okCount++;
+    Combo.update(correct);
+    playerBody.insertAdjacentHTML("beforeend", `<button class="primary" id="next">${tr("Дальше")}</button>`);
+    if (await waitClick($("#next", playerBody)) === ABORT) return;
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `<div class="result">
+      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">🎯</div>`}
+      <h2>${tr("Различение отработано")}</h2>
+      <p>${tr("Разобрано: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
       <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);

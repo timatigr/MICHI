@@ -441,6 +441,20 @@ const EN = {
   "Тон освоен": "Pitch mastered",
   "Слов разобрано: {n} · точность {p}%": "Words covered: {n} · accuracy {p}%",
 
+  // --- Радар путаницы 🎯 ---
+  "Радар путаницы": "Confusion radar",
+  "Радар путаницы 🎯": "Confusion radar 🎯",
+  "Знаки, которые вы чаще путаете на повторениях. Точечная отработка — на расписание SRS не влияет.":
+    "Characters you most often confuse in reviews. Targeted practice — doesn't affect the SRS schedule.",
+  "Отработать различение": "Drill the differences",
+  "Прервать тренировку различения?": "Stop the discrimination drill?",
+  "Какой знак читается так?": "Which character reads like this?",
+  "Путаниц пока нет": "No confusions yet",
+  "Здесь появятся знаки, которые вы путаете на повторениях.":
+    "Characters you confuse during reviews will appear here.",
+  "Различение отработано": "Differences drilled",
+  "Разобрано: {n} · точность {p}%": "Covered: {n} · accuracy {p}%",
+
   // --- «Свиток истории» 物語 ---
   "Свиток": "Scroll",
   "Свиток истории": "Story scroll",
