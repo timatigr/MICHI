@@ -116,6 +116,22 @@ async def settle(ms=1400):
     await asyncio.sleep(ms / 1000)
 
 
+AXE_URL = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.10.2/axe.min.js"
+
+
+def axe_source():
+    """Исходник axe-core (автоматический аудит a11y) из локального кэша или с CDN.
+    Кэшируем в системный temp, чтобы не качать 0.5 МБ при каждом прогоне."""
+    cache = os.path.join(tempfile.gettempdir(), "axe-core-4.10.2.min.js")
+    if not os.path.exists(cache):
+        with urllib.request.urlopen(AXE_URL, timeout=60) as r:
+            data = r.read()
+        with open(cache, "wb") as f:
+            f.write(data)
+    with open(cache, encoding="utf-8") as f:
+        return f.read()
+
+
 OVERFLOW_JS = r"""
 (() => {
   const vw = document.documentElement.clientWidth;
@@ -719,6 +735,39 @@ async def main():
             await cdp.js("api.get=window.__realApiGet;"
                          "document.querySelector('#player').classList.remove('open')")
             await settle(200)
+
+            # --- Автоматический аудит доступности (axe-core, WCAG 2 A/AA) ---
+            # Инжектируем axe на каждую новую страницу, прогоняем по ключевым
+            # экранам и собираем нарушения. serious/critical считаем провалом.
+            await cdp.send("Page.addScriptToEvaluateOnNewDocument", source=axe_source())
+
+            async def axe_scan(label):
+                raw = await cdp.js(
+                    "(async()=>{try{const r=await axe.run(document,"
+                    "{runOnly:{type:'tag',values:['wcag2a','wcag2aa']},"
+                    "resultTypes:['violations']});"
+                    "return JSON.stringify(r.violations.map(v=>({id:v.id,"
+                    "impact:v.impact,n:v.nodes.length})));}"
+                    "catch(e){return '[{\"id\":\"axe-error\",\"impact\":\"critical\",\"n\":0}]'}})()")
+                viol = json.loads(raw)
+                summary = ", ".join(f"{v['id']}×{v['n']}({v['impact']})" for v in viol) or "чисто"
+                print(f"axe [{label}]: {summary}")
+                for v in viol:
+                    if v.get("impact") in ("serious", "critical"):
+                        problems.append(f"a11y [{label}] {v['id']} ({v['impact']}) ×{v['n']}")
+                return viol
+
+            await cdp.metrics(390, 844, dpr=2, mobile=True)
+            await cdp.send("Page.navigate", url=ORIGIN + "/"); await settle(1500)
+            await axe_scan("today")
+            await cdp.js("document.querySelector('nav.tabs button[data-view=lessons]').click()")
+            await settle(900); await axe_scan("lessons")
+            await cdp.js("openSettings()"); await settle(600); await axe_scan("settings")
+            await cdp.js("document.getElementById('set-close').click()"); await settle(300)
+            await cdp.js("document.querySelector('nav.tabs button[data-view=dict]').click()")
+            await settle(900); await axe_scan("dict")
+            await cdp.js("document.querySelector('nav.tabs button[data-view=stats]').click()")
+            await settle(900); await axe_scan("stats")
 
             # --- Десктоп today ---
             await cdp.metrics(1100, 860, dpr=1, mobile=False)
