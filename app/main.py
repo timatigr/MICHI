@@ -29,8 +29,9 @@ from .content.registry import (
     srs_items_for_lesson,
 )
 from .exercises import (
-    _mnemonics_for, counter_rounds, item_info, kanji_forge_rounds, make_lesson_steps,
-    minimal_pair_rounds, pitch_rounds, review_exercise, shiritori_rounds,
+    _mnemonics_for, confusion_rounds, counter_rounds, item_info, kanji_forge_rounds,
+    make_lesson_steps, minimal_pair_rounds, pitch_rounds, review_exercise,
+    shiritori_rounds,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -489,6 +490,7 @@ class Answer(BaseModel):
     duration_ms: int | None = None
     exercise_type: str = ""
     used_hint: bool = False
+    confused_with: str | None = None    # знак, выбранный ошибочно (радар путаницы)
 
 
 @app.post("/api/srs/answer")
@@ -502,10 +504,15 @@ def srs_answer(answer: Answer, request: Request):
         if row is None:
             raise HTTPException(404, "Карточка не найдена")
         settings = db.get_settings(conn)
-        return srs_engine.answer_card(
+        result = srs_engine.answer_card(
             conn, settings, row, answer.correct, answer.duration_ms,
             answer.exercise_type, answer.used_hint, tz,
         )
+        # Радар путаницы: фиксируем «выбрал X вместо Y» (пока только кана).
+        cw = (answer.confused_with or "").strip()
+        if not answer.correct and cw and len(cw) <= 8 and row["item_type"] == "kana":
+            db.record_confusion(conn, "kana", row["item_id"], cw)
+        return result
     finally:
         conn.close()
 
@@ -589,6 +596,38 @@ def counters(limit: int = 8):
 def pitch_drill(limit: int = 8):
     """Раунды дрилла высотного ударения 高低. Чистый контент — БД не нужна."""
     return {"rounds": pitch_rounds(limit)}
+
+
+# ---------- Радар путаницы: личные ошибки → точечный дрилл-различение ----------
+
+@app.get("/api/confusions")
+def confusions_list(request: Request, limit: int = 8):
+    """Самые частые путаницы знаков (для карточки-радара). Только кана с
+    валидным отображением; читает личную базу, ничего не пишет."""
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        rows = db.top_confusions(conn, limit)
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        a, b = KANA_BY_CHAR.get(r["item_id"]), KANA_BY_CHAR.get(r["confused_with"])
+        if not a or not b:
+            continue
+        out.append({"a": r["item_id"], "a_romaji": a["romaji"],
+                    "b": r["confused_with"], "b_romaji": b["romaji"], "count": r["count"]})
+    return {"pairs": out}
+
+
+@app.get("/api/confusions/rounds")
+def confusions_drill(request: Request, limit: int = 8):
+    """Раунды различения по личным путаницам. Read-only практика — в SRS не пишет."""
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        rows = db.top_confusions(conn, limit)
+    finally:
+        conn.close()
+    return {"rounds": confusion_rounds(rows, limit)}
 
 
 # ---------- Кузница кандзи: сборка из компонентов (6.3, граф знаний) ----------

@@ -72,6 +72,17 @@ CREATE TABLE IF NOT EXISTS ui_prefs (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- «Радар путаницы»: какие знаки ученик реально путает (выбрал X вместо Y).
+-- Агрегат-счётчик пары — для точечных дриллов по личным ошибкам, а не по теории.
+CREATE TABLE IF NOT EXISTS confusions (
+    item_type     TEXT NOT NULL,             -- пока 'kana'
+    item_id       TEXT NOT NULL,             -- верный знак (правильный ответ)
+    confused_with TEXT NOT NULL,             -- что выбрал ошибочно
+    count         INTEGER NOT NULL DEFAULT 0,
+    last_at       TEXT,
+    PRIMARY KEY (item_type, item_id, confused_with)
+);
 """
 
 DEFAULT_SETTINGS = {
@@ -85,7 +96,8 @@ DEFAULT_SETTINGS = {
 # не на каждое соединение (т.е. не на каждый API-запрос) — см. _prepare.
 #   1 — базовая схема (+ ui_prefs)
 #   2 — денормализованные srs_cards.stability/last_review (быстрый R без JSON)
-SCHEMA_VERSION = 2
+#   3 — таблица confusions (радар путаницы): создаётся через SCHEMA (IF NOT EXISTS)
+SCHEMA_VERSION = 3
 
 
 def _user_path(user_id):
@@ -171,6 +183,32 @@ def set_setting(conn, key, value):
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, json.dumps(value)),
         )
+
+
+# ---------- Радар путаницы ----------
+
+def record_confusion(conn, item_type, item_id, confused_with):
+    """Зафиксировать ошибку «выбрал confused_with вместо item_id» (+1 к счётчику
+    пары). Идемпотентно по строке: апсерт со счётчиком."""
+    if not item_id or not confused_with or item_id == confused_with:
+        return
+    with conn:
+        conn.execute(
+            "INSERT INTO confusions(item_type, item_id, confused_with, count, last_at) "
+            "VALUES (?, ?, ?, 1, datetime('now')) "
+            "ON CONFLICT(item_type, item_id, confused_with) "
+            "DO UPDATE SET count = count + 1, last_at = datetime('now')",
+            (item_type, item_id, confused_with),
+        )
+
+
+def top_confusions(conn, limit=8):
+    """Самые частые путаницы (по убыванию счётчика, затем свежести)."""
+    return conn.execute(
+        "SELECT item_type, item_id, confused_with, count FROM confusions "
+        "ORDER BY count DESC, last_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
 
 
 # ---------- UI-настройки клиента (зеркало localStorage) ----------

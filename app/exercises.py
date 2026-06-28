@@ -603,6 +603,25 @@ def pitch_rounds(limit=8):
     return rounds
 
 
+def confusion_rounds(pairs, limit=8):
+    """Дрилл-различение по ЛИЧНЫМ путаницам: дано чтение (ромадзи + озвучка) —
+    выбрать верный знак из двух, которые ученик реально путал (item_id и
+    confused_with). pairs — строки db.top_confusions. Практика, в SRS не пишет."""
+    rounds = []
+    for p in pairs[:limit]:
+        a, b = p["item_id"], p["confused_with"]
+        ka, kb = KANA_BY_CHAR.get(a), KANA_BY_CHAR.get(b)
+        if not ka or not kb:
+            continue
+        opts = [a, b]
+        random.shuffle(opts)
+        rounds.append({
+            "prompt": ka["romaji"], "tts": a,
+            "options": opts, "answer": opts.index(a),
+        })
+    return rounds
+
+
 # ---------- Сиритори しりとり: словесная цепочка (USP, японская игра) ----------
 # Каждое слово начинается с последней каны предыдущего (りんご→ごりら→…). Строим
 # реальную цепочку из ИЗУЧЕННЫХ слов (i+1), чистая практика — в SRS не пишет.
