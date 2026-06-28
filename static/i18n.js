@@ -451,6 +451,7 @@ const EN = {
     "Complete the first vocabulary lessons to open the story's first chapter.",
   // главы
   "Встреча": "Meeting", "Числа и дни": "Numbers and days", "За столом": "At the table",
+  "Дом": "Home", "Утро и день": "Morning and day", "Какой день": "What a day",
   // сцены
   "Здравствуйте.": "Hello.",
   "Я студент.": "I'm a student.",
@@ -464,6 +465,18 @@ const EN = {
   "Ем рис.": "I eat rice.",
   "Пью воду.": "I drink water.",
   "Вкусно, правда?": "Delicious, isn't it?",
+  "Это мой дом.": "This is my home.",
+  "В комнате стол и стул.": "A desk and a chair in the room.",
+  "Смотрю телевизор.": "I watch TV.",
+  "Ночью сплю.": "At night I sleep.",
+  "Утром встаю.": "In the morning I get up.",
+  "Учу японский.": "I study Japanese.",
+  "Учитель объясняет.": "The teacher explains.",
+  "Вечером возвращаюсь домой.": "In the evening I go home.",
+  "Сегодня жарко.": "It's hot today.",
+  "Японский трудный?": "Is Japanese hard?",
+  "Нет, лёгкий.": "No, it's easy.",
+  "Друг добрый.": "My friend is kind.",
 };
 
 // Индекс по «схлопнутым» пробелам: ключи в словаре можно писать одной строкой,
