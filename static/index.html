@@ -60,8 +60,10 @@
       <h1>MICHI</h1>
       <span class="pill" id="streak-pill" style="display:none"></span>
       <span class="spacer"></span>
-      <button class="icon-btn" id="btn-theme" title="Светлая/тёмная тема" aria-label="Светлая/тёмная тема">☾</button>
-      <button class="icon-btn" id="btn-settings" title="Настройки озвучки" aria-label="Настройки">⚙</button>
+      <!-- Содержимое кнопок — SVG из icons.js (Theme.apply / boot); до запуска JS пусто,
+           чтобы не мигать системным глифом -->
+      <button class="icon-btn" id="btn-theme" title="Светлая/тёмная тема" aria-label="Светлая/тёмная тема"></button>
+      <button class="icon-btn" id="btn-settings" title="Настройки озвучки" aria-label="Настройки"></button>
     </header>
     <main id="view"></main>
   </div>
@@ -77,12 +79,12 @@
   <!-- Полноэкранный плеер урока / SRS-сессии -->
   <div id="player" role="dialog" aria-modal="true" aria-label="Урок">
     <div class="player-top">
-      <button class="close" id="player-close" title="Выйти" aria-label="Выйти">✕</button>
+      <button class="close" id="player-close" title="Выйти" aria-label="Выйти"></button>
       <div class="progress"><div id="player-progress"></div></div>
       <span id="combo" class="combo" hidden></span>
       <span id="player-counter" class="stat-label"></span>
-      <button class="close" id="player-theme" title="Ночной режим" aria-label="Ночной режим">☾</button>
-      <button class="close" id="player-settings" title="Настройки" aria-label="Настройки">⚙</button>
+      <button class="close" id="player-theme" title="Ночной режим" aria-label="Ночной режим"></button>
+      <button class="close" id="player-settings" title="Настройки" aria-label="Настройки"></button>
     </div>
     <div class="player-body" id="player-body"></div>
   </div>
@@ -211,6 +213,7 @@
   <script src="i18n.js"></script>
   <!-- content_en*.js (EN-оверлей контента, ~158КБ) грузятся динамически только в
        английском режиме (loadEnContent в i18n.js) — русскому большинству не нужны. -->
+  <script src="icons.js"></script>
   <script src="tracing.js"></script>
   <script src="art.js"></script>
   <script src="app.js"></script>

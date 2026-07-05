@@ -260,7 +260,7 @@ function mountExplain(host, ctx) {
   if (!AI.available || !host) return;
   const wrap = document.createElement("div");
   wrap.className = "ai-explain";
-  wrap.innerHTML = `<button class="ghost ai-ask">${tr("🧠 Разобрать ошибку")}</button>
+  wrap.innerHTML = `<button class="ghost ai-ask">${Icons.ui("spark")} ${tr("Разобрать ошибку")}</button>
     <div class="ai-body" hidden></div>`;
   host.appendChild(wrap);
   const btn = $(".ai-ask", wrap);
@@ -279,7 +279,7 @@ function mountExplain(host, ctx) {
       btn.remove();
     } catch {
       btn.disabled = false;
-      btn.textContent = tr("🧠 Разобрать ошибку");
+      btn.innerHTML = `${Icons.ui("spark")} ${tr("Разобрать ошибку")}`;
       body.innerHTML = `<p class="ai-text">${tr("Не получилось получить разбор. Попробуйте ещё раз.")}</p>`;
       body.hidden = false;
     }
@@ -318,7 +318,7 @@ function humanizeInterval(secs) {
 const speak = text => TTS.speak(text);
 function ttsButton(text) {
   if (!TTS.available) return "";
-  return `<button class="tts-btn" data-tts="${text}">🔊 ${tr("послушать")}</button>`;
+  return `<button class="tts-btn" data-tts="${text}">${Icons.ui("speaker")} ${tr("послушать")}</button>`;
 }
 
 /* ---------- Тактильный отклик интерфейса: звук нажатия + вибрация ----------
@@ -488,7 +488,7 @@ function refreshAiStatus() {
       ? " " + tr("Сегодня осталось {r} из {l} запросов (кэш-разборы не тратят квоту).",
           { r: AI.status.remaining, l: AI.status.limit })
       : "";
-    hint.textContent = tr("После неверного ответа жмите «🧠 Разобрать ошибку» — модель " +
+    hint.textContent = tr("После неверного ответа жмите «Разобрать ошибку» — модель " +
       "объяснит промах. Разборы кэшируются, чтобы не платить дважды.") + q;
   } else {
     pill.textContent = tr("нет ключа");
@@ -576,7 +576,7 @@ const Theme = {
   pref: localStorage.getItem("michi_theme") || "auto",
   media: matchMedia("(prefers-color-scheme: dark)"),
   labels: { light: "светлая", dark: "тёмная", auto: "как в системе" },
-  icons: { light: "☀", dark: "☾", auto: "◐" },
+  icons: { light: "sun", dark: "moon", auto: "themeAuto" },
   isDark() {
     return this.pref === "dark" || (this.pref === "auto" && this.media.matches);
   },
@@ -584,13 +584,13 @@ const Theme = {
     const dark = this.isDark();
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     const btn = $("#btn-theme");
-    btn.textContent = this.icons[this.pref];
+    btn.innerHTML = Icons.ui(this.icons[this.pref]);
     btn.title = `Тема: ${this.labels[this.pref]} (нажмите, чтобы сменить)`;
     btn.setAttribute("aria-label", btn.title);     // имя для скринридера = подсказка
-    // Кнопка в плеере: показывает «куда переключим» (☾ в светлой, ☀ в тёмной)
+    // Кнопка в плеере: показывает «куда переключим» (месяц в светлой, солнце в тёмной)
     const pbtn = document.getElementById("player-theme");
     if (pbtn) {
-      pbtn.textContent = dark ? "☀" : "☾";
+      pbtn.innerHTML = Icons.ui(dark ? "sun" : "moon");
       pbtn.title = dark ? "Дневной режим" : "Ночной режим";
       pbtn.setAttribute("aria-label", pbtn.title);
     }
@@ -619,6 +619,11 @@ Theme.media.addEventListener("change", () => {
 $("#btn-theme").addEventListener("click", () => Theme.toggle());
 $("#player-theme").addEventListener("click", () => Theme.flip());
 Theme.apply();
+// Статичные SVG-иконки «хрома»: index.html держит кнопки пустыми до JS,
+// чтобы не мигать системным глифом до подмены (см. icons.js)
+$("#btn-settings").innerHTML = Icons.ui("gear");
+$("#player-settings").innerHTML = Icons.ui("gear");
+$("#player-close").innerHTML = Icons.ui("close");
 
 /* ---------- Ромадзи в интерфейсе курса (2.1: отключается после хираганы) ---------- */
 const Romaji = {
@@ -937,7 +942,21 @@ function show(name) {
     b.classList.toggle("active", on);
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
-  Promise.resolve(renderers[name]()).then(() => animateIn(view, dir));
+  // Граница ошибки: упавший рендер (обрыв сети на /api/overview и т.п.) не должен
+  // оставлять скелетон навсегда — показываем восстановимое состояние с «Повторить».
+  Promise.resolve(renderers[name]())
+    .then(() => animateIn(view, dir))
+    .catch(err => {
+      console.error(err);
+      view.innerHTML = `
+        <div class="card empty-state error-state" role="alert">
+          <div class="empty-mascot">${Art.mascotTile("wave")}</div>
+          <p class="note center">${tr("Не удалось загрузить. Проверьте соединение.")}</p>
+          <button class="primary" id="retry-view">${tr("Повторить")}</button>
+        </div>`;
+      $("#retry-view")?.addEventListener("click", () => show(name));
+      animateIn(view, 0);
+    });
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>
   b.addEventListener("click", () => show(b.dataset.view)));
@@ -948,7 +967,7 @@ function setStreakPill(streak) {
   const dayWord = LANG === "en"
     ? (streak === 1 ? "day" : "days")
     : plural(streak, ["день", "дня", "дней"]);
-  pill.textContent = `🔥 ${streak} ${dayWord}`;
+  pill.innerHTML = `${Icons.ui("flame")} ${streak} ${dayWord}`;
   pill.style.display = streak > 0 ? "" : "none";
 }
 
@@ -993,12 +1012,12 @@ async function renderToday() {
         <div class="hero-mascot">${Art.mascotTile("wave")}</div>
       </div>
       <div class="hero-stats">
-        ${o.streak > 0 ? `<div class="hs hs-streak"><b>🔥 ${o.streak}</b><span>${tr("серия дней")}</span></div>` : ""}
+        ${o.streak > 0 ? `<div class="hs hs-streak"><b>${Icons.ui("flame")} ${o.streak}</b><span>${tr("серия дней")}</span></div>` : ""}
         <div class="hs"><b>${o.today.reviews}</b><span>${tr("повторено сегодня")}</span></div>
         <div class="hs"><b>${o.today.accuracy !== null ? o.today.accuracy + "%" : "—"}</b><span>${tr("точность сегодня")}</span></div>
       </div>
     </div>
-    ${o.streak > 0 && o.today.reviews === 0 ? `<div class="streak-nudge">🔥 ${tr("Серия {n} дн. — позанимайтесь сегодня, чтобы не прервать её", { n: o.streak })}</div>` : ""}
+    ${o.streak > 0 && o.today.reviews === 0 ? `<div class="streak-nudge">${Icons.ui("flame")} ${tr("Серия {n} дн. — позанимайтесь сегодня, чтобы не прервать её", { n: o.streak })}</div>` : ""}
 
     <div class="card gami">
       <div class="level-badge">
@@ -1156,7 +1175,7 @@ async function renderLessons() {
             <div class="circle jp c${lessons.indexOf(l) % 6}" aria-hidden="true">${l.icon}</div>
             ${l.status === "completed"
               ? `<span class="state done">✓ ${l.score != null ? Math.round(l.score * 100) + "%" : ""}</span>`
-              : l.status === "locked" ? `<span class="state lock" aria-hidden="true">🔒</span>` : ""}
+              : l.status === "locked" ? `<span class="state lock" aria-hidden="true">${Icons.ui("lock")}</span>` : ""}
             <h3>${tr(l.title)}</h3>
             <div class="tag">${tr(l.subtitle)}${l.kana_count ? ` · ${tr("{n} знаков", { n: l.kana_count })}` : ""}${l.locked_hint ? `<br>${tr(l.locked_hint)}` : ""}</div>
           </div>`;}).join("")}
@@ -1254,7 +1273,7 @@ function openPlayer(mode) {
                    calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
                    shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞",
                    pitch: "Высотное ударение 高低", story: "Свиток истории 物語",
-                   confusion: "Радар путаницы 🎯" };
+                   confusion: "Радар путаницы" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1263,7 +1282,7 @@ function openPlayer(mode) {
   return sessionToken;
 }
 
-/* Серия верных ответов внутри сессии — лёгкий мотиватор (🔥 N), сброс на ошибке. */
+/* Серия верных ответов внутри сессии — лёгкий мотиватор (огонёк N), сброс на ошибке. */
 const Combo = {
   n: 0, el: null,
   _box() { return this.el || (this.el = document.getElementById("combo")); },
@@ -1275,7 +1294,7 @@ const Combo = {
     if (!el) return;
     if (this.n < 3) { el.hidden = true; return; }
     el.hidden = false;
-    el.textContent = `🔥 ${this.n}`;
+    el.innerHTML = `${Icons.ui("flame")} ${this.n}`;
     el.classList.toggle("milestone", this.n % 5 === 0);   // вехи 5/10/15 — ярче
     el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
   },
@@ -1411,7 +1430,7 @@ function mnemoChoiceHtml(char, presets) {
 function customMnemoHtml(char) {
   const c = Mnemo.custom(char);
   return `<div class="mnemo-block mnemo-own" data-char="${escAttr(char)}">
-    ${c ? `<p class="mnemo-head">📝 ${tr("Твоя ассоциация")}</p>` +
+    ${c ? `<p class="mnemo-head">✎ ${tr("Твоя ассоциация")}</p>` +
           `<div class="mnemo-own-text">${escapeHtml(c)}</div>` : ""}
     <input class="mnemo-custom" maxlength="140"
       placeholder="${tr("…впиши свою ассоциацию")}" value="${escAttr(c)}">
@@ -1483,7 +1502,7 @@ function mountMnemoReminder(host, ex, choice) {
             `<span><b>${tr("Вспомни")}:</b> ${escapeHtml(fav)}</span></div>`;
   const own = Mnemo.custom(ex.item_id);
   if (own && own !== fav)
-    html += `<div class="mnemo-remind own"><span class="mr-char">📝</span>` +
+    html += `<div class="mnemo-remind own"><span class="mr-char">✎</span>` +
             `<span><b>${tr("Твоя заметка")}:</b> ${escapeHtml(own)}</span></div>`;
   const chosen = ex.options[choice];
   if (ex.confusables && ex.confusables[chosen])
@@ -1591,7 +1610,7 @@ async function showIntroKanji(step) {
     ${components}
     ${ttsButton(step.tts)}
     ${step.mnemonic && LANG === "ru" ? `<div class="mnemonic">${step.mnemonic}</div>` : ""}
-    ${step.mnemonic_reading && LANG === "ru" ? `<div class="mnemonic mnemonic-reading"><b>🔉 Чтение:</b> ${step.mnemonic_reading}</div>` : ""}
+    ${step.mnemonic_reading && LANG === "ru" ? `<div class="mnemonic mnemonic-reading"><b>${Icons.ui("speaker")} Чтение:</b> ${step.mnemonic_reading}</div>` : ""}
     ${LANG === "ru" ? customMnemoHtml(step.char) : ""}
     ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
     <div class="spacer"></div>
@@ -1809,7 +1828,7 @@ async function runChoice(ex, afterAnswer) {
   const jpish = style === "jp" || style === "jp-sentence";
   const jpClass = style === "jp" ? "jp" : style === "jp-sentence" ? "jp jp-sentence" : "";
   const promptHtml = style === "audio"
-    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="${tr("Прослушать ещё раз")}">🔊</button>`
+    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="${tr("Прослушать ещё раз")}">${Icons.ui("speaker")}</button>`
     : `<div class="prompt-text ${jpClass}" ${ex.prompt.tts ? `data-tts="${ex.prompt.tts}"` : ""}>${tr(ex.prompt.text)}</div>` +
       (!jpish && ex.prompt.tts ? ttsButton(ex.prompt.tts) : "");
   playerBody.innerHTML = `
@@ -1953,7 +1972,7 @@ async function runInput(ex, afterAnswer) {
   // Диктант без озвучки (офлайн) деградирует к показу перевода — иначе никак
   const audioMode = isAudio && TTS.available;
   const top = audioMode
-    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="${tr("Прослушать ещё раз")}">🔊</button>`
+    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="${tr("Прослушать ещё раз")}">${Icons.ui("speaker")}</button>`
     : `<div class="prompt-text">${tr(isAudio ? ex.prompt.fallback_text : ex.prompt.text)}</div>`;
   const question = (isAudio && !audioMode) ? "Введите слово по-японски" : ex.question;
   playerBody.innerHTML = `
@@ -2157,7 +2176,7 @@ async function startLesson(lessonId) {
     const need = Math.round((done.pass_mark || 0.8) * 100);
     playerBody.innerHTML = `
       <div class="result gate-fail">
-        <div class="mark">⛩</div>
+        <div class="mark">門</div>
         <h2>${tr("Ворота не пройдены")}</h2>
         <p>${tr("Ваш результат {p}% · нужно {need}%", { p: Math.round(score * 100), need })}<br>
         ${tr("Следующий юнит откроется после пересдачи.")}</p>
@@ -2350,7 +2369,7 @@ async function renderReviewTab() {
       <button class="ghost mt" id="btn-mistakes">${tr("Разобрать ошибки дня · {n}", { n: o.mistakes_today })}</button>
     </div>` : ""}
     ${conf.pairs.length ? `<div class="card radar-card">
-      <h2>${tr("Радар путаницы")} 🎯</h2>
+      <h2>${tr("Радар путаницы")}</h2>
       <p class="note" style="margin-top:0">${tr("Знаки, которые вы чаще путаете на повторениях. Точечная отработка — на расписание SRS не влияет.")}</p>
       <div class="radar-pairs">${conf.pairs.map(p => `
         <span class="radar-pair"><b class="jp">${escapeHtml(p.a)}</b><i>↔</i><b class="jp">${escapeHtml(p.b)}</b><em>×${p.count}</em></span>`).join("")}</div>
@@ -2360,13 +2379,13 @@ async function renderReviewTab() {
       <h2>${tr("Тренировки и игры")}</h2>
       <p class="note" style="margin-top:0">${tr("Практика и мини-игры — на расписание SRS не влияют.")}</p>
       <div class="practice-grid">
-        <button class="practice-tile story-tile" data-practice="story"><span class="pt-ico">📜</span><span class="pt-label">${tr("Свиток")}</span><span class="pt-jp jp">物語</span></button>
-        ${TTS.available ? `<button class="practice-tile" data-practice="listen"><span class="pt-ico">🎧</span><span class="pt-label">${tr("Слух")}</span><span class="pt-jp jp">耳</span></button>` : ""}
-        <button class="practice-tile" data-practice="pitch"><span class="pt-ico">📈</span><span class="pt-label">${tr("Тон")}</span><span class="pt-jp jp">高低</span></button>
-        <button class="practice-tile" data-practice="shiritori"><span class="pt-ico">🔗</span><span class="pt-label">${tr("Сиритори")}</span><span class="pt-jp jp">しりとり</span></button>
-        <button class="practice-tile" data-practice="counters"><span class="pt-ico">🔢</span><span class="pt-label">${tr("Счётчики")}</span><span class="pt-jp jp">助数詞</span></button>
-        <button class="practice-tile" data-practice="forge"><span class="pt-ico">🔨</span><span class="pt-label">${tr("Кузница")}</span><span class="pt-jp jp">鍛冶</span></button>
-        <button class="practice-tile" data-practice="calligraphy"><span class="pt-ico">✍️</span><span class="pt-label">${tr("Каллиграфия")}</span><span class="pt-jp jp">書道</span></button>
+        <button class="practice-tile story-tile" data-practice="story"><span class="pt-ico">${Icons.art("story")}</span><span class="pt-label">${tr("Свиток")}</span><span class="pt-jp jp">物語</span></button>
+        ${TTS.available ? `<button class="practice-tile" data-practice="listen"><span class="pt-ico">${Icons.art("listen")}</span><span class="pt-label">${tr("Слух")}</span><span class="pt-jp jp">耳</span></button>` : ""}
+        <button class="practice-tile" data-practice="pitch"><span class="pt-ico">${Icons.art("pitch")}</span><span class="pt-label">${tr("Тон")}</span><span class="pt-jp jp">高低</span></button>
+        <button class="practice-tile" data-practice="shiritori"><span class="pt-ico">${Icons.art("shiritori")}</span><span class="pt-label">${tr("Сиритори")}</span><span class="pt-jp jp">しりとり</span></button>
+        <button class="practice-tile" data-practice="counters"><span class="pt-ico">${Icons.art("counters")}</span><span class="pt-label">${tr("Счётчики")}</span><span class="pt-jp jp">助数詞</span></button>
+        <button class="practice-tile" data-practice="forge"><span class="pt-ico">${Icons.art("forge")}</span><span class="pt-label">${tr("Кузница")}</span><span class="pt-jp jp">鍛冶</span></button>
+        <button class="practice-tile" data-practice="calligraphy"><span class="pt-ico">${Icons.art("calligraphy")}</span><span class="pt-label">${tr("Каллиграфия")}</span><span class="pt-jp jp">書道</span></button>
       </div>
       ${!TTS.available ? `<p class="note mt" style="color:var(--warning)">${tr("Тренировка слуха требует голос — включите озвучку в ⚙.")}</p>` : ""}
     </div>
@@ -2440,7 +2459,7 @@ async function startListening() {
     playerBody.classList.remove("center-step");
     playerBody.innerHTML = `
       <p class="question">${tr("Что вы услышали?")}</p>
-      <button class="audio-prompt" id="lp-play" title="${tr("Прослушать ещё раз")}">🔊</button>
+      <button class="audio-prompt" id="lp-play" title="${tr("Прослушать ещё раз")}">${Icons.ui("speaker")}</button>
       <div class="options">
         ${r.options.map((o, j) =>
           `<button data-i="${j}" class="jp"><span class="kbd">${j + 1}</span>${o}</button>`).join("")}
@@ -2545,7 +2564,7 @@ async function forgeRound(r) {
     <p class="question">${tr("Соберите кандзи из частей")}</p>
     <div class="forge-clue">
       <div class="forge-meaning">${tr(r.meaning)}</div>
-      <button class="forge-reading jp" data-tts="${r.tts}">🔊 ${r.reading}</button>
+      <button class="forge-reading jp" data-tts="${r.tts}">${Icons.ui("speaker")} ${r.reading}</button>
     </div>
     <div class="build-slots forge-slots" id="fslots"></div>
     <div class="tiles forge-tiles" id="ftiles">
@@ -2646,7 +2665,7 @@ async function startShiritori() {
       <p class="question">${tr("Слово на 「{k}」 — продолжите цепочку", { k: r.need })}</p>
       <button class="shiri-current jp" data-tts="${r.current.tts}">
         <span class="sc-kana">${escapeHtml(r.current.kana)}</span>
-        <small>${escapeHtml(tr(r.current.ru))} 🔊</small></button>
+        <small>${escapeHtml(tr(r.current.ru))} ${Icons.ui("speaker")}</small></button>
       <div class="options shiri-options">
         ${r.options.map((o, j) => `<button data-i="${j}" class="shiri-opt">
           <span class="kbd">${j + 1}</span><span class="so-kana jp">${escapeHtml(o.kana)}</span>
@@ -2714,7 +2733,7 @@ async function startCounters() {
       <div class="cnt-objects" aria-hidden="true">${(r.noun.emoji + " ").repeat(r.count).trim()}</div>
       <button class="cnt-noun jp" data-tts="${r.noun.tts}">
         <span class="cn-kana">${escapeHtml(r.noun.kana)}</span>
-        <small>${escapeHtml(tr(r.noun.ru))} × ${r.count} 🔊</small></button>
+        <small>${escapeHtml(tr(r.noun.ru))} × ${r.count} ${Icons.ui("speaker")}</small></button>
       <p class="question">${tr("Каким счётным словом их сосчитать?")}</p>
       <div class="options cnt-options">
         ${r.options.map((o, j) => `<button data-i="${j}" class="cnt-opt">
@@ -2827,7 +2846,7 @@ async function startPitch() {
   closePlayer();
 }
 
-/* ---------- Радар путаницы: дрилл-различение по личным ошибкам 🎯 ----------
+/* ---------- Радар путаницы: дрилл-различение по личным ошибкам ----------
    Берём пары, которые ученик реально путал на повторениях (db.confusions), и
    гоняем различение: дано чтение — выбрать верный знак из двух спутанных.
    Практика — в SRS не пишет. */
@@ -2840,7 +2859,7 @@ async function startConfusionDrill() {
   const rounds = data.rounds;
   if (!rounds.length) {
     playerBody.classList.add("center-step");
-    playerBody.innerHTML = `<div class="result"><div class="mark">🎯</div>
+    playerBody.innerHTML = `<div class="result"><div class="mark">的</div>
       <h2>${tr("Путаниц пока нет")}</h2>
       <p>${tr("Здесь появятся знаки, которые вы путаете на повторениях.")}</p>
       <button class="primary" id="finish">${tr("Готово")}</button></div>`;
@@ -2889,7 +2908,7 @@ async function startConfusionDrill() {
   setProgress(1);
   playerBody.classList.add("center-step");
   playerBody.innerHTML = `<div class="result">
-      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">🎯</div>`}
+      ${done ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">的</div>`}
       <h2>${tr("Различение отработано")}</h2>
       <p>${tr("Разобрано: {n} · точность {p}%", { n: done, p: Math.round(okCount / Math.max(done, 1) * 100) })}</p>
       <button class="primary" id="finish">${tr("Готово")}</button>
@@ -2983,7 +3002,7 @@ async function startStory() {
         <button class="story-chapter ${c.unlocked ? "" : "locked"}" data-i="${i}" ${c.unlocked ? "" : "disabled"}>
           <span class="sc-num jp">${i + 1}</span>
           <span class="sc-meta"><span class="sc-jp jp">${escapeHtml(c.jp)}</span><span class="sc-title">${escapeHtml(tr(c.title))}</span></span>
-          <span class="sc-state">${c.unlocked ? "›" : "🔒"}</span>
+          <span class="sc-state">${c.unlocked ? "›" : Icons.ui("lock")}</span>
         </button>`).join("")}</div>`;
     animateIn(playerBody);
     playerBody.querySelectorAll(".story-chapter:not(.locked)").forEach(b =>
@@ -2997,7 +3016,7 @@ async function startStory() {
         <div class="story-head"><span class="sh-jp jp">${escapeHtml(ch.jp)}</span><h2>${escapeHtml(tr(ch.title))}</h2></div>
         <div class="story-scenes">${ch.scenes.map(s => `
           <div class="story-scene">
-            <button class="story-jp jp" data-tts="${escAttr(s.tts)}">${escapeHtml(s.jp)} <span class="sj-spk">🔊</span></button>
+            <button class="story-jp jp" data-tts="${escAttr(s.tts)}">${escapeHtml(s.jp)} <span class="sj-spk">${Icons.ui("speaker")}</span></button>
             <div class="story-ru">${escapeHtml(tr(s.ru))}</div>
           </div>`).join("")}</div>
         <button class="ghost mt" id="story-back">← ${tr("К главам")}</button>
@@ -3036,7 +3055,7 @@ function mnemoGalleryHtml(courses) {
   }
   if (!entries.length) return "";
   return `<div class="card mnemo-gallery">
-    <h2>✨ ${tr("Мои ассоциации")} · ${entries.length}</h2>
+    <h2>${tr("Мои ассоциации")} · ${entries.length}</h2>
     <p class="note">${tr("Твои собственные и выбранные образы. Нажми — послушать знак.")}</p>
     <div class="mg-grid">${entries.join("")}</div>
   </div>`;
@@ -3428,7 +3447,7 @@ const Onboarding = {
           `<button class="ob-goal ${xp === this.goal ? "sel" : ""}" data-goal="${xp}">
              <b>${xp}</b><span>XP</span><em>${tr(label)}</em></button>`).join("")}
       </div>
-      <button class="ghost ob-hear" id="ob-hear">🔊 ${tr("Послушать голос")}</button>`;
+      <button class="ghost ob-hear" id="ob-hear">${Icons.ui("speaker")} ${tr("Послушать голос")}</button>`;
   },
 
   stepStart() {
@@ -3464,6 +3483,14 @@ const Onboarding = {
     } catch { /* нет сети — просто останемся на дашборде */ }
   },
 };
+
+/* Последняя линия защиты: непойманное отклонение промиса (необёрнутый await в
+   обработчике, фоновая операция) не должно тихо проваливаться — мягко уведомляем.
+   ABORT-выходы из сессии резолвятся, а не реджектятся, поэтому сюда не попадают. */
+addEventListener("unhandledrejection", e => {
+  console.error("unhandledrejection:", e.reason);
+  toast(tr("Что-то пошло не так. Попробуйте ещё раз."), true);
+});
 
 /* ---------- Старт ---------- */
 function boot() {

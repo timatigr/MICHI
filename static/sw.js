@@ -5,13 +5,13 @@
    только сеть (динамика, cookie-сессия). Версия CACHE инвалидирует кэш на деплое. */
 "use strict";
 
-const VERSION = "05aa69c752e3";
+const VERSION = "a41f09d2c7e8";
 const CACHE = `michi-${VERSION}`;
 // Минимальная оболочка приложения (EN-оверлей контента и звуки кэшируются лениво
 // по факту обращения через stale-while-revalidate — не раздуваем precache).
 const SHELL = [
   "/", "/index.html", "/style.css", "/fonts.css", "/app.js", "/i18n.js",
-  "/tracing.js", "/art.js", "/manifest.webmanifest", "/icon.svg",
+  "/icons.js", "/tracing.js", "/art.js", "/manifest.webmanifest", "/icon.svg",
 ];
 
 self.addEventListener("install", e => {

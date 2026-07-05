@@ -335,13 +335,13 @@ const EN = {
   "нет ключа": "no key",
   "Сегодня осталось {r} из {l} запросов (кэш-разборы не тратят квоту).":
     "{r} of {l} requests left today (cached analyses don't use quota).",
-  "После неверного ответа жмите «🧠 Разобрать ошибку» — модель объяснит промах. Разборы кэшируются, чтобы не платить дважды.":
-    "After a wrong answer, tap «🧠 Analyze mistake» — the model will explain it. Analyses are cached so you don't pay twice.",
+  "После неверного ответа жмите «Разобрать ошибку» — модель объяснит промах. Разборы кэшируются, чтобы не платить дважды.":
+    "After a wrong answer, tap «Analyze mistake» — the model will explain it. Analyses are cached so you don't pay twice.",
   "Чтобы включить, задайте ключ перед запуском и перезапустите сервер. Бесплатно: GEMINI_API_KEY (ключ на aistudio.google.com/apikey) — set GEMINI_API_KEY=… затем run.bat. Либо ANTHROPIC_API_KEY (Claude). Без ключа курс работает как обычно.":
     "To enable it, set a key before launch and restart the server. Free: GEMINI_API_KEY (get one at aistudio.google.com/apikey) — set GEMINI_API_KEY=… then run.bat. Or ANTHROPIC_API_KEY (Claude). Without a key the course works as usual.",
 
   // --- Разбор ошибок «Сэнсэй» (кнопка/панель) ---
-  "🧠 Разобрать ошибку": "🧠 Analyze mistake",
+  "Разобрать ошибку": "Analyze mistake",
   "Думаю…": "Thinking…",
   "Не получилось получить разбор. Попробуйте ещё раз.": "Couldn't get an analysis. Please try again.",
   "Правило": "Rule",
@@ -441,9 +441,8 @@ const EN = {
   "Тон освоен": "Pitch mastered",
   "Слов разобрано: {n} · точность {p}%": "Words covered: {n} · accuracy {p}%",
 
-  // --- Радар путаницы 🎯 ---
+  // --- Радар путаницы ---
   "Радар путаницы": "Confusion radar",
-  "Радар путаницы 🎯": "Confusion radar 🎯",
   "Знаки, которые вы чаще путаете на повторениях. Точечная отработка — на расписание SRS не влияет.":
     "Characters you most often confuse in reviews. Targeted practice — doesn't affect the SRS schedule.",
   "Отработать различение": "Drill the differences",

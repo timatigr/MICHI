@@ -32,7 +32,7 @@ const Art = {
     const kind = this.kindFor(ach.id);
     const art = kind ? this.svg(kind, ach)
       : `<span class="ach-emoji">${ach.icon || "🏆"}</span>`;
-    const lock = ach.unlocked ? "" : `<span class="ach-lock">🔒</span>`;
+    const lock = ach.unlocked ? "" : `<span class="ach-lock">${Icons.ui("lock")}</span>`;
     return `<span class="ach-art ${ach.unlocked ? "" : "locked"}${big ? " big" : ""}"
       data-kind="${kind || "emoji"}">${art}${lock}</span>`;
   },
