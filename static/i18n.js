@@ -345,6 +345,7 @@ const EN = {
 
   // --- Разбор ошибок «Сэнсэй» (кнопка/панель) ---
   "Разобрать ошибку": "Analyze mistake",
+  "Объяснить по-другому": "Explain differently",
   "Думаю…": "Thinking…",
   "Не получилось получить разбор. Попробуйте ещё раз.": "Couldn't get an analysis. Please try again.",
   "Правило": "Rule",

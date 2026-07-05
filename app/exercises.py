@@ -944,7 +944,7 @@ def _kanji_lesson_steps(lesson):
 
 
 def _intro_grammar_step(p):
-    return {"type": "intro_grammar", "title": p["title"],
+    return {"type": "intro_grammar", "id": p["id"], "title": p["title"],
             "structure": p["structure"], "meaning": p["meaning"],
             "register": p.get("register"), "explanation": p.get("explanation", []),
             "caution": p.get("caution"),

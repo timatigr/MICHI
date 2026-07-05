@@ -100,6 +100,61 @@ _GEMINI_SCHEMA = {
     "required": ["category", "explanation", "rule", "counterexample"],
 }
 
+# ---------- «Объяснить по-другому»: грамматика по кнопке (SRS.md 7, роадмап) ----------
+
+GRAMMAR_SYSTEM_PROMPT = (
+    "Ты — Сэнсэй, доброжелательный преподаватель японского языка для "
+    "русскоязычного новичка уровня JLPT N5. Ученик читает учебное объяснение "
+    "грамматической точки и просит объяснить её ДРУГИМИ словами.\n"
+    "Правила:\n"
+    "1. Отвечай ТОЛЬКО на русском языке (японские фразы можно приводить).\n"
+    "2. Никаких приветствий и воды — сразу суть.\n"
+    "3. explanation — 2–4 коротких предложения: объясни смысл проще, чем в "
+    "учебнике, своими словами; уместна бытовая аналогия.\n"
+    "4. examples — 2–3 НОВЫХ коротких примера (не повторяй примеры учебника): "
+    "простая лексика уровня N5, запись каной без кандзи, у каждого перевод.\n"
+    "5. tip — одна фраза-подсказка, как запомнить или не перепутать.\n"
+    "6. Говори только об этой грамматической точке, не уходи в другие темы."
+)
+
+_GRAMMAR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "explanation": {"type": "string"},
+        "examples": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"jp": {"type": "string"}, "ru": {"type": "string"}},
+                "required": ["jp", "ru"],
+                "additionalProperties": False,
+            },
+            "minItems": 2,
+            "maxItems": 3,
+        },
+        "tip": {"type": "string"},
+    },
+    "required": ["explanation", "examples", "tip"],
+    "additionalProperties": False,
+}
+
+_GEMINI_GRAMMAR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "explanation": {"type": "string"},
+        "examples": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"jp": {"type": "string"}, "ru": {"type": "string"}},
+                "required": ["jp", "ru"],
+            },
+        },
+        "tip": {"type": "string"},
+    },
+    "required": ["explanation", "examples", "tip"],
+}
+
 
 def _provider() -> str:
     """Какой LLM-провайдер активен: явный MICHI_AI_PROVIDER или автоопределение."""
@@ -275,46 +330,54 @@ def _user_message(context: dict) -> str:
     return "\n".join(lines)
 
 
-def _request_claude(context: dict) -> dict:
+def _claude_json(system: str, message: str, schema: dict, max_tokens: int = 600) -> dict:
     import anthropic
 
     client = anthropic.Anthropic()
     resp = client.messages.create(
         model=_model("claude"),
-        max_tokens=600,
+        max_tokens=max_tokens,
         system=[
             {
                 "type": "text",
-                "text": SYSTEM_PROMPT,
+                "text": system,
                 "cache_control": {"type": "ephemeral"},
             }
         ],
-        messages=[{"role": "user", "content": _user_message(context)}],
-        output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
+        messages=[{"role": "user", "content": message}],
+        output_config={"format": {"type": "json_schema", "schema": schema}},
     )
     text = next((b.text for b in resp.content if b.type == "text"), "")
     return json.loads(text)
 
 
-def _request_gemini(context: dict) -> dict:
+def _gemini_json(system: str, message: str, schema: dict, max_tokens: int = 800) -> dict:
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     resp = client.models.generate_content(
         model=_model("gemini"),
-        contents=_user_message(context),
+        contents=message,
         config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system,
             response_mime_type="application/json",
-            response_schema=_GEMINI_SCHEMA,
-            max_output_tokens=800,
+            response_schema=schema,
+            max_output_tokens=max_tokens,
             # Flash по умолчанию «думает» и съедает выходной бюджет — для короткого
             # разбора это лишний расход; отключаем, ответ остаётся качественным.
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
     return json.loads(resp.text)
+
+
+def _request_claude(context: dict) -> dict:
+    return _claude_json(SYSTEM_PROMPT, _user_message(context), _SCHEMA)
+
+
+def _request_gemini(context: dict) -> dict:
+    return _gemini_json(SYSTEM_PROMPT, _user_message(context), _GEMINI_SCHEMA)
 
 
 def _request_explanation(context: dict) -> dict:
@@ -357,6 +420,88 @@ def explain(context: dict, user_id=None) -> dict:
         "explanation": data.get("explanation", ""),
         "rule": data.get("rule", ""),
         "counterexample": data.get("counterexample", ""),
+    }
+    _write_cache(key, result)
+    return {"available": True, "cached": False, **result}
+
+
+# ---------- Грамматика: «объяснить по-другому» ----------
+
+def _grammar_message(point: dict) -> str:
+    """Описание грамматической точки для модели: что ученик уже прочитал."""
+    lines = [
+        f"Грамматическая точка: {point.get('title', '')}",
+        f"Структура: {point.get('structure', '')}",
+        f"Значение: {point.get('meaning', '')}",
+    ]
+    expl = point.get("explanation") or []
+    if expl:
+        lines.append("Учебное объяснение (его ученик уже читал — не повторяй):")
+        lines.extend(f"  {b}" for b in expl)
+    if point.get("caution"):
+        lines.append(f"Предостережение учебника: {point['caution']}")
+    examples = point.get("examples") or []
+    if examples:
+        jp = ["".join(e.get("tokens", [])) for e in examples]
+        lines.append("Примеры учебника (не повторяй их): " + " / ".join(jp))
+    return "\n".join(lines)
+
+
+def _grammar_cache_key(point: dict) -> str:
+    """Ключ кэша: объяснение зависит только от точки и модели (не от пользователя)."""
+    prov = _provider()
+    payload = json.dumps(
+        {"kind": "grammar", "model": f"{prov}:{_model(prov)}" if prov else "",
+         "point_id": point.get("id", "")},
+        ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _request_grammar(point: dict) -> dict:
+    """Сетевой вызов «объясни по-другому». Отдельный шов — чтобы мокать в тестах."""
+    msg = _grammar_message(point)
+    if _provider() == "gemini":
+        return _gemini_json(GRAMMAR_SYSTEM_PROMPT, msg, _GEMINI_GRAMMAR_SCHEMA)
+    return _claude_json(GRAMMAR_SYSTEM_PROMPT, msg, _GRAMMAR_SCHEMA)
+
+
+def explain_grammar(point: dict, user_id=None) -> dict:
+    """Объяснение грамматической точки другими словами (кнопка в интро урока).
+
+    Формат: {available, cached, explanation, examples: [{jp, ru}], tip}.
+    Кэш и квоты — те же, что у разбора ошибок: кэш-хиты бесплатны, реальные
+    запросы тратят дневной лимит пользователя и общий потолок.
+    """
+    if not available():
+        return {"available": False, "error": "no_api_key"}
+
+    key = _grammar_cache_key(point)
+    cached = _read_cache(key)
+    if cached is not None:
+        return {"available": True, "cached": True, **cached}
+
+    u = _read_usage()
+    if int(u["users"].get(_bucket(user_id), 0)) >= _daily_limit():
+        return {"available": False, "error": "daily_limit"}
+    glimit = _global_limit()
+    if glimit is not None and int(u.get("total", 0)) >= glimit:
+        return {"available": False, "error": "global_limit"}
+
+    try:
+        data = _request_grammar(point)
+    except Exception as exc:  # сеть/ключ/сбой — деградируем мягко (попытку не считаем)
+        return {"available": False, "error": type(exc).__name__}
+
+    _bump_usage(user_id)
+    examples = [
+        {"jp": str(e.get("jp", "")), "ru": str(e.get("ru", ""))}
+        for e in (data.get("examples") or [])
+        if isinstance(e, dict) and e.get("jp")
+    ]
+    result = {
+        "explanation": data.get("explanation", ""),
+        "examples": examples[:3],
+        "tip": data.get("tip", ""),
     }
     _write_cache(key, result)
     return {"available": True, "cached": False, **result}

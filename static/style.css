@@ -1709,6 +1709,14 @@ button.ghost:active { transform: scale(0.94); }
 .ai-body p { margin: var(--space-xs) 0; font-size: var(--text-300); line-height: 1.5; color: var(--text); }
 .ai-text { color: var(--title); }
 .ai-rule b, .ai-ex b { color: var(--indigo); }
+/* «Объяснить по-другому» (грамматика): нейтральная лавандовая подложка —
+   это справка по запросу, а не разбор ошибки (та — на красноватой .ai-body) */
+.ai-body.ai-grammar {
+  background: color-mix(in srgb, var(--indigo) 9%, var(--card));
+  border-color: color-mix(in srgb, var(--indigo) 32%, transparent);
+}
+.ai-body .jp-ex .jp { color: var(--title); cursor: pointer; }
+
 .ai-pill {
   font-size: var(--text-75); font-weight: 700; padding: 2px var(--space-md); border-radius: var(--r-pill);
   vertical-align: middle; margin-left: var(--space-2xs);

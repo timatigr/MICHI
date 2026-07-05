@@ -190,6 +190,80 @@ def test_global_limit_caps_everyone(monkeypatch, tmp_path):
     assert ai_tutor.explain(_ctx("に"), "b")["error"] == "global_limit"
 
 
+# ---------- «Объяснить по-другому»: грамматика по кнопке ----------
+
+def _point():
+    return {"id": "wa", "title": "は", "structure": "A は B です",
+            "meaning": "выделяет тему",
+            "explanation": ["Частица は ставится после темы."],
+            "caution": "は читается «ва».",
+            "examples": [{"tokens": ["わたし", "は", "がくせい", "です"],
+                          "key": 1, "ru": "Я студент."}]}
+
+
+def test_grammar_explain_uses_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(ai_tutor, "CACHE_DIR", tmp_path)
+    calls = {"n": 0}
+
+    def fake(point):
+        calls["n"] += 1
+        return {"explanation": "Проще: は — прожектор на тему.",
+                "examples": [{"jp": "это", "ru": "пример"},
+                             {"jp": "это2", "ru": "пример2"}],
+                "tip": "は = «что касается…»"}
+
+    monkeypatch.setattr(ai_tutor, "_request_grammar", fake)
+
+    first = ai_tutor.explain_grammar(_point())
+    assert first["available"] and first["cached"] is False
+    assert len(first["examples"]) == 2 and first["tip"]
+
+    second = ai_tutor.explain_grammar(_point())
+    assert second["cached"] is True          # из кэша
+    assert calls["n"] == 1                   # сеть дёрнули один раз
+
+
+def test_grammar_quota_shared_with_mistakes(monkeypatch, tmp_path):
+    """Квота одна на все ИИ-фичи: разбор ошибки съедает лимит и для грамматики."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("MICHI_AI_DAILY_LIMIT", "1")
+    monkeypatch.setattr(ai_tutor, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(ai_tutor, "_request_explanation", lambda ctx: {
+        "category": "particle", "explanation": "x", "rule": "y", "counterexample": "z"})
+
+    assert ai_tutor.explain(_ctx())["cached"] is False       # тратит 1 из 1
+    out = ai_tutor.explain_grammar(_point())
+    assert out == {"available": False, "error": "daily_limit"}
+
+
+def test_grammar_cache_survives_bad_examples(monkeypatch, tmp_path):
+    """Мусорные элементы examples от модели отбрасываются, не роняя ответ."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(ai_tutor, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(ai_tutor, "_request_grammar", lambda p: {
+        "explanation": "e", "tip": "t",
+        "examples": ["строка", {"ru": "без jp"}, {"jp": "ある", "ru": "ок"}]})
+    out = ai_tutor.explain_grammar(_point())
+    assert out["examples"] == [{"jp": "ある", "ru": "ок"}]
+
+
+def test_grammar_endpoint(monkeypatch, make_client, tmp_path):
+    c = make_client()
+    # без ключа — 503
+    assert c.post("/api/ai/explain_grammar", json={"point_id": "wa"}).status_code == 503
+    # с ключом: неизвестная точка — 404, известная — 200 с разбором
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(ai_tutor, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(ai_tutor, "_request_grammar", lambda p: {
+        "explanation": "e", "examples": [{"jp": "x", "ru": "y"}], "tip": "t"})
+    assert c.post("/api/ai/explain_grammar", json={"point_id": "no_such"}).status_code == 404
+    r = c.post("/api/ai/explain_grammar", json={"point_id": "wa"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["explanation"] == "e" and body["examples"][0]["jp"] == "x"
+
+
 # Форму реального вызова провайдера тесты выше не трогали (мокали диспетчер
 # _request_explanation). Эти два мокают сам SDK-клиент и фиксируют, что запрос
 # собран по текущему API — чтобы апгрейд SDK или случайная правка это не сломали.

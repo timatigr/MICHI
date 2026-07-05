@@ -1641,6 +1641,13 @@ async function showIntroGrammar(step) {
     `<button class="kanji-ex" data-tts="${e.tts}">
        <span class="ex-w jp">${e.jp}</span>
        <span class="ex-ru">${tr(e.ru)}</span></button>`).join("");
+  // «Объяснить по-другому» (SRS 7): ленивый запрос к Сэнсэю по клику. Кнопка
+  // только при доступном ИИ и в RU (модель объясняет по-русски).
+  const aiBtn = AI.available && LANG === "ru" && step.id
+    ? `<div class="ai-explain g-ai">
+         <button class="ghost ai-ask" id="g-ai">${Icons.ui("spark")} ${tr("Объяснить по-другому")}</button>
+         <div class="ai-body ai-grammar" hidden></div></div>`
+    : "";
   playerBody.innerHTML = `
     <div class="big-kana jp" data-tts="${step.tts || step.title}">${tr(step.title)}</div>
     <div class="grammar-structure jp">${step.structure}</div>
@@ -1649,9 +1656,32 @@ async function showIntroGrammar(step) {
     ${explanation}
     ${step.caution ? `<div class="mnemonic">⚠ ${tr(step.caution)}</div>` : ""}
     ${examples ? `<div class="kanji-examples">${examples}</div>` : ""}
+    ${aiBtn}
     <div class="spacer"></div>
     <button class="primary" id="next">${tr("Понятно")}</button>`;
   animateIn(playerBody);
+  const gAi = $("#g-ai", playerBody);
+  if (gAi) gAi.addEventListener("click", async () => {
+    const body = playerBody.querySelector(".ai-grammar");
+    gAi.disabled = true;
+    gAi.textContent = tr("Думаю…");
+    try {
+      const r = await api.post("/api/ai/explain_grammar", { point_id: step.id });
+      body.innerHTML = `
+        <p class="ai-text">${escapeHtml(r.explanation)}</p>
+        ${(r.examples || []).map(e => `<p class="ai-ex jp-ex">
+          <span class="jp" data-tts="${escAttr(e.jp)}">${escapeHtml(e.jp)}</span>
+          — ${escapeHtml(e.ru)}</p>`).join("")}
+        ${r.tip ? `<p class="ai-rule"><b>${tr("Подсказка")}:</b> ${escapeHtml(r.tip)}</p>` : ""}`;
+      body.hidden = false;
+      gAi.remove();
+    } catch {
+      gAi.disabled = false;
+      gAi.innerHTML = `${Icons.ui("spark")} ${tr("Объяснить по-другому")}`;
+      body.innerHTML = `<p class="ai-text">${tr("Не получилось получить разбор. Попробуйте ещё раз.")}</p>`;
+      body.hidden = false;
+    }
+  });
   await waitClick($("#next", playerBody));
 }
 

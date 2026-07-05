@@ -744,6 +744,26 @@ def ai_explain(req: ExplainRequest, request: Request):
     return result
 
 
+class ExplainGrammarRequest(BaseModel):
+    point_id: str
+
+
+@app.post("/api/ai/explain_grammar")
+def ai_explain_grammar(req: ExplainGrammarRequest, request: Request):
+    """«Объяснить по-другому»: альтернативное объяснение грамматической точки.
+    Контекст собирается из контента курса по id (клиентскому тексту не доверяем);
+    кэш общий для всех пользователей, квота — та же, что у разбора ошибок."""
+    if not ai_tutor.available():
+        raise HTTPException(503, "ИИ-объяснение недоступно")
+    point = GRAMMAR_BY_ID.get(req.point_id)
+    if point is None:
+        raise HTTPException(404, "Нет такой грамматической точки")
+    result = ai_tutor.explain_grammar(point, _uid(request))
+    if not result.get("available"):
+        raise HTTPException(503, "ИИ-объяснение временно недоступно")
+    return result
+
+
 # ---------- Озвучка (Edge TTS, нейроголоса) ----------
 # На публичном хостинге серверный Edge TTS под потоком людей Microsoft троттлит,
 # а дисковый кэш растёт без границ. MICHI_TTS_ENABLED=0 выключает серверную
