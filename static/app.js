@@ -338,22 +338,26 @@ const Haptics = {
     tapSound: "off",          // звук нажатия по умолчанию выключен (раздражает); вибрация и вердикт-звуки остаются. Можно включить в ⚙
     ...JSON.parse(localStorage.getItem("michi_haptics") || "{}"),
   },
-  // имя файла -> подпись для селектора (порядок = порядок в списке)
+  // имя файла -> подпись для селектора (порядок = мягкие первыми).
+  // Набор курирован по метрикам резкости (ZCR/длительность/атака): визгливые
+  // сэмплы (tick_002 ~8200 пересечений/с, pluck/glass ~4000) заменены мягкими
+  // (bong_001 ~200/с, click_005 ~170/с). Старые wav оставлены на диске — у кого
+  // они сохранены в настройках, у тех продолжают играть.
   TAPS: {
+    bong_001: "Маримба",
+    click_005: "Тик",
+    back_002: "Блип",
+    switch_006: "Щелчок",
     drop_003: "Капля",
-    tick_002: "Тик",
     select_002: "Мягкий",
-    click_002: "Клик",
-    pluck_002: "Струна",
-    glass_002: "Стекло",
-    switch_002: "Щелчок",
+    glitch_001: "Пиксель",
   },
   ctx: null,
   raw: {},        // name -> Promise<ArrayBuffer|null> (скачанный файл)
   buffers: {},    // name -> AudioBuffer (декодированный)
   // заранее качаем все нужные файлы (декодируем позже — для decode нужен жест)
   prefetch() {
-    const need = [...Object.keys(this.TAPS), "confirmation_001", "error_002"];
+    const need = [...Object.keys(this.TAPS), "confirmation_001", "error_008"];
     for (const n of need) {
       if (!this.raw[n]) this.raw[n] = fetch(`/sounds/ui/${n}.wav`)
         .then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
@@ -401,17 +405,17 @@ const Haptics = {
   tap() {
     if (!this.prefs.enabled) return;
     if (this.prefs.tapSound && this.prefs.tapSound !== "off")
-      this.play(this.prefs.tapSound, 0.28);   // мягче, чем было (0.4), если пользователь включил
+      this.play(this.prefs.tapSound, 0.25);
     this.vibrate(8);
   },
   good() {                       // мягкий «подтверждающий» звук на верный ответ
     if (!this.prefs.enabled) return;
-    this.play("confirmation_001", 0.45);
+    this.play("confirmation_001", 0.38);
     this.vibrate(12);
   },
-  bad() {                        // короткий звук ошибки
-    if (!this.prefs.enabled) return;
-    this.play("error_002", 0.4);
+  bad() {                        // мягкий низкий «вумп» на ошибку (error_008:
+    if (!this.prefs.enabled) return;     // ~130 пересечений/с против ~7700 у
+    this.play("error_008", 0.38);        // прежнего error_002, звеневшего на пике)
     this.vibrate([10, 50, 10]);
   },
   save() {
