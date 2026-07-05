@@ -1598,6 +1598,21 @@ html[data-theme="dark"] .srs-limits select {
 /* --- Десктоп: занять пустые бока, «Сегодня» как дашборд в две колонки --- */
 @media (min-width: 900px) {
   #app { max-width: 880px; padding-left: var(--space-5xl); padding-right: var(--space-5xl); }
+  /* Навигация — плавающая «пилюля» по центру: полоса на всю ширину 1100px+
+     выглядит как непеределанный мобайл; компактный плавающий док читается
+     как осознанный десктопный паттерн. */
+  nav.tabs {
+    left: 50%; right: auto; transform: translateX(-50%);
+    bottom: var(--space-2xl); gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--r-pill); border: 1px solid var(--card-edge);
+    box-shadow: var(--shadow);
+  }
+  nav.tabs button {
+    flex: 0 0 auto; padding: var(--space-sm) var(--space-2xl);
+    border-radius: var(--r-pill);
+  }
+  nav.tabs button.active { background: var(--pink-soft); }
   /* Колонки (masonry-поток): карточки заполняют две колонки без привязки к
      рядам — нет дыры под низкой карточкой и пустых ячеек. Герой — на всю ширину. */
   .today { columns: 2; column-gap: var(--space-xl); }
