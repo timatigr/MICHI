@@ -544,6 +544,11 @@ html[data-theme="dark"] .hero {
 .course-tabs {
   display: flex; gap: var(--space-sm); overflow-x: auto; padding: var(--space-2xs) 2px var(--space-2xs); margin: 2px -2px var(--space-2xs);
   scrollbar-width: none;
+  /* Аффорданс скролла: правый край растворяется, а не режет вкладку. Хвостовой
+     padding выводит последнюю вкладку из-под маски при полном прокруте. */
+  padding-right: var(--space-6xl);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
 }
 .course-tabs::-webkit-scrollbar { display: none; }
 .course-tab {
@@ -1407,6 +1412,19 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .setting select {
   padding: var(--space-md) var(--space-lg); border: 1px solid var(--line); border-radius: var(--r-md);
   font-size: var(--text-300); background: var(--card); color: var(--title);
+}
+/* Селекты без нативной стрелки: свой SVG-шеврон (одинаков на всех ОС и в обеих
+   темах), длинный текст уходит в эллипсис, а не режется под стрелкой. data-URI
+   разрешён CSP (img-src data:); цвет шеврона = --muted соответствующей темы. */
+.setting select, .srs-limits select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 38px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23706785' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 16px;
+}
+html[data-theme="dark"] .setting select,
+html[data-theme="dark"] .srs-limits select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238E84A2' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 .setting input[type="range"] { accent-color: var(--pink-ink); }
 .setting .val { float: right; color: var(--title); font-size: var(--text-200); font-weight: 600; }
