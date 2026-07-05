@@ -89,11 +89,6 @@ Speech API). Дополнительно поддерживается **VOICEVOX*
 (© Ulrich Apel, лицензия CC BY-SA 3.0), уже скачаны в
 `app/content/kanjivg_kana.json` (переcкачать: `scripts/fetch_kanjivg.py`).
 
-Звуки интерфейса (нажатия, вердикт ответа) — [Kenney «Interface
-Sounds»](https://kenney.nl/assets/interface-sounds), лицензия CC0
-(общественное достояние), в `static/sounds/ui/`; звук нажатия выбирается
-в ⚙ настройках. Подробности — `static/sounds/ui/CREDITS.txt`.
-
 ## Структура
 
 ```
@@ -222,5 +217,4 @@ michi.example.com {
 
 Код — под лицензией **MIT** (см. [LICENSE](LICENSE)). Встроенные сторонние данные
 сохраняют свои лицензии: черты [KanjiVG](https://kanjivg.tagaini.net/)
-(© Ulrich Apel) — **CC BY-SA 3.0**, звуки интерфейса
-[Kenney](https://kenney.nl/assets/interface-sounds) — **CC0**.
+(© Ulrich Apel) — **CC BY-SA 3.0**.

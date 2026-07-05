@@ -326,104 +326,32 @@ function ttsButton(text) {
   return `<button class="tts-btn" data-tts="${text}">${Icons.ui("speaker")} ${tr("послушать")}</button>`;
 }
 
-/* ---------- Тактильный отклик интерфейса: звук нажатия + вибрация ----------
-   Короткие сэмплы из набора Kenney «Interface Sounds» (CC0) через Web Audio —
-   низкая задержка, мгновенный отклик. Звук нажатия выбирается в настройках,
-   вердикт ответа — confirmation/error. Тумблер общий, по умолчанию включён;
-   громкость не зависит от озвучки слов, вибрация уважает reduced-motion.
-   Атрибуция — static/sounds/ui/CREDITS.txt. */
+/* ---------- Тактильный отклик интерфейса: вибрация ----------
+   Звуки интерфейса (Kenney) удалены по решению владельца — даже курированные
+   мешали; визуального отклика (squish, вспышка края, печать ✓) достаточно.
+   Осталась вибрация на мобильных: тап / верный / неверный. Тумблер в ⚙,
+   по умолчанию включена; уважает prefers-reduced-motion. Старый ключ
+   michi_haptics совместим (лишний tapSound в сохранённом JSON игнорируется). */
 const Haptics = {
   prefs: {
     enabled: true,
-    tapSound: "off",          // звук нажатия по умолчанию выключен (раздражает); вибрация и вердикт-звуки остаются. Можно включить в ⚙
     ...JSON.parse(localStorage.getItem("michi_haptics") || "{}"),
   },
-  // имя файла -> подпись для селектора (порядок = мягкие первыми).
-  // Набор курирован по метрикам резкости (ZCR/длительность/атака): визгливые
-  // сэмплы (tick_002 ~8200 пересечений/с, pluck/glass ~4000) заменены мягкими
-  // (bong_001 ~200/с, click_005 ~170/с). Старые wav оставлены на диске — у кого
-  // они сохранены в настройках, у тех продолжают играть.
-  TAPS: {
-    bong_001: "Маримба",
-    click_005: "Тик",
-    back_002: "Блип",
-    switch_006: "Щелчок",
-    drop_003: "Капля",
-    select_002: "Мягкий",
-    glitch_001: "Пиксель",
-  },
-  ctx: null,
-  raw: {},        // name -> Promise<ArrayBuffer|null> (скачанный файл)
-  buffers: {},    // name -> AudioBuffer (декодированный)
-  // заранее качаем все нужные файлы (декодируем позже — для decode нужен жест)
-  prefetch() {
-    const need = [...Object.keys(this.TAPS), "confirmation_001", "error_008"];
-    for (const n of need) {
-      if (!this.raw[n]) this.raw[n] = fetch(`/sounds/ui/${n}.wav`)
-        .then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
-    }
-  },
-  ensureCtx() {
-    if (!this.ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) this.ctx = new AC();
-    }
-    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
-    return this.ctx;
-  },
-  async buffer(name) {
-    if (this.buffers[name]) return this.buffers[name];
-    const ctx = this.ensureCtx();
-    if (!ctx) return null;
-    if (!this.raw[name]) this.raw[name] = fetch(`/sounds/ui/${name}.wav`)
-      .then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
-    const ab = await this.raw[name];
-    if (!ab) return null;
-    try {
-      this.buffers[name] = await ctx.decodeAudioData(ab.slice(0));
-      return this.buffers[name];
-    } catch { return null; }
-  },
-  play(name, gain = 0.5) {
-    this.buffer(name).then(buf => {
-      const ctx = this.ctx;
-      if (!buf || !ctx) return;
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const g = ctx.createGain();
-      g.gain.value = gain;
-      src.connect(g).connect(ctx.destination);
-      src.start();
-    });
-  },
   vibrate(pattern) {
+    if (!this.prefs.enabled) return;
     if (navigator.vibrate &&
         !matchMedia("(prefers-reduced-motion: reduce)").matches) {
       try { navigator.vibrate(pattern); } catch { /* не поддерживается */ }
     }
   },
-  tap() {
-    if (!this.prefs.enabled) return;
-    if (this.prefs.tapSound && this.prefs.tapSound !== "off")
-      this.play(this.prefs.tapSound, 0.25);
-    this.vibrate(8);
-  },
-  good() {                       // мягкий «подтверждающий» звук на верный ответ
-    if (!this.prefs.enabled) return;
-    this.play("confirmation_001", 0.38);
-    this.vibrate(12);
-  },
-  bad() {                        // мягкий низкий «вумп» на ошибку (error_008:
-    if (!this.prefs.enabled) return;     // ~130 пересечений/с против ~7700 у
-    this.play("error_008", 0.38);        // прежнего error_002, звеневшего на пике)
-    this.vibrate([10, 50, 10]);
-  },
+  tap() { this.vibrate(8); },
+  good() { this.vibrate(12); },              // верный ответ
+  bad() { this.vibrate([10, 50, 10]); },     // ошибка — двойной импульс
   save() {
     localStorage.setItem("michi_haptics", JSON.stringify(this.prefs));
     Prefs.push("michi_haptics");
   },
 };
-Haptics.prefetch();
 
 /* «Пик» в момент нажатия (pointerdown — мгновенно, не на отпускании) для всех
    кликабельных элементов; disabled-кнопки и заблокированные уроки молчат. */
@@ -479,9 +407,7 @@ function openSettings() {
   $("#set-romaji").value = Romaji.pref;
   $("#set-goal").value = localStorage.getItem("michi_daily_goal") || "20";
   $("#set-haptics").checked = Haptics.prefs.enabled;
-  fillTapSounds();
   fillLangSelect();
-  $("#set-tap-sound").disabled = !Haptics.prefs.enabled;
   AI.init().then(refreshAiStatus);   // перепроверить (вдруг ключ задали после старта)
   refreshAiStatus();
   settingsModal.classList.add("open");
@@ -507,13 +433,6 @@ function refreshAiStatus() {
       "set GEMINI_API_KEY=… затем run.bat. Либо ANTHROPIC_API_KEY (Claude). " +
       "Без ключа курс работает как обычно.");
   }
-}
-
-function fillTapSounds() {
-  $("#set-tap-sound").innerHTML =
-    Object.entries(Haptics.TAPS).map(([k, v]) =>
-      `<option value="${k}" ${k === Haptics.prefs.tapSound ? "selected" : ""}>${tr(v)}</option>`).join("") +
-    `<option value="off" ${Haptics.prefs.tapSound === "off" ? "selected" : ""}>${tr("Без звука")}</option>`;
 }
 
 // Переключатель языка интерфейса: смена → reload (всё перерисуется на новом языке)
@@ -571,13 +490,7 @@ $("#set-goal").addEventListener("change", e => {
 $("#set-haptics").addEventListener("change", e => {
   Haptics.prefs.enabled = e.target.checked;
   Haptics.save();
-  $("#set-tap-sound").disabled = !e.target.checked;
-  if (e.target.checked) Haptics.tap();   // сразу дать услышать/почувствовать
-});
-$("#set-tap-sound").addEventListener("change", e => {
-  Haptics.prefs.tapSound = e.target.value;
-  Haptics.save();
-  if (e.target.value !== "off") Haptics.play(e.target.value, 0.4);  // прослушать
+  if (e.target.checked) Haptics.tap();   // сразу дать почувствовать
 });
 
 /* ---------- Тема оформления ---------- */

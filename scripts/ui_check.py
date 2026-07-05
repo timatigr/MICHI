@@ -298,11 +298,6 @@ async def main():
             if errs:
                 problems.append(f"JS errors: {errs}")
             print(f"JS errors: {errs if errs else '(none)'}")
-            snd = await cdp.js(
-                "(async()=>{try{const b=await Haptics.buffer('drop_003');"
-                "return b?('ok '+Math.round(b.duration*1000)+'ms'):'null';}"
-                "catch(e){return 'err '+e}})()")
-            print(f"sound decode drop_003: {snd}")
 
             info = json.loads(await cdp.js(OVERFLOW_JS))
             print(f"overflow (mobile today): vw={info['vw']} scrollWidth={info['scroll']}")
@@ -382,14 +377,15 @@ async def main():
             await cdp.js("document.querySelector('#player-body #next')."
                          "click&&document.querySelector('#player-body #next').click()")
 
-            # --- Настройки (тумблер + селектор звука) ---
+            # --- Настройки (тумблер вибрации + селекторы) ---
             await cdp.send("Page.navigate", url=ORIGIN + "/")
             await settle(1400)
             await cdp.js("openSettings()")
             await settle(700)
-            opts = await cdp.js("Array.from(document.querySelectorAll("
-                                "'#set-tap-sound option')).length")
-            print(f"tap-sound options: {opts}")
+            haptics_ok = await cdp.js("!!document.getElementById('set-haptics')")
+            print(f"haptics toggle: {'present' if haptics_ok else 'MISSING'}")
+            if not haptics_ok:
+                problems.append("в настройках нет тумблера вибрации")
             await cdp.shot("m_settings")
 
             # --- О проекте / приватность (открывается из настроек) ---

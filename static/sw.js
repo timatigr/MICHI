@@ -5,10 +5,10 @@
    только сеть (динамика, cookie-сессия). Версия CACHE инвалидирует кэш на деплое. */
 "use strict";
 
-const VERSION = "02abeaeec1a0";
+const VERSION = "2e86570f58a5";
 const CACHE = `michi-${VERSION}`;
-// Минимальная оболочка приложения (EN-оверлей контента и звуки кэшируются лениво
-// по факту обращения через stale-while-revalidate — не раздуваем precache).
+// Минимальная оболочка приложения (EN-оверлей контента и озвучка кэшируются
+// лениво по факту обращения — не раздуваем precache).
 const SHELL = [
   "/", "/index.html", "/style.css", "/fonts.css", "/app.js", "/i18n.js",
   "/icons.js", "/tracing.js", "/art.js", "/manifest.webmanifest", "/icon.svg",

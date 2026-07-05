@@ -197,20 +197,13 @@ const EN = {
   "Серьёзная — 40 XP": "Serious — 40 XP",
   "Серия 🔥 растёт за любой день с занятием. Цель — личный дневной ориентир. XP: повторение +2, урок +20.":
     "Your 🔥 streak grows on any day you study. The goal is a personal daily target. XP: review +2, lesson +20.",
-  "Звук и вибрация при нажатиях": "Sound & vibration on taps",
-  "Звук нажатия": "Tap sound",
-  "Выберите звук — он сразу проиграется. Звуки Kenney (CC0), не зависят от громкости озвучки слов.":
-    "Pick a sound — it plays instantly. Kenney sounds (CC0), independent of word audio volume.",
+  "Вибрация при нажатиях": "Vibration on taps",
+  "Лёгкий тактильный отклик на телефоне: нажатия и вердикт ответа. На компьютере не ощущается.":
+    "A light tactile response on the phone: taps and answer verdicts. Not felt on desktop.",
   "ИИ-разбор ошибок «Сэнсэй»": "AI mistake analysis «Sensei»",
   "Язык": "Language",
   "Язык интерфейса. Контент уроков переводится постепенно; непереведённое показывается по-русски.":
     "Interface language. Lesson content is translated gradually; untranslated parts show in Russian.",
-  "Без звука": "No sound",
-
-  // --- Голоса нажатий (Haptics.TAPS) ---
-  "Капля": "Drop", "Тик": "Tick", "Мягкий": "Soft", "Клик": "Click",
-  "Струна": "Pluck", "Стекло": "Glass", "Щелчок": "Switch",
-  "Маримба": "Marimba", "Блип": "Blip", "Пиксель": "Pixel",
 
   // --- Сегодня ---
   "Доброй ночи": "Good night",
@@ -448,8 +441,8 @@ const EN = {
   "Удалить данные: на вкладке «Статистика» → «Резервная копия» есть кнопка «Удалить мои данные» — она безвозвратно стирает весь прогресс с сервера и начинает чистую сессию. Можно и просто очистить cookie сайта. Заброшенные пустые сессии сервер удаляет сам.":
     "Deleting your data: on the «Stats» tab → «Backup» there's a «Delete my data» button — it permanently erases all progress on the server and starts a clean session. You can also just clear the site's cookie. Abandoned empty sessions are removed by the server automatically.",
   "Лицензия и благодарности": "License & credits",
-  'Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Звуки интерфейса — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Шрифты — Inter и Noto Sans JP.':
-    'Code is licensed under MIT. Stroke-order data — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Interface sounds — <a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Fonts — Inter and Noto Sans JP.',
+  'Код — под лицензией MIT. Данные порядка черт — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Шрифты — Inter и Noto Sans JP.':
+    'Code is licensed under MIT. Stroke-order data — <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (© Ulrich Apel, CC BY-SA 3.0). Fonts — Inter and Noto Sans JP.',
   "Учебный проект, предоставляется «как есть», без гарантий.":
     "An educational project, provided «as is», without any warranty.",
 
