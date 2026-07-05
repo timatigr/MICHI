@@ -1000,6 +1000,15 @@ async function renderToday() {
     ? `<p class="note">${tr("Хирагана пройдена — ромадзи скрыт, чтобы вы читали каной.\n       Вернуть можно в ⚙ настройках.")}</p>`
     : "";
   if (romajiNote) localStorage.setItem("michi_romaji_note", "1");
+  // «Правило 2 тапов» (SRS 11.2): одна главная кнопка дня прямо в герое —
+  // очередь SRS, а когда она пуста — следующий урок. У новичка (ни XP, ни
+  // серии) вместо мёртвых нулей статистики — только приглашение к первому уроку.
+  const freshUser = o.xp.total === 0 && o.streak === 0;
+  const heroAct = queueTotal
+    ? { fn: startReview, label: tr("Начать сессию · {n} · ≈{m} мин", { n: queueTotal, m: estMin }) }
+    : next
+      ? { fn: () => startLesson(next.id), label: freshUser ? tr("Начать первый урок") : tr("Начать урок") }
+      : null;
 
   view.innerHTML = `
     <div class="today stagger">
@@ -1011,11 +1020,12 @@ async function renderToday() {
         </div>
         <div class="hero-mascot">${Art.mascotTile("wave")}</div>
       </div>
-      <div class="hero-stats">
+      ${freshUser ? "" : `<div class="hero-stats">
         ${o.streak > 0 ? `<div class="hs hs-streak"><b>${Icons.ui("flame")} ${o.streak}</b><span>${tr("серия дней")}</span></div>` : ""}
         <div class="hs"><b>${o.today.reviews}</b><span>${tr("повторено сегодня")}</span></div>
         <div class="hs"><b>${o.today.accuracy !== null ? o.today.accuracy + "%" : "—"}</b><span>${tr("точность сегодня")}</span></div>
-      </div>
+      </div>`}
+      ${heroAct ? `<button class="hero-cta" id="hero-cta">${heroAct.label}</button>` : ""}
     </div>
     ${o.streak > 0 && o.today.reviews === 0 ? `<div class="streak-nudge">${Icons.ui("flame")} ${tr("Серия {n} дн. — позанимайтесь сегодня, чтобы не прервать её", { n: o.streak })}</div>` : ""}
 
@@ -1110,6 +1120,7 @@ async function renderToday() {
   $("#btn-review")?.addEventListener("click", startReview);
   $("#btn-lesson")?.addEventListener("click", () => startLesson(next.id));
   $("#btn-freshen")?.addEventListener("click", startFreshen);
+  if (heroAct) $("#hero-cta")?.addEventListener("click", heroAct.fn);
 }
 
 /* ---------- Путь: регионы и сетка уроков ---------- */
@@ -2350,10 +2361,16 @@ async function renderReviewTab() {
   Romaji.syncProgress(o.courses);
   const total = o.srs.due + o.srs.new_available;
   const estMin = Math.max(1, Math.round(total * 0.15));
+  // Новичок без единой карточки: вместо трёх нулей — маскот и приглашение
+  const freshSrs = !total && !o.srs.reviews_done_today;
   view.innerHTML = `
     <div class="review-wrap stagger">
     <div class="card">
       <h2>${tr("Очередь на сегодня")}</h2>
+      ${freshSrs ? `
+      <div class="empty-mascot">${Art.mascotTile("wave")}</div>
+      <p class="note center">${tr("Пока нечего повторять — пройдите первый урок, и карточки появятся здесь.")}</p>`
+      : `
       <div class="stat-trio">
         <div><b>${o.srs.due}</b><span>${tr("по расписанию")}</span></div>
         <div><b>${o.srs.new_available}</b><span>${tr(plural(o.srs.new_available, ["новая", "новые", "новых"]))}</span></div>
@@ -2361,7 +2378,7 @@ async function renderReviewTab() {
       </div>
       ${total
         ? `<button class="primary mt cta-glow" id="btn-start">${tr("Начать сессию · {n} · ≈{m} мин", { n: total, m: estMin })}</button>`
-        : `<p class="note center mt">${tr("Очередь пуста — всё повторено! Новые карточки появятся\n           после уроков, повторения — по расписанию FSRS.")}</p>`}
+        : `<p class="note center mt">${tr("Очередь пуста — всё повторено! Новые карточки появятся\n           после уроков, повторения — по расписанию FSRS.")}</p>`}`}
     </div>
     ${o.mistakes_today ? `<div class="card">
       <h2>${tr("Работа над ошибками")}</h2>

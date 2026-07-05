@@ -269,6 +269,9 @@ const EN = {
   "новая": "new", "новые": "new", "новых": "new",
   "повторено сегодня ": "reviewed today",
   "Начать сессию · {n} · ≈{m} мин": "Start session · {n} · ≈{m} min",
+  "Начать урок": "Start the lesson",
+  "Пока нечего повторять — пройдите первый урок, и карточки появятся здесь.":
+    "Nothing to review yet — finish your first lesson and cards will appear here.",
   "Очередь пуста — всё повторено! Новые карточки появятся\n           после уроков, повторения — по расписанию FSRS.":
     "Queue empty — all reviewed! New cards appear after lessons; reviews follow the FSRS schedule.",
 

@@ -351,6 +351,21 @@ html[data-theme="dark"] .hero {
 .hs span { display: block; font-size: var(--text-100); opacity: 0.92; margin-top: 2px; line-height: 1.35; text-shadow: 0 1px 2px rgba(60, 40, 95, 0.28); }
 .hs-streak b { letter-spacing: -0.5px; }
 
+/* Главная кнопка дня в герое — «правило 2 тапов» (SRS 11.2): одно действие,
+   агрегирующее очередь SRS и следующий урок. Белая на градиенте — единственный
+   светлый прямоугольник экрана, взгляд падает сразу на неё. */
+.hero-cta {
+  display: block; width: 100%; margin-top: var(--space-3xl);
+  background: rgba(255, 255, 255, 0.95); color: #B42A66;   /* AA на белом */
+  border: none; cursor: pointer;
+  padding: var(--space-xl) var(--space-3xl); border-radius: var(--r-xl);
+  font-size: var(--text-400); font-weight: 800; letter-spacing: 0.2px;
+  box-shadow: 0 10px 24px rgba(60, 40, 95, 0.28);
+  transition: transform .12s, box-shadow .15s, filter .15s;
+}
+.hero-cta:hover { transform: translateY(-1px); filter: brightness(1.02); box-shadow: 0 13px 28px rgba(60, 40, 95, 0.34); }
+.hero-cta:active { transform: scale(0.97); }
+
 /* Нудж «не потеряй серию» — показываем под героем, если сегодня ещё не занимались */
 .streak-nudge {
   margin: -2px 0 var(--space-xl); padding: var(--space-lg) var(--space-2xl); border-radius: var(--r-lg);
