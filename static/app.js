@@ -1284,7 +1284,7 @@ function openPlayer(mode) {
                    calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
                    shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞",
                    pitch: "Высотное ударение 高低", story: "Свиток истории 物語",
-                   confusion: "Радар путаницы" };
+                   confusion: "Радар путаницы", exam: "Пробный тест N5" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -2415,6 +2415,11 @@ async function renderReviewTab() {
       <p class="note" style="margin-top:0">${tr("Быстрый разбор того, в чём вы сегодня ошиблись. Это практика — на расписание SRS не влияет.")}</p>
       <button class="ghost mt" id="btn-mistakes">${tr("Разобрать ошибки дня · {n}", { n: o.mistakes_today })}</button>
     </div>` : ""}
+    <div class="card">
+      <h2>${tr("Пробный тест")}</h2>
+      <p class="note" style="margin-top:0">${tr("Мини-срез уровня по всей программе N5: кана, слова, кандзи, грамматика — 10 минут. Практика, на расписание SRS не влияет.")}</p>
+      <button class="ghost mt" id="btn-exam">${tr("Пройти пробный тест N5")}</button>
+    </div>
     ${conf.pairs.length ? `<div class="card radar-card">
       <h2>${tr("Радар путаницы")}</h2>
       <p class="note" style="margin-top:0">${tr("Знаки, которые вы чаще путаете на повторениях. Точечная отработка — на расписание SRS не влияет.")}</p>
@@ -2442,6 +2447,7 @@ async function renderReviewTab() {
                      pitch: startPitch };
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
+  $("#btn-exam")?.addEventListener("click", startExam);
   $("#btn-confusion")?.addEventListener("click", startConfusionDrill);
   view.querySelector(".practice-grid")?.addEventListener("click", e => {
     const b = e.target.closest(".practice-tile");
@@ -2482,6 +2488,114 @@ async function startMistakes() {
       <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+}
+
+/* ---------- Пробный мини-тест N5 (SRS.md 11.1 «Пробный экзамен») ----------
+   Оценка по всей программе — i+1 сознательно не действует (это срез уровня,
+   не обучение). Read-only: runExercise без afterAnswer, в SRS ничего не уходит.
+   Таймер в шапке; по истечении времени оставшиеся вопросы идут в ошибки. */
+async function startExam() {
+  const token = openPlayer("exam");
+  let paper;
+  try { paper = await api.get("/api/exam?listening=" + (TTS.available ? 1 : 0)); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const sections = paper.sections;
+  const totalN = sections.reduce((n, s) => n + s.exercises.length, 0);
+  const totalMin = Math.round(paper.time_limit_sec / 60);
+
+  // Вступление: правила теста (таймер стартует после «Начать»)
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `
+    <div class="intro-screen">
+      <div class="intro-ico jp c4">験</div>
+      <h2 class="intro-title">${tr("Пробный тест N5")}</h2>
+      <div class="intro-sub jp">${sections.map(s => s.jp).join("・")}</div>
+      <p class="intro-text">${tr("{n} вопросов · {m} минут. Вопросы — по всей программе N5, в том числе ещё не пройденной. Результат не влияет на расписание повторений.", { n: totalN, m: totalMin })}</p>
+      <div class="spacer"></div>
+      <button class="primary" id="next">${tr("Начать")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (await waitClick($("#next", playerBody)) === ABORT) return;
+
+  const deadline = Date.now() + paper.time_limit_sec * 1000;
+  let answeredN = 0;
+  const counter = $("#player-counter");
+  const tick = () => {
+    const left = Math.max(0, deadline - Date.now());
+    const m = Math.floor(left / 60000), s = Math.floor(left / 1000) % 60;
+    counter.textContent = `${m}:${String(s).padStart(2, "0")} · ${answeredN}/${totalN}`;
+  };
+  tick();
+  const timer = setInterval(() => {
+    if (token !== sessionToken) { clearInterval(timer); return; }
+    tick();
+  }, 500);
+
+  const results = [];
+  let timeUp = false;
+  try {
+    for (const sec of sections) {
+      const r = { title: sec.title, jp: sec.jp, ok: 0, total: sec.exercises.length };
+      results.push(r);
+      if (timeUp || !sec.exercises.length) continue;
+      // Перебивка секции: что сейчас проверяем
+      playerBody.classList.add("center-step");
+      playerBody.innerHTML = `
+        <div class="intro-screen">
+          <div class="intro-ico jp c${results.length % 6}">${sec.jp.slice(0, 1)}</div>
+          <h2 class="intro-title">${tr(sec.title)}</h2>
+          <div class="intro-sub jp">${sec.jp}</div>
+          <div class="spacer"></div>
+          <button class="primary" id="next">${tr("Дальше")}</button>
+        </div>`;
+      animateIn(playerBody);
+      if (await waitClick($("#next", playerBody)) === ABORT) return;
+      for (const ex of sec.exercises) {
+        if (Date.now() >= deadline) { timeUp = true; break; }
+        setProgress(answeredN / totalN);
+        const res = await runExercise(ex);          // без afterAnswer → read-only
+        if (token !== sessionToken) return;
+        answeredN++;
+        if (res.correct) r.ok++;
+        Combo.update(res.correct);
+      }
+    }
+  } finally {
+    clearInterval(timer);
+  }
+
+  setProgress(1);
+  counter.textContent = "";
+  const okTotal = results.reduce((n, r) => n + r.ok, 0);
+  const pct = totalN ? Math.round(okTotal / totalN * 100) : 0;
+  const passed = pct >= 80;                          // планка ворот юнита (раздел 3)
+  const verdictText = passed
+    ? tr("Отличная готовность! Такой результат — уверенный проходной.")
+    : pct >= 60
+      ? tr("Уже близко: подтяните слабые секции и попробуйте ещё раз.")
+      : tr("Пока рано — продолжайте путь. Тест можно повторять в любой момент.");
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `
+    <div class="result">
+      ${passed ? `<div class="result-mascot">${Art.mascotTile("cheer")}</div>` : `<div class="mark">験</div>`}
+      <h2>${tr("Результат: {p}%", { p: pct })}</h2>
+      <p>${verdictText}${timeUp ? `<br>${tr("Время вышло — оставшиеся вопросы засчитаны как ошибки.")}` : ""}</p>
+      <div class="exam-breakdown">
+        ${results.map(r => `
+        <div class="exam-row">
+          <span class="er-jp jp">${r.jp}</span>
+          <span class="er-t">${tr(r.title)}</span>
+          <div class="er-bar"><div style="width:${r.total ? Math.round(r.ok / r.total * 100) : 0}%"></div></div>
+          <b class="er-n">${r.ok}/${r.total}</b>
+        </div>`).join("")}
+      </div>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (passed) confetti();
   if (await waitClick($("#finish", playerBody)) === ABORT) return;
   closePlayer();
 }

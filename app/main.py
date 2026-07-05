@@ -29,9 +29,9 @@ from .content.registry import (
     srs_items_for_lesson,
 )
 from .exercises import (
-    _mnemonics_for, confusion_rounds, counter_rounds, item_info, kanji_forge_rounds,
-    make_lesson_steps, minimal_pair_rounds, pitch_rounds, review_exercise,
-    shiritori_rounds,
+    _mnemonics_for, confusion_rounds, counter_rounds, exam_paper, item_info,
+    kanji_forge_rounds, make_lesson_steps, minimal_pair_rounds, pitch_rounds,
+    review_exercise, shiritori_rounds,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -596,6 +596,16 @@ def counters(limit: int = 8):
 def pitch_drill(limit: int = 8):
     """Раунды дрилла высотного ударения 高低. Чистый контент — БД не нужна."""
     return {"rounds": pitch_rounds(limit)}
+
+
+# ---------- Пробный мини-тест N5 (SRS.md 11.1 «Пробный экзамен») ----------
+
+@app.get("/api/exam")
+def exam(listening: int = 1):
+    """Билет пробного теста: срез по всей программе. Чистый контент — БД не
+    нужна; ответы фронт в SRS не отправляет (read-only практика).
+    listening=0 — без секции 聴解 (у клиента нет озвучки)."""
+    return exam_paper(listening=bool(listening))
 
 
 # ---------- Радар путаницы: личные ошибки → точечный дрилл-различение ----------

@@ -346,6 +346,27 @@ const EN = {
   // --- Разбор ошибок «Сэнсэй» (кнопка/панель) ---
   "Разобрать ошибку": "Analyze mistake",
   "Объяснить по-другому": "Explain differently",
+
+  // --- Пробный мини-тест N5 ---
+  "Пробный тест": "Mock test",
+  "Пробный тест N5": "N5 mock test",
+  "Мини-срез уровня по всей программе N5: кана, слова, кандзи, грамматика — 10 минут. Практика, на расписание SRS не влияет.":
+    "A quick level check across the whole N5 course: kana, words, kanji, grammar — 10 minutes. Practice only, doesn't affect the SRS schedule.",
+  "Пройти пробный тест N5": "Take the N5 mock test",
+  "{n} вопросов · {m} минут. Вопросы — по всей программе N5, в том числе ещё не пройденной. Результат не влияет на расписание повторений.":
+    "{n} questions · {m} minutes. Questions cover the whole N5 course, including parts you haven't studied yet. The result doesn't affect your review schedule.",
+  "Знаки": "Kana",
+  "Слова": "Words",
+  "Аудирование": "Listening",
+  "Результат: {p}%": "Score: {p}%",
+  "Отличная готовность! Такой результат — уверенный проходной.":
+    "Great readiness! A score like this is a confident pass.",
+  "Уже близко: подтяните слабые секции и попробуйте ещё раз.":
+    "Almost there: shore up the weaker sections and try again.",
+  "Пока рано — продолжайте путь. Тест можно повторять в любой момент.":
+    "Not yet — keep walking your path. You can retake the test anytime.",
+  "Время вышло — оставшиеся вопросы засчитаны как ошибки.":
+    "Time's up — the remaining questions were counted as mistakes.",
   "Думаю…": "Thinking…",
   "Не получилось получить разбор. Попробуйте ещё раз.": "Couldn't get an analysis. Please try again.",
   "Правило": "Rule",

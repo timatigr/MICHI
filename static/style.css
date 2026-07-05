@@ -1353,6 +1353,18 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
 .result.gate-fail .primary { display: block; margin: 0 auto var(--space-lg); }
 .result.gate-fail .ghost { display: block; margin: 0 auto; }
 
+/* Пробный тест: разбивка результата по секциям */
+.exam-breakdown {
+  display: flex; flex-direction: column; gap: var(--space-md);
+  margin: 0 auto var(--space-5xl); max-width: 380px; text-align: left;
+}
+.exam-row { display: flex; align-items: center; gap: var(--space-md); }
+.exam-row .er-jp { font-size: var(--text-300); color: var(--muted); width: 40px; flex-shrink: 0; }
+.exam-row .er-t { font-size: var(--text-300); font-weight: 600; color: var(--title); width: 104px; flex-shrink: 0; }
+.exam-row .er-bar { flex: 1; height: 8px; border-radius: var(--r-xs); background: var(--line); overflow: hidden; }
+.exam-row .er-bar > div { height: 100%; border-radius: var(--r-xs); background: linear-gradient(90deg, var(--indigo), var(--pink)); }
+.exam-row .er-n { font-size: var(--text-200); color: var(--muted); width: 36px; text-align: right; flex-shrink: 0; }
+
 /* --- Статистика --- */
 .bars { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100px; margin-top: var(--space-xs); }
 .bars .bar { flex: 1; max-width: 46px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: var(--space-2xs); height: 100%; }

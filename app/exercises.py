@@ -1077,3 +1077,47 @@ def make_lesson_steps(lesson_id):
         steps.extend({"type": "exercise", "exercise": e} for e in mix)
 
     return steps
+
+
+# ---------- Пробный мини-тест N5 (SRS.md 11.1 «Пробный экзамен») ----------
+
+EXAM_TIME_LIMIT_SEC = 10 * 60
+
+def exam_paper(listening=True, seed=None):
+    """Срез готовности по ВСЕЙ программе N5 — секции в духе JLPT:
+    文字 (кана) / 語彙 (слова) / 漢字 / 文法 [/ 聴解 при доступной озвучке].
+
+    Это оценка, а не обучение: выборка не зависит от прогресса, поэтому принцип
+    i+1 здесь сознательно не действует. Практика read-only — фронт не отправляет
+    ответы в SRS, расписание и статистика не меняются. seed — для тестов.
+    """
+    rnd = random.Random(seed)
+
+    kana = rnd.sample(list(KANA_BY_CHAR), 4)
+    n_words = 8 + (4 if listening else 0)
+    words = rnd.sample(list(VOCAB_BY_ID), min(n_words, len(VOCAB_BY_ID)))
+    kanji = rnd.sample(list(KANJI_BY_CHAR), min(8, len(KANJI_BY_CHAR)))
+    grammar = rnd.sample(list(GRAMMAR_BY_ID), min(6, len(GRAMMAR_BY_ID)))
+
+    sections = [
+        {"id": "moji", "title": "Знаки", "jp": "文字", "exercises":
+            [review_exercise("kana", c, reps=i % 2) for i, c in enumerate(kana)]},
+        {"id": "goi", "title": "Слова", "jp": "語彙", "exercises":
+            # 6 на распознавание (JP→RU) + 2 на воспроизведение (RU→JP)
+            [review_exercise("vocab_jp_ru", w, reps=0) for w in words[:6]]
+            + [review_exercise("vocab_ru_jp", w, reps=0) for w in words[6:8]]},
+        {"id": "kanji", "title": "Кандзи", "jp": "漢字", "exercises":
+            [review_exercise("kanji_meaning" if i % 2 else "kanji_reading", c)
+             for i, c in enumerate(kanji)]},
+        {"id": "bunpou", "title": "Грамматика", "jp": "文法", "exercises":
+            [review_exercise("grammar", p, reps=0) for p in grammar]},
+    ]
+    if listening:
+        sections.append(
+            {"id": "choukai", "title": "Аудирование", "jp": "聴解", "exercises":
+                [review_exercise("vocab_jp_ru", w, reps=1) for w in words[8:12]]})
+
+    # осиротевших быть не должно (id из реестров) — но страхуемся от None
+    for s in sections:
+        s["exercises"] = [e for e in s["exercises"] if e]
+    return {"sections": sections, "time_limit_sec": EXAM_TIME_LIMIT_SEC}

@@ -676,6 +676,62 @@ async def main():
                          "document.querySelector('#player').classList.remove('open')")
             await settle(150)
 
+            # --- Пробный тест N5: интро → таймер → секции → результат ---
+            # (мы на вкладке «Повторение» после блока радара)
+            if not await cdp.js("!!document.querySelector('#btn-exam')"):
+                problems.append("на «Повторении» нет кнопки пробного теста")
+            await cdp.js(
+                "window.__realApiGet4=api.get;"
+                "api.get=async p=>p.indexOf('/api/exam')===0?({time_limit_sec:600,sections:["
+                "{id:'moji',title:'Знаки',jp:'文字',exercises:["
+                "{type:'kana_recognition',item_id:'あ',question:'Как читается этот знак?',"
+                "prompt:{text:'あ',tts:'あ',style:'jp'},options:['a','i','u','e'],answer:0}]},"
+                "{id:'goi',title:'Слова',jp:'語彙',exercises:["
+                "{type:'vocab_choice',item_id:'mizu',question:'Что означает это слово?',"
+                "prompt:{text:'みず',tts:'みず',style:'jp'},"
+                "options:['вода','чай','хлеб','рыба'],answer:0}]}]})"
+                ":window.__realApiGet4(p)")
+            await cdp.fire("startExam()")
+            await settle(800)
+            await cdp.shot("m_exam_intro")
+            intro_t = await cdp.js(
+                "(document.querySelector('#player-body .intro-title')||{}).textContent||''")
+            print(f"exam intro: {intro_t!r}")
+            if "Пробный тест" not in intro_t:
+                problems.append(f"интро пробного теста не отрисовалось: {intro_t!r}")
+            await cdp.js("document.querySelector('#player-body #next').click()")  # Начать
+            await settle(500)
+            timer_txt = await cdp.js(
+                "document.getElementById('player-counter').textContent")
+            print(f"exam timer: {timer_txt!r}")
+            if ":" not in (timer_txt or ""):
+                problems.append(f"таймер теста не тикает: {timer_txt!r}")
+            await cdp.js("document.querySelector('#player-body #next').click()")  # 文字
+            await settle(600)
+            n_opts = await cdp.js(
+                "document.querySelectorAll('#player-body .options button').length")
+            if n_opts != 4:
+                problems.append(f"вопрос теста: вариантов {n_opts} (ждали 4)")
+            await cdp.js(
+                "document.querySelectorAll('#player-body .options button')[0].click()")
+            await settle(1800)                       # автопереход после верного ответа
+            await cdp.js("var b=document.querySelector('#player-body #next');b&&b.click()")
+            await settle(600)                        # секция 語彙
+            await cdp.js("var b=document.querySelectorAll("
+                         "'#player-body .options button')[0];b&&b.click()")
+            await settle(1800)
+            await cdp.shot("m_exam_result")
+            res_rows = await cdp.js(
+                "document.querySelectorAll('#player-body .exam-row').length")
+            res_h2 = await cdp.js(
+                "(document.querySelector('#player-body .result h2')||{}).textContent||''")
+            print(f"exam result: rows={res_rows} h2={res_h2!r}")
+            if res_rows != 2 or "%" not in res_h2:
+                problems.append(f"результат теста: rows={res_rows}, h2={res_h2!r}")
+            await cdp.js("var b=document.querySelector('#player-body #finish');b&&b.click()")
+            await settle(500)
+            await cdp.js("api.get=window.__realApiGet4")
+
             # --- Combo-счётчик серии в шапке плеера ---
             await cdp.js("openPlayer('review');Combo.update(true);Combo.update(true);Combo.update(true)")
             await settle(150)
