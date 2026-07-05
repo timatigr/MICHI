@@ -289,6 +289,11 @@ function mountExplain(host, ctx) {
 const escapeHtml = s => String(s == null ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/* Учебный мини-markdown: **жирный** в объяснениях грамматики. Контент курса
+   пишет **は** — без конвертации звёздочки уходили в разметку как есть. */
+const fmtBold = s => String(s == null ? "" : s)
+  .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+
 /* Локализация составного вопроса: шаблон и каждая подстановка переводятся
    отдельно (word_kanji / verb_conjugation). В RU вернёт исходную фразу. */
 function qtr(qi) {
@@ -1636,7 +1641,7 @@ async function showIntroKanji(step) {
 async function showIntroGrammar(step) {
   const reg = { neutral: "нейтр.", polite: "вежл.", casual: "разг.", formal: "формальн." };
   const explanation = (step.explanation || []).map(b =>
-    `<p class="g-block">${tr(b)}</p>`).join("");
+    `<p class="g-block">${fmtBold(tr(b))}</p>`).join("");
   const examples = (step.examples || []).map(e =>
     `<button class="kanji-ex" data-tts="${e.tts}">
        <span class="ex-w jp">${e.jp}</span>
@@ -1668,7 +1673,7 @@ async function showIntroGrammar(step) {
     try {
       const r = await api.post("/api/ai/explain_grammar", { point_id: step.id });
       body.innerHTML = `
-        <p class="ai-text">${escapeHtml(r.explanation)}</p>
+        <p class="ai-text">${fmtBold(escapeHtml(r.explanation))}</p>
         ${(r.examples || []).map(e => `<p class="ai-ex jp-ex">
           <span class="jp" data-tts="${escAttr(e.jp)}">${escapeHtml(e.jp)}</span>
           — ${escapeHtml(e.ru)}</p>`).join("")}

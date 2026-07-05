@@ -933,6 +933,7 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
   border-radius: var(--r-md); padding: var(--space-sm) var(--space-xl); margin: 2px auto var(--space-sm); align-self: center;
 }
 .g-block { font-size: var(--text-400); line-height: 1.6; color: var(--text); margin: var(--space-md) 0 0; }
+.g-block b { color: var(--title); }   /* **акценты** контента читаются как заголовочные */
 .g-register {
   font-size: var(--text-100); font-weight: 700; color: var(--muted);
   border: 1px solid var(--line); border-radius: var(--r-xs); padding: 1px var(--space-sm); margin-left: var(--space-2xs);
