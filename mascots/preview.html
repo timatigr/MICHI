@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Кандидаты маскота MICHI</title>
+<style>
+  body { font-family: "Segoe UI", system-ui, sans-serif; margin: 24px;
+         background: #F4F2FB; color: #4A4458; }
+  h1 { font-size: 20px; } p { color: #706785; max-width: 640px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+          gap: 16px; margin-top: 20px; }
+  .card { background: #fff; border-radius: 18px; padding: 16px; text-align: center;
+          box-shadow: 0 8px 24px rgba(126,104,173,.12); }
+  .pair { display: flex; gap: 12px; justify-content: center; }
+  /* контекст приложения: светлый герой-градиент и тёмная карточка */
+  .slot { width: 96px; height: 96px; border-radius: 50%; display: flex;
+          align-items: center; justify-content: center; }
+  .slot.hero { background: linear-gradient(135deg, #8E7CC3, #F2A2C4); }
+  .slot.dark { background: #221E2E; }
+  .slot img { width: 72px; height: 72px; object-fit: contain;
+              filter: drop-shadow(0 4px 8px rgba(60,40,95,.28)); }
+  .name { margin-top: 10px; font-weight: 600; font-size: 14px; }
+  .lic { color: #706785; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Кандидаты маскота MICHI（道）</h1>
+<p>Каждый показан в двух контекстах приложения: на градиенте героя «Сегодня»
+и на тёмной карточке. Выбранный файл скопируйте в
+<code>static/img/mascot.png</code> — подробности в CREDITS.md.</p>
+<div class="grid" id="grid"></div>
+<script>
+const items = [
+  ["noto-fox.png", "Noto — лисёнок", "Apache 2.0"],
+  ["noto-cat.png", "Noto — котик", "Apache 2.0"],
+  ["noto-dog.png", "Noto — пёсик", "Apache 2.0"],
+  ["noto-rabbit.png", "Noto — кролик", "Apache 2.0"],
+  ["noto-hamster.png", "Noto — хомяк", "Apache 2.0"],
+  ["noto-panda.png", "Noto — панда", "Apache 2.0"],
+  ["openmoji-fox.png", "OpenMoji — лиса", "CC BY-SA 4.0"],
+  ["openmoji-cat.png", "OpenMoji — кот", "CC BY-SA 4.0"],
+  ["openmoji-rabbit.png", "OpenMoji — кролик", "CC BY-SA 4.0"],
+  ["twemoji-fox.png", "Twemoji — лиса", "CC BY 4.0"],
+  ["twemoji-cat.png", "Twemoji — кот", "CC BY 4.0"],
+];
+document.getElementById("grid").innerHTML = items.map(([f, name, lic]) => `
+  <div class="card">
+    <div class="pair">
+      <div class="slot hero"><img src="${f}" alt=""></div>
+      <div class="slot dark"><img src="${f}" alt=""></div>
+    </div>
+    <div class="name">${name}</div>
+    <div class="lic">${f} · ${lic}</div>
+  </div>`).join("");
+</script>
+</body>
+</html>
