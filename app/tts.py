@@ -3,9 +3,12 @@
 
 - Edge TTS (онлайн, бесплатно): Нанами/Кэйта + «кавайный» вариант Нанами
   (поднятый тон и чуть живее темп).
-- VOICEVOX (https://voicevox.hiroshiba.jp/ — бесплатный локальный движок
-  аниме-голосов: Дзундамон, Сикоку Мэтан и др.): если движок запущен на
-  127.0.0.1:50021, его голоса автоматически появляются в списке.
+- VOICEVOX (https://voicevox.hiroshiba.jp/ — бесплатный движок аниме-голосов:
+  Дзундамон, Сикоку Мэтан и др.): если движок доступен, его голоса
+  автоматически появляются в списке. Локально — установленный движок на
+  127.0.0.1:50021; на публичном сервере — свой контейнер voicevox_engine
+  через MICHI_VOICEVOX_URL: аниме-голоса получают ВСЕ посетители сайта,
+  ничего не устанавливая (синтез серверный, браузер ходит только в /api/tts).
 
 Файлы кэшируются на диске; скорость/громкость применяются на клиенте.
 """
@@ -38,8 +41,16 @@ EDGE_BY_ID = {v["id"]: v for v in EDGE_VOICES}
 # Старые сохранённые настройки клиентов
 LEGACY_IDS = {"ja-JP-NanamiNeural": "nanami", "ja-JP-KeitaNeural": "keita"}
 
-# --- VOICEVOX (локальный движок аниме-голосов) ---
-VOICEVOX_URL = "http://127.0.0.1:50021"
+# --- VOICEVOX (движок аниме-голосов: локальный или контейнер рядом с приложением) ---
+DEFAULT_VOICEVOX_URL = "http://127.0.0.1:50021"
+
+
+def _vv_url() -> str:
+    """Адрес движка. Читается на каждый запрос (не на импорт): тесты и
+    docker-compose задают MICHI_VOICEVOX_URL (например, http://voicevox:50021)."""
+    return os.environ.get("MICHI_VOICEVOX_URL", DEFAULT_VOICEVOX_URL).rstrip("/")
+
+
 VV_NAME_RU = {
     "ずんだもん": "Дзундамон",
     "四国めたん": "Сикоку Мэтан",
@@ -48,25 +59,26 @@ VV_NAME_RU = {
     "波音リツ": "Намине Рицу",
     "冥鳴ひまり": "Мэймэй Химари",
 }
-_vv_cache = {"ts": 0.0, "voices": []}
+_vv_cache = {"ts": 0.0, "voices": [], "url": ""}
 
 
 def _vv_get(path, timeout=2):
-    with urllib.request.urlopen(VOICEVOX_URL + path, timeout=timeout) as r:
+    with urllib.request.urlopen(_vv_url() + path, timeout=timeout) as r:
         return r.read()
 
 
 def _vv_post(path, body=b"", timeout=20):
     req = urllib.request.Request(
-        VOICEVOX_URL + path, data=body, method="POST",
+        _vv_url() + path, data=body, method="POST",
         headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
 
 async def voicevox_voices():
-    """Список голосов VOICEVOX; пусто, если движок не запущен. Кэш 60 с."""
-    if time.time() - _vv_cache["ts"] < 60:
+    """Список голосов VOICEVOX; пусто, если движок не запущен. Кэш 60 с
+    (ключуется адресом движка — смена MICHI_VOICEVOX_URL сбрасывает)."""
+    if _vv_cache["url"] == _vv_url() and time.time() - _vv_cache["ts"] < 60:
         return _vv_cache["voices"]
 
     def probe():
@@ -87,7 +99,7 @@ async def voicevox_voices():
         voices = await asyncio.to_thread(probe)
     except Exception:
         voices = []
-    _vv_cache.update(ts=time.time(), voices=voices)
+    _vv_cache.update(ts=time.time(), voices=voices, url=_vv_url())
     return voices
 
 

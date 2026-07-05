@@ -1,0 +1,40 @@
+# MICHI + VOICEVOX: публичный сайт с аниме-голосами для всех посетителей.
+#
+#   docker compose up -d
+#
+# Движок voicevox_engine крутится рядом с приложением (только во внутренней
+# сети compose, наружу не торчит); синтез серверный с дисковым кэшем, браузеру
+# посетителя ничего устанавливать не нужно — голоса Дзундамон и др. сами
+# появляются в списке ⚙ → Озвучка. Не нужен VOICEVOX — уберите сервис и
+# переменную MICHI_VOICEVOX_URL, остальное работает как раньше.
+#
+# Секрет подписи cookie задайте в .env рядом с этим файлом:
+#   MICHI_SECRET_KEY=<openssl rand -hex 32>
+# TLS и рейт-лимиты — на reverse-proxy перед 8000 (см. README «Деплой»).
+
+services:
+  michi:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MICHI_SECRET_KEY: ${MICHI_SECRET_KEY:?задайте MICHI_SECRET_KEY в .env}
+      MICHI_COOKIE_SECURE: "1"
+      MICHI_VOICEVOX_URL: http://voicevox:50021
+    volumes:
+      - michi-data:/app/data       # прогресс пользователей — бэкапьте этот том
+      - michi-tts:/app/tts_cache   # кэш озвучки переживает пересборки образа
+    depends_on:
+      - voicevox
+
+  voicevox:
+    # Официальный образ движка (CPU): https://hub.docker.com/r/voicevox/voicevox_engine
+    # Голоса — по условиям персонажей VOICEVOX (кредит вида «VOICEVOX:ずんだもん»).
+    image: voicevox/voicevox_engine:cpu-latest
+    restart: unless-stopped
+    # порт наружу не публикуем — движок доступен только приложению
+
+volumes:
+  michi-data:
+  michi-tts:
