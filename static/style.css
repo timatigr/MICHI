@@ -209,7 +209,8 @@ header.topbar h1 {
   font-size: var(--text-800); font-weight: 700; color: var(--title); letter-spacing: 0.5px;
 }
 .pill {
-  background: var(--pink); color: #fff; font-size: var(--text-100); font-weight: 700;
+  /* фон --pink-cta, не --pink: под белым мелким текстом нужен AA ≥4.5:1 */
+  background: var(--pink-cta); color: #fff; font-size: var(--text-100); font-weight: 700;
   letter-spacing: 1px; padding: var(--space-xs) var(--space-xl); border-radius: var(--r-xl);
 }
 .icon-btn {
@@ -538,7 +539,8 @@ html[data-theme="dark"] .hero {
 .pi-info .s { font-size: var(--text-200); color: var(--muted); margin-top: 2px; line-height: 1.4; }
 .pi-done { color: var(--success); font-size: var(--text-600); font-weight: 700; padding: 0 var(--space-md); }
 .mini-btn {
-  background: var(--pink); color: #fff; border: none; cursor: pointer;
+  /* --pink-cta: белый текст на --pink не добирал AA (≈2.6:1) */
+  background: var(--pink-cta); color: #fff; border: none; cursor: pointer;
   padding: var(--space-md) var(--space-3xl); border-radius: var(--r-md); font-size: var(--text-300); font-weight: 700;
   box-shadow: 0 5px 14px rgba(242, 119, 155, 0.35); transition: filter .15s, transform .1s;
   flex-shrink: 0;
@@ -839,7 +841,7 @@ html[data-theme="dark"] .c5 { background: #1F3D44; color: #87CBDA; }
   font-size: var(--text-200); font-weight: 700; color: var(--pink-ink); align-self: center;
   background: var(--pink-soft); border-radius: var(--r-pill); padding: 2px var(--space-md); white-space: nowrap;
 }
-.combo.milestone { color: #fff; background: var(--pink); }
+.combo.milestone { color: #fff; background: var(--pink-cta); }   /* AA на белом тексте */
 .combo.bump { animation: combo-bump .3s cubic-bezier(.2, .8, .3, 1); }
 @keyframes combo-bump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
 
@@ -1721,7 +1723,8 @@ button.ghost:active { transform: scale(0.94); }
   font-size: var(--text-75); font-weight: 700; padding: 2px var(--space-md); border-radius: var(--r-pill);
   vertical-align: middle; margin-left: var(--space-2xs);
 }
-.ai-pill.on { color: #fff; background: var(--success); }
+/* Тёмная пара success: белый на #5CA37E давал 3:1 (axe, мелкий текст) */
+.ai-pill.on { color: #fff; background: #3E7D5C; }
 .ai-pill.off { color: #574d70; background: var(--line); }
 html[data-theme="dark"] .ai-pill.off { color: #B3A9C6; }   /* светлее под тёмный --line (AA) */
 
