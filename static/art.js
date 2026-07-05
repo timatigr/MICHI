@@ -12,14 +12,15 @@ const Art = {
   // а каной/кандзи рисуется собственный глиф из поля icon). Незнакомый id даёт
   // фолбэк на эмодзи — новые достижения не ломают сетку.
   KIND: {
-    first_lesson: "sprout", first_review: "loop", first_kanji: "scroll",
+    first_lesson: "sprout", first_review: "loop", first_kanji: "fude",
     gate_first: "torii",
-    lessons_10: "book", lessons_30: "book", lessons_60: "grad",
-    rev_100: "loop", rev_500: "loop", rev_1000: "target",
-    streak_3: "flame", streak_7: "flame", streak_30: "flame", streak_100: "mountain",
+    lessons_10: "book", lessons_30: "books", lessons_60: "grad",
+    rev_100: "hundred", rev_500: "vortex", rev_1000: "target",
+    streak_3: "flame", streak_7: "campfire", streak_30: "moonflame",
+    streak_100: "mountain",
     hiragana_done: "kana", katakana_done: "kana",
     kanji_10: "scroll", kanji_30: "scroll",
-    words_50: "words", words_150: "words",
+    words_50: "words", words_150: "bubbles",
     memory_20: "brain", memory_50: "gem",
     accuracy_day: "medal", night_owl: "owl", level_5: "star",
   },
@@ -136,6 +137,46 @@ const Art = {
       ${this._face(50, 62, .85)}`;
   },
 
+  // «Сотня» повторений: петля SRS + 百 в центре (иначе дублировала first_review)
+  _hundred() {
+    return this._loop() + `<text x="50" y="51" text-anchor="middle"
+      dominant-baseline="central" font-family="'Noto Sans JP',sans-serif"
+      font-weight="700" font-size="23" fill="#8E7CC3">百</text>`;
+  },
+
+  // Костёр — «Неделя в строю»: огонь уже обжился, у него есть поленья
+  _campfire() {
+    return `<ellipse cx="50" cy="84" rx="19" ry="4" fill="#4A4458" opacity=".10"/>
+      <path d="M50,30 C56,40 66,45 66,56 C66,66 59,73 50,73
+        C41,73 34,67 34,57 C34,49 40,46 44,40 C46,45 48,43 50,30 Z"
+        fill="#FF9E4F" stroke="#4A4458" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M50,47 C54,53 58,56 58,62 C58,67 54,71 50,71
+        C46,71 42,68 42,63 C42,57 47,55 50,47 Z" fill="#FFD24F"/>
+      <g stroke="#4A4458" stroke-width="2.4">
+        <rect x="27" y="73" width="46" height="8" rx="4" fill="#A9744C"
+          transform="rotate(-7 50 77)"/>
+        <rect x="27" y="73" width="46" height="8" rx="4" fill="#C08A5B"
+          transform="rotate(7 50 77)"/></g>
+      <g fill="#F4C84B">
+        <circle cx="29" cy="38" r="2.2"/><circle cx="71" cy="33" r="2.6"/>
+        <circle cx="63" cy="23" r="1.8"/></g>
+      ${this._face(50, 60, .75)}`;
+  },
+
+  // Огонёк под месяцем — «Месяц пути» (серия 30 дней)
+  _moonflame() {
+    return `<path d="M78,14 A19,19 0 1,0 90,42 A15,15 0 1,1 78,14 Z"
+        fill="#FCE39A" stroke="#4A4458" stroke-width="2.2" stroke-linejoin="round"/>
+      <g fill="#F4C84B"><circle cx="66" cy="16" r="2"/><circle cx="88" cy="50" r="1.7"/></g>
+      <ellipse cx="44" cy="84" rx="15" ry="3.6" fill="#4A4458" opacity=".10"/>
+      <path d="M44,26 C51,38 63,43 63,58 C63,71 54,82 44,82
+        C34,82 26,73 26,59 C26,50 33,49 37,43 C40,50 42,46 44,26 Z"
+        fill="#FF9E4F" stroke="#4A4458" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M44,47 C48,54 53,58 53,65 C53,72 49,77 44,77
+        C39,77 35,72 35,66 C35,59 41,58 44,47 Z" fill="#FFD24F"/>
+      ${this._face(44, 64, .8)}`;
+  },
+
   _mountain() {
     return `<path d="M20,76 L45,32 Q50,24 55,32 L80,76 Z"
         fill="#8E7CC3" stroke="#4A4458" stroke-width="2.6" stroke-linejoin="round"/>
@@ -167,6 +208,62 @@ const Art = {
       <text x="50" y="51" text-anchor="middle" dominant-baseline="central"
         font-family="'Noto Sans JP',sans-serif" font-weight="700" font-size="25"
         fill="#4A4458">${g}</text>`;
+  },
+
+  // Стопка книг — «Усердный» (30 уроков): больше одной книги «Прилежного»
+  _books() {
+    return `<ellipse cx="50" cy="83" rx="21" ry="4.5" fill="#4A4458" opacity=".10"/>
+      <g stroke="#4A4458" stroke-width="2.4" stroke-linejoin="round">
+        <rect x="25" y="66" width="50" height="13" rx="4" fill="#8FD0AE"/>
+        <rect x="29" y="53" width="45" height="13" rx="4" fill="#F7B8D0"/>
+        <rect x="27" y="40" width="42" height="13" rx="4" fill="#B9A7E6"/></g>
+      <g stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" opacity=".75">
+        <path d="M31,72.5 h8"/><path d="M35,59.5 h8"/><path d="M33,46.5 h8"/></g>
+      <path d="M74,28 l2,4.6 4.6,2 -4.6,2 -2,4.6 -2,-4.6 -4.6,-2 4.6,-2 Z"
+        fill="#F4C84B" stroke="#4A4458" stroke-width="1.4" stroke-linejoin="round"/>`;
+  },
+
+  // Водоворот — «Пятьсот» повторений (🌀 круговорот карточек)
+  _vortex() {
+    return `<path d="M50,20 C71,20 84,34 84,51 C84,68 71,80 54,80
+        C40,80 30,70 30,57 C30,46 38,38 49,38 C58,38 64,44 64,52
+        C64,59 59,64 52,64 C47,64 43,60 44,55"
+        fill="none" stroke="#7FD4E0" stroke-width="7.5" stroke-linecap="round"/>
+      <path d="M50,20 C71,20 84,34 84,51" fill="none"
+        stroke="#57BECE" stroke-width="7.5" stroke-linecap="round"/>
+      <circle cx="22" cy="34" r="3" fill="#B6E8F0"/>
+      <circle cx="18" cy="60" r="2.4" fill="#B6E8F0"/>
+      <circle cx="30" cy="22" r="2" fill="#B6E8F0"/>`;
+  },
+
+  // Кисть пишет 字 — «Первый кандзи»
+  _fude() {
+    return `<rect x="20" y="26" width="44" height="50" rx="5"
+        fill="#FFF7E9" stroke="#4A4458" stroke-width="2.4"/>
+      <text x="42" y="49" text-anchor="middle" dominant-baseline="central"
+        font-family="'Noto Sans JP',sans-serif" font-weight="700" font-size="26"
+        fill="#4A4458">字</text>
+      <path d="M34,66 Q42,62 50,66" fill="none" stroke="#8E7CC3"
+        stroke-width="4" stroke-linecap="round"/>
+      <path d="M82,14 L66,40" stroke="#C08A5B" stroke-width="5.5"
+        stroke-linecap="round"/>
+      <path d="M66,40 C60,45 57,52 59,58 C66,56 71,50 72,44 Z"
+        fill="#4A4458" stroke="#4A4458" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="74" cy="68" r="3" fill="#8E7CC3"/>`;
+  },
+
+  // Два пузыря диалога — «Полтораста слов» (одиночный — у «Полсотни»)
+  _bubbles() {
+    return `<path d="M20,26 H60 a7,7 0 0,1 7,7 V49 a7,7 0 0,1 -7,7 H38 L28,66 V56 h-8
+        a7,7 0 0,1 -7,-7 V33 a7,7 0 0,1 7,-7 Z"
+        fill="#B9A7E6" stroke="#4A4458" stroke-width="2.4" stroke-linejoin="round"/>
+      <g stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round">
+        <path d="M26,38 H56"/><path d="M26,46 H48"/></g>
+      <path d="M56,52 H80 a6,6 0 0,1 6,6 V70 a6,6 0 0,1 -6,6 h-6 l-8,8 V76 h-10
+        a6,6 0 0,1 -6,-6 V58 a6,6 0 0,1 6,-6 Z"
+        fill="#F7B8D0" stroke="#4A4458" stroke-width="2.4" stroke-linejoin="round"/>
+      <g stroke="#FFFFFF" stroke-width="3" stroke-linecap="round">
+        <path d="M56,60 H78"/><path d="M56,67 H72"/></g>`;
   },
 
   _words() {
