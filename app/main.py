@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from . import ai_tutor, db, gamification, identity, ratelimit, srs_engine, tts
+from . import ai_tutor, backup, db, gamification, identity, ratelimit, srs_engine, tts
 from .content import story as story_content
 from .content.pitch import pitch_for
 from .content.seasons import current_sekki
@@ -67,6 +67,23 @@ async def _cleanup_loop():
         await asyncio.sleep(_CLEANUP_INTERVAL_SEC)
 
 
+# Серверный бэкап всех данных (app/backup.py): первый прогон сразу после старта
+# (если свежий архив уже есть — пропускается), далее раз в сутки. Локальная
+# ротация + offsite-выгрузка через MICHI_BACKUP_S3_* (см. README «Публичный
+# хостинг»). MICHI_BACKUP_ENABLED=0 — выключить.
+async def _backup_loop():
+    while True:
+        try:
+            info = await asyncio.to_thread(backup.run)
+            if "skipped" not in info:
+                log.info("Серверный бэкап: %s (%d КиБ)%s",
+                         info["archive"], info["size"] // 1024,
+                         " → выгружен offsite" if info.get("uploaded") else "")
+        except Exception:
+            log.exception("Серверный бэкап не удался")
+        await asyncio.sleep(backup.interval_sec())
+
+
 def _secret_key_warning():
     """Текст предупреждения, если в прод-режиме (HTTPS-cookie) не задан явный
     MICHI_SECRET_KEY; иначе None. Без него подпись cookie держится на
@@ -98,11 +115,15 @@ def _enforce_secret_key():
 async def lifespan(_app):
     _enforce_secret_key()   # прод без секрета подписи cookie — отказ старта (см. выше)
     db.init_db()
-    task = asyncio.create_task(_cleanup_loop()) if _CLEANUP_ENABLED else None
+    tasks = []
+    if _CLEANUP_ENABLED:
+        tasks.append(asyncio.create_task(_cleanup_loop()))
+    if backup.enabled():
+        tasks.append(asyncio.create_task(_backup_loop()))
     try:
         yield
     finally:
-        if task is not None:
+        for task in tasks:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
