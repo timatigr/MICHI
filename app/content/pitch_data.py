@@ -292,4 +292,13 @@ PITCH = {
     'tokuni': 1,
     'kyuuni': 0,
     'yappari': 3,
+    'kibun': 1,
+    'kimochi': 0,
+    'anshin': 0,
+    'shinpai': 0,
+    'bikkuri': 3,
+    'zannen': 3,
+    'ureshii': 3,
+    'sabishii': 3,
+    'tanoshimi': 3,
 }
