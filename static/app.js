@@ -928,7 +928,13 @@ async function show(name) {
     });
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>
-  b.addEventListener("click", () => show(b.dataset.view)));
+  b.addEventListener("click", () => {
+    // Повторный тап по активной вкладке — не перерисовка (у вкладок без кэша
+    // мигал бы скелетон), а прокрутка к началу, как в нативных приложениях.
+    // Программные show() того же экрана (после урока, retry) рендерят как раньше.
+    if (b.dataset.view === _curTab) { scrollTo({ top: 0, behavior: "smooth" }); return; }
+    show(b.dataset.view);
+  }));
 
 /* Скользящая «пилюля» активной вкладки: подложка плавно едет к активной кнопке
    вместо мгновенной перекраски. Видима только на десктопе (см. CSS); класс
