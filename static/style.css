@@ -1607,15 +1607,19 @@ html[data-theme="dark"] .srs-limits select {
 .empty { text-align: center; color: var(--muted); padding: 48px 0; font-size: var(--text-300); animation: fadein .3s ease both; }
 
 /* Скелетоны загрузки: мерцающие плейсхолдеры под геометрию экрана (без CLS) */
-/* Скелетон не должен вспыхивать на быстрых ответах: первые ~0.15с он невидим
-   (fill backwards держит opacity из from-кадра), и быстрый рендер подменяет его
-   контентом до появления. Медленный — мягко проявляет. Нарочно без явного
+/* Скелетон не должен вспыхивать на быстрых и средних ответах: первые 0.4с он
+   невидим (fill backwards держит opacity из from-кадра), и рендер быстрее этого
+   подменяет его контентом до появления. Реально медленная загрузка — мягко
+   проявляет. Именно мигание скелетона читалось как «белые прямоугольники в
+   тёмной теме / тёмные в светлой» при переключении вкладок. Нарочно без явного
    opacity: 0 — при prefers-reduced-motion анимации глушатся глобально, и
    скелетон должен остаться видимым, а не пропасть насовсем. */
-.skel { animation: fadein .25s ease .15s both; }
+.skel { animation: fadein .3s ease .4s both; }
 .skel-card, .skel-tile, .skel-tabs span {
+  /* Блик шиммера едва светлее карточки (12% белого): яркая полоса в тёмной
+     теме читалась как белая вспышка, когда скелетон всё же показывается */
   background: linear-gradient(100deg,
-    var(--line) 30%, color-mix(in srgb, var(--card) 70%, #fff) 50%, var(--line) 70%);
+    var(--line) 30%, color-mix(in srgb, var(--card) 88%, #fff) 50%, var(--line) 70%);
   background-size: 300% 100%;
   border-radius: var(--radius);
   animation: skel-shimmer 1.3s ease-in-out infinite;
