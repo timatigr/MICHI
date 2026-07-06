@@ -167,6 +167,13 @@ html[data-theme="dark"] body::before {
 @keyframes slide-from-left  { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: none; } }
 .anim-in-right { animation: slide-from-right .26s cubic-bezier(.21, .8, .36, 1) both; }
 .anim-in-left  { animation: slide-from-left  .26s cubic-bezier(.21, .8, .36, 1) both; }
+/* Уход старого экрана перед въездом нового (animateOut в app.js): короче и с
+   ease-in — уходящее ускоряется, приходящее тормозит, как в нативной навигации.
+   forwards держит конечную прозрачность до подмены DOM. */
+@keyframes slide-to-left  { to { opacity: 0; transform: translateX(-16px); } }
+@keyframes slide-to-right { to { opacity: 0; transform: translateX(16px); } }
+.anim-out-left  { animation: slide-to-left  .13s ease-in forwards; }
+.anim-out-right { animation: slide-to-right .13s ease-in forwards; }
 
 /* Каскадное появление карточек внутри экрана (premium «list appear» как в iOS):
    контейнер въезжает целиком (.anim-in на #view), а его карточки «оседают» по
@@ -246,6 +253,9 @@ nav.tabs button .ico {
 nav.tabs button.active { color: var(--pink-ink); }
 nav.tabs button.active .ico { font-weight: 700; transform: translateY(-1px); }
 nav.tabs button:active .ico { transform: scale(0.88); }   /* тактильный отклик нажатия */
+/* Скользящая подложка активной вкладки (moveTabGlider в app.js): на телефоне
+   скрыта — там активность передаёт цвет; включается в десктопной «пилюле» */
+.tab-glider { display: none; }
 
 /* --- Карточки --- */
 .card {
@@ -1624,8 +1634,20 @@ html[data-theme="dark"] .srs-limits select {
   nav.tabs button {
     flex: 0 0 auto; padding: var(--space-sm) var(--space-2xl);
     border-radius: var(--r-pill);
+    position: relative; z-index: 1;      /* контент кнопок поверх .tab-glider */
   }
   nav.tabs button.active { background: var(--pink-soft); }
+  /* Подложку активной вкладке рисует скользящая пилюля; статичный фон кнопки —
+     только фолбэк, пока JS её не создал (иначе рисовались бы обе) */
+  nav.tabs:has(.tab-glider) button.active { background: none; }
+  .tab-glider {
+    display: block; position: absolute; left: 0; top: 0; z-index: 0;
+    border-radius: var(--r-pill); background: var(--pink-soft);
+  }
+  .tab-glider.ready {
+    transition: transform .32s cubic-bezier(.21, .8, .36, 1),
+                width .32s cubic-bezier(.21, .8, .36, 1);
+  }
   /* Колонки (masonry-поток): карточки заполняют две колонки без привязки к
      рядам — нет дыры под низкой карточкой и пустых ячеек. Герой — на всю ширину. */
   .today { columns: 2; column-gap: var(--space-xl); }

@@ -584,6 +584,32 @@ function animateIn(el, dir = 0) {
   el.classList.add(cls);
 }
 
+/* Короткий уход старого экрана перед сменой вкладки (симметрия с animateIn):
+   переключение читается как непрерывное движение, а не подмена картинки.
+   fill:forwards держит экран прозрачным до конца анимации; класс снимается в
+   finish(), а следующий рендер подменяет DOM в той же микрозадаче — кадра со
+   «вернувшимся» старым контентом не бывает. Резолвится сразу при reduced-motion
+   и на пустом экране; setTimeout — страховка, если animationend не пришёл. */
+function animateOut(el, dir) {
+  return new Promise(resolve => {
+    if (dir === 0 || !el.childElementCount ||
+        matchMedia("(prefers-reduced-motion: reduce)").matches) { resolve(); return; }
+    el.classList.remove("anim-in", "anim-in-left", "anim-in-right");
+    const cls = dir > 0 ? "anim-out-left" : "anim-out-right";
+    el.classList.add(cls);
+    let done = false;
+    const finish = e => {
+      if (done || (e && e.target !== el)) return;  // animationend детей — не наш
+      done = true;
+      el.removeEventListener("animationend", finish);
+      el.classList.remove(cls);
+      resolve();
+    };
+    el.addEventListener("animationend", finish);
+    setTimeout(finish, 220);
+  });
+}
+
 /* Плавный счёт числа 0→to (ease-out cubic). Под reduced-motion — конечное сразу. */
 function countUp(el, to, dur = 650) {
   if (!el) return;
@@ -854,21 +880,27 @@ const view = $("#view");
 const renderers = { today: renderToday, lessons: renderLessons, review: renderReviewTab, stats: renderStats, dict: renderDict };
 const TAB_ORDER = ["today", "lessons", "review", "stats", "dict"];
 let _curTab = "today";
+let _navSeq = 0;   // быстрые клики по вкладкам: устаревший переход не дорисовывается
 
-function show(name) {
+async function show(name) {
   // Направление перехода между вкладками — для горизонтального въезда контента
   const dir = Math.sign(TAB_ORDER.indexOf(name) - TAB_ORDER.indexOf(_curTab));
   _curTab = name;
+  const seq = ++_navSeq;
   document.querySelectorAll("nav.tabs button").forEach(b => {
     const on = b.dataset.view === name;
     b.classList.toggle("active", on);
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
+  moveTabGlider();
+  await animateOut(view, dir);       // старый экран уходит в противоположную сторону
+  if (seq !== _navSeq) return;       // пока уходил — кликнули другую вкладку
   // Граница ошибки: упавший рендер (обрыв сети на /api/overview и т.п.) не должен
   // оставлять скелетон навсегда — показываем восстановимое состояние с «Повторить».
   Promise.resolve(renderers[name]())
-    .then(() => animateIn(view, dir))
+    .then(() => { if (seq === _navSeq) animateIn(view, dir); })
     .catch(err => {
+      if (seq !== _navSeq) return;
       console.error(err);
       view.innerHTML = `
         <div class="card empty-state error-state" role="alert">
@@ -882,6 +914,33 @@ function show(name) {
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>
   b.addEventListener("click", () => show(b.dataset.view)));
+
+/* Скользящая «пилюля» активной вкладки: подложка плавно едет к активной кнопке
+   вместо мгновенной перекраски. Видима только на десктопе (см. CSS); класс
+   ready включает transition после первой расстановки — без него пилюля ехала бы
+   в стартовую позицию из угла. Пересчёт: смена вкладки, ресайз, догрузка шрифтов
+   (меняет ширины кнопок). */
+function moveTabGlider() {
+  const nav = document.querySelector("nav.tabs");
+  const btn = nav.querySelector("button.active");
+  if (!btn) return;
+  let g = nav.querySelector(".tab-glider");
+  if (!g) {
+    g = document.createElement("span");
+    g.className = "tab-glider";
+    g.setAttribute("aria-hidden", "true");
+    nav.prepend(g);
+  }
+  const n = nav.getBoundingClientRect(), b = btn.getBoundingClientRect();
+  if (!b.width) return;                     // вкладки ещё не разложены
+  g.style.width = b.width + "px";
+  g.style.height = b.height + "px";
+  g.style.transform = `translate(${b.left - n.left}px, ${b.top - n.top}px)`;
+  if (!g.classList.contains("ready"))
+    requestAnimationFrame(() => requestAnimationFrame(() => g.classList.add("ready")));
+}
+addEventListener("resize", () => requestAnimationFrame(moveTabGlider));
+document.fonts?.ready?.then(() => moveTabGlider());
 
 function setStreakPill(streak) {
   const pill = $("#streak-pill");

@@ -230,6 +230,14 @@ def _tz_offset_min(request: Request):
         return None
 
 
+@app.get("/api/health")
+def health():
+    """Живость сервиса для аптайм-мониторинга (UptimeRobot/Better Stack и т.п.:
+    GET сюда раз в минуту, алерт при не-200). Ничего не читает и не пишет —
+    проверка должна быть дешёвой и не плодить состояния (per-user баз)."""
+    return {"ok": True}
+
+
 def _lesson_statuses(conn):
     rows = conn.execute("SELECT * FROM lesson_progress").fetchall()
     progress = {r["lesson_id"]: r for r in rows}
