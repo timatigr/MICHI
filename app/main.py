@@ -825,9 +825,9 @@ def stats(request: Request):
             ).fetchone()
             return round(row["ok"] / row["total"] * 100) if row["total"] else None
 
-        # Все 14 дней, включая нулевые — иначе график из одного дня
-        # превращается в сплошной столбец на всю ширину
-        act_days = 14
+        # Все дни, включая нулевые: календарь занятий рисует 20 недель
+        # (пустая ячейка — тоже информация), «дырявый» ряд ломал бы сетку
+        act_days = 140
         start = (srs_engine.local_today(tz) - timedelta(days=act_days - 1))
         rev_day = srs_engine.day_sql("reviewed_at", tz)
         act_rows = conn.execute(

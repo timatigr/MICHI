@@ -1290,7 +1290,7 @@ document.addEventListener("click", e => {
 /* Тач: у столбиков графиков нет hover-подсказки — показываем значение по тапу
    (на устройствах без курсора), на десктопе остаётся нативный title. */
 document.addEventListener("click", e => {
-  const el = e.target.closest(".bars .bar, .mm-cell");
+  const el = e.target.closest(".bars .bar, .mm-cell, .ac-cell");
   if (el && el.title && matchMedia("(hover: none)").matches) toast(el.title);
 });
 
@@ -3275,6 +3275,34 @@ async function renderDict() {
 /* ---------- Статистика ---------- */
 const fmtDay = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
+/* Календарь занятий (GitHub-style): колонки — недели, строки пн→вс.
+   Sequential-шкала одной тональности (розовый рамп, светлее → темнее =
+   больше повторений); величина в тултипе, на таче — тостом (как .mm-cell). */
+function activityCalendar(days) {
+  const max = Math.max(...days.map(d => d.reviews), 1);
+  const level = n => n === 0 ? 0
+    : n <= Math.max(1, max * 0.25) ? 1
+    : n <= max * 0.5 ? 2
+    : n <= max * 0.75 ? 3 : 4;
+  // выравнивание первой колонки: понедельник — верхняя строка
+  const offset = (new Date(days[0].date + "T12:00:00").getDay() + 6) % 7;
+  const pads = `<span class="ac-cell pad" aria-hidden="true"></span>`.repeat(offset);
+  const cells = days.map(d => {
+    const title = d.reviews
+      ? `${fmtDay(d.date)}: ${d.reviews}${d.accuracy != null
+          ? ` · ${tr("точность {p}%", { p: d.accuracy })}` : ""}`
+      : `${fmtDay(d.date)} — ${tr("без занятий")}`;
+    return `<button class="ac-cell l${level(d.reviews)}" title="${title}"
+      aria-label="${title}"></button>`;
+  }).join("");
+  return `<div class="act-cal">${pads}${cells}</div>
+    <div class="ac-legend">
+      <span>${tr("меньше")}</span>
+      ${[0, 1, 2, 3, 4].map(l => `<i class="ac-cell l${l}"></i>`).join("")}
+      <span>${tr("больше")}</span>
+    </div>`;
+}
+
 function barChart(data, valueKey, dateKey, cls = "", titleFn = null) {
   const max = Math.max(...data.map(d => d[valueKey]), 1);
   return `<div class="bars">${data.map((d, i) => `
@@ -3321,10 +3349,9 @@ async function renderStats() {
       </div>
     </div>
     <div class="card">
-      <h2>${tr("Сколько я повторял · 14 дней")}</h2>
+      <h2>${tr("Календарь занятий · 20 недель")}</h2>
       ${hasActivity
-        ? barChart(s.activity, "reviews", "date", "", d =>
-            `${fmtDay(d.date)}: ${d.reviews}${d.accuracy != null ? ` · ${tr("точность {p}%", { p: d.accuracy })}` : ""}`)
+        ? activityCalendar(s.activity)
         : `<p class="note">${tr("Пока нет данных — пройдите первую SRS-сессию.")}</p>`}
     </div>
     <div class="card">

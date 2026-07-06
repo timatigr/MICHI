@@ -1747,6 +1747,38 @@ html[data-theme="dark"] .ai-pill.off { color: #B3A9C6; }   /* светлее п�
   margin: 2px 0 var(--space-md);
 }
 
+/* --- Календарь занятий: недели-колонки, sequential розовый рамп ---
+   Светлая тема: светлее → темнее (больше повторений); тёмная — свои шаги
+   от поверхности к яркому, не автоперевёртыш (читаемость на тёмном). */
+:root, html[data-theme="light"] {
+  --ac-0: #EFEAF7; --ac-1: #F6C9DC; --ac-2: #EF8FB4; --ac-3: #D9548A; --ac-4: #B42A66;
+}
+html[data-theme="dark"] {
+  --ac-0: #322C40; --ac-1: #55304A; --ac-2: #8A3F63; --ac-3: #C25585; --ac-4: #F08CB4;
+}
+.act-cal {
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr);
+  gap: 3px; margin-top: var(--space-lg);
+}
+.ac-cell {
+  aspect-ratio: 1; padding: 0; border: none; border-radius: 3px;
+  cursor: pointer; transition: transform .12s;
+}
+.ac-cell.pad { visibility: hidden; }
+.ac-cell.l0 { background: var(--ac-0); }
+.ac-cell.l1 { background: var(--ac-1); }
+.ac-cell.l2 { background: var(--ac-2); }
+.ac-cell.l3 { background: var(--ac-3); }
+.ac-cell.l4 { background: var(--ac-4); }
+.ac-cell:hover { transform: scale(1.3); box-shadow: var(--shadow-sm); }
+.ac-legend {
+  display: flex; align-items: center; gap: var(--space-2xs);
+  justify-content: flex-end; margin-top: var(--space-md);
+  font-size: var(--text-100); color: var(--muted);
+}
+.ac-legend .ac-cell { width: 11px; height: 11px; cursor: default; display: inline-block; }
+.ac-legend span { margin: 0 var(--space-2xs); }
+
 /* --- Карта памяти (тепловая решётка «силы памяти» FSRS-R) --- */
 .mem-map .mm-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(15px, 1fr));
