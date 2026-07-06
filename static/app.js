@@ -893,39 +893,61 @@ async function show(name) {
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
   moveTabGlider();
-  await animateOut(view, dir);       // старый экран уходит в противоположную сторону
+
+  // Граница ошибки: упавший рендер (обрыв сети на /api/overview и т.п.) не должен
+  // оставлять скелетон навсегда — показываем восстановимое состояние с «Повторить».
+  const render = () => Promise.resolve(renderers[name]()).catch(err => {
+    if (seq !== _navSeq) return;
+    console.error(err);
+    view.innerHTML = `
+      <div class="card empty-state error-state" role="alert">
+        <div class="empty-mascot">${Art.mascotTile("wave")}</div>
+        <p class="note center">${tr("Не удалось загрузить. Проверьте соединение.")}</p>
+        <button class="primary" id="retry-view">${tr("Повторить")}</button>
+      </div>`;
+    $("#retry-view")?.addEventListener("click", () => show(name));
+  });
+
+  // Основной путь — View Transitions API: старый экран ОСТАЁТСЯ на месте, пока
+  // готовится новый (на быстрой сети скелетон не показывается вовсе — пустой
+  // промежуток «фон мелькнул между экранами» исчезает по построению), затем один
+  // перекрёстный сдвиг по направлению (CSS ::view-transition-*(view)). Гонка с
+  // таймаутом, чтобы медленная сеть не замораживала страницу: через 350мс
+  // переходим на скелетон, а контент позже мягко проявится (у .skel — отложенный
+  // fade-in, плюс подъём ниже).
+  if (dir !== 0 && document.startViewTransition &&
+      !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.documentElement.dataset.navDir = dir > 0 ? "fwd" : "back";
+    const t0 = performance.now();
+    document.startViewTransition(() => {
+      scrollTo(0, 0);                // прыжок скрыт снимком старого экрана
+      const p = render().then(() => {
+        // Контент опоздал к переходу (в переходе был показан скелетон) —
+        // подменяем его с мягким подъёмом, а не «хлопком»
+        if (seq === _navSeq && performance.now() - t0 > 360) animateIn(view, 0);
+      });
+      return Promise.race([p, new Promise(r => setTimeout(r, 350))]);
+    });
+    return;
+  }
+
+  // Фолбэк (нет View Transitions / reduced-motion / перерисовка на месте dir=0):
+  // уход → въезд классами .anim-*; скелетон, если успеет мелькнуть, едет въездом.
+  await animateOut(view, dir);
   if (seq !== _navSeq) return;       // пока уходил — кликнули другую вкладку
   if (dir !== 0) {
     scrollTo(0, 0);                  // экран сейчас прозрачен — сброс скролла невидим
-    // Въезд стартует сразу, НЕ дожидаясь данных: скелетон (если успеет мелькнуть)
-    // едет тем же движением, а контент ложится внутрь уже едущего контейнера.
-    // Одна непрерывная анимация вместо «ушёл → вспыхнул скелетон → въехал заново».
     animateIn(view, dir);
   }
-  // Граница ошибки: упавший рендер (обрыв сети на /api/overview и т.п.) не должен
-  // оставлять скелетон навсегда — показываем восстановимое состояние с «Повторить».
-  Promise.resolve(renderers[name]())
-    .then(() => {
-      if (seq !== _navSeq) return;
-      // Перерисовка на месте (dir 0) — мягкий подъём готового контента, как раньше.
-      // Медленная загрузка (въезд уже кончился) — тоже, иначе контент подменяет
-      // скелетон «хлопком». Быстрый путь не трогаем: перезапуск анимации на
-      // полпути и был главным источником дёрганья.
-      const entering = view.getAnimations?.().some(a => a.playState === "running");
-      if (dir === 0 || !entering) animateIn(view, 0);
-    })
-    .catch(err => {
-      if (seq !== _navSeq) return;
-      console.error(err);
-      view.innerHTML = `
-        <div class="card empty-state error-state" role="alert">
-          <div class="empty-mascot">${Art.mascotTile("wave")}</div>
-          <p class="note center">${tr("Не удалось загрузить. Проверьте соединение.")}</p>
-          <button class="primary" id="retry-view">${tr("Повторить")}</button>
-        </div>`;
-      $("#retry-view")?.addEventListener("click", () => show(name));
-      animateIn(view, 0);
-    });
+  render().then(() => {
+    if (seq !== _navSeq) return;
+    // Перерисовка на месте (dir 0) — мягкий подъём готового контента, как раньше.
+    // Медленная загрузка (въезд уже кончился) — тоже, иначе контент подменяет
+    // скелетон «хлопком». Быстрый путь не трогаем: перезапуск анимации на
+    // полпути и был главным источником дёрганья.
+    const entering = view.getAnimations?.().some(a => a.playState === "running");
+    if (dir === 0 || !entering) animateIn(view, 0);
+  });
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>
   b.addEventListener("click", () => {

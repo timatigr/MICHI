@@ -181,6 +181,21 @@ html[data-theme="dark"] body::before {
 .anim-out-left  { animation: slide-to-left  .13s ease-in forwards; }
 .anim-out-right { animation: slide-to-right .13s ease-in forwards; }
 
+/* Переход вкладок через View Transitions API (show в app.js; без поддержки
+   работает фолбэк на .anim-* классах). Контент-область — своя именованная
+   группа: шапка, навигация и фон в переходе не участвуют. Старый экран
+   держится на месте, пока готовится новый, затем перекрёстный сдвиг по
+   направлению (data-nav-dir на <html>). mix-blend-mode: normal вместо
+   дефолтного plus-lighter обязателен: полупрозрачный перехлёст двух слоёв
+   в plus-lighter складывает яркость — и получается та самая вспышка. */
+#view { view-transition-name: view; }
+::view-transition-old(view),
+::view-transition-new(view) { mix-blend-mode: normal; }
+::view-transition-old(view) { animation: slide-to-left .13s ease-in both; }
+::view-transition-new(view) { animation: slide-from-right .26s cubic-bezier(.21, .8, .36, 1) both; }
+:root[data-nav-dir="back"]::view-transition-old(view) { animation-name: slide-to-right; }
+:root[data-nav-dir="back"]::view-transition-new(view) { animation-name: slide-from-left; }
+
 /* Каскадное появление карточек внутри экрана (premium «list appear» как в iOS):
    контейнер въезжает целиком (.anim-in на #view), а его карточки «оседают» по
    очереди. Малые задержки, верхний предел — чтобы длинные экраны не тормозили.
