@@ -39,6 +39,13 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 log = logging.getLogger("michi")
 
+# Логи фоновых задач (бэкап/чистка) должны быть видны в логах платформы
+# (`fly logs`, `docker logs`): uvicorn настраивает только свои логгеры, root
+# остаётся без хендлера — и INFO-строки молча пропадали (last-resort печатает
+# лишь WARNING+). basicConfig — no-op, если хендлер уже настроен (напр. pytest).
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s:     %(name)s — %(message)s")
+
 # Авточистка заброшенных пустых баз (см. db.cleanup_stale_users). На auto-stop
 # машинах (Fly) суточный цикл может не наступить — поэтому первый прогон сразу
 # после старта (фактически на каждом «пробуждении»), затем раз в сутки для
