@@ -7,7 +7,7 @@
 #
 # Перед первым деплоем поменяйте app на своё (имя уникально на весь Fly).
 
-app = "michi-jp"               # ← поменяйте на своё, имя уникально на весь Fly
+app = "michi-nihongo"          # адрес сайта: https://michi-nihongo.fly.dev
 primary_region = "fra"          # Франкфурт; смените при желании (fly platform regions)
 
 [build]
