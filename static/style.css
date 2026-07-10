@@ -171,15 +171,15 @@ html[data-theme="dark"] body::before {
 /* Горизонтальный въезд контента под направление смены вкладки (как в нативных) */
 @keyframes slide-from-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
 @keyframes slide-from-left  { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: none; } }
-.anim-in-right { animation: slide-from-right .26s cubic-bezier(.21, .8, .36, 1) both; }
-.anim-in-left  { animation: slide-from-left  .26s cubic-bezier(.21, .8, .36, 1) both; }
+.anim-in-right { animation: slide-from-right .2s cubic-bezier(.21, .8, .36, 1) both; }
+.anim-in-left  { animation: slide-from-left  .2s cubic-bezier(.21, .8, .36, 1) both; }
 /* Уход старого экрана перед въездом нового (animateOut в app.js): короче и с
    ease-in — уходящее ускоряется, приходящее тормозит, как в нативной навигации.
    forwards держит конечную прозрачность до подмены DOM. */
 @keyframes slide-to-left  { to { opacity: 0; transform: translateX(-16px); } }
 @keyframes slide-to-right { to { opacity: 0; transform: translateX(16px); } }
-.anim-out-left  { animation: slide-to-left  .13s ease-in forwards; }
-.anim-out-right { animation: slide-to-right .13s ease-in forwards; }
+.anim-out-left  { animation: slide-to-left  .1s ease-in forwards; }
+.anim-out-right { animation: slide-to-right .1s ease-in forwards; }
 
 /* Переход вкладок через View Transitions API (show в app.js; без поддержки
    работает фолбэк на .anim-* классах). Контент-область — своя именованная
@@ -187,12 +187,15 @@ html[data-theme="dark"] body::before {
    держится на месте, пока готовится новый, затем перекрёстный сдвиг по
    направлению (data-nav-dir на <html>). mix-blend-mode: normal вместо
    дефолтного plus-lighter обязателен: полупрозрачный перехлёст двух слоёв
-   в plus-lighter складывает яркость — и получается та самая вспышка. */
+   в plus-lighter складывает яркость — и получается та самая вспышка.
+   Длительности старого и нового РАВНЫ: если старый гаснет вдвое быстрее
+   (было .1s против .2s), в середине оба слоя полупрозрачны и переход
+   читается двухфазно — «исчез… потом появился». */
 #view { view-transition-name: view; }
 ::view-transition-old(view),
 ::view-transition-new(view) { mix-blend-mode: normal; }
-::view-transition-old(view) { animation: slide-to-left .13s ease-in both; }
-::view-transition-new(view) { animation: slide-from-right .26s cubic-bezier(.21, .8, .36, 1) both; }
+::view-transition-old(view) { animation: slide-to-left .2s ease-in both; }
+::view-transition-new(view) { animation: slide-from-right .2s cubic-bezier(.21, .8, .36, 1) both; }
 :root[data-nav-dir="back"]::view-transition-old(view) { animation-name: slide-to-right; }
 :root[data-nav-dir="back"]::view-transition-new(view) { animation-name: slide-from-left; }
 
@@ -241,6 +244,9 @@ header.topbar h1 {
   background: var(--pink-cta); color: #fff; font-size: var(--text-100); font-weight: 700;
   letter-spacing: 1px; padding: var(--space-xs) var(--space-xl); border-radius: var(--r-xl);
 }
+/* Щит «выходного» в пилюле серии: ледяной оттенок на розовом — читается как
+   защита, а не часть счётчика */
+.pill-shield { display: inline-flex; align-items: center; margin-left: var(--space-xs); color: #CFE8FF; }
 .icon-btn {
   background: var(--card); border: none; cursor: pointer; font-size: var(--text-500);
   color: var(--muted); width: 38px; height: 38px; border-radius: 50%;
@@ -299,9 +305,7 @@ nav.tabs button:active .ico { transform: scale(0.88); }   /* тактильны�
 .row { display: flex; gap: var(--space-xl); flex-wrap: wrap; margin-bottom: var(--space-xl); }
 .row .card { flex: 1 1 150px; margin-bottom: 0; }
 
-.stat-big { font-size: var(--text-1000); font-weight: 700; color: var(--title); letter-spacing: -0.5px; }
 .stat-label { color: var(--muted); font-size: var(--text-100); margin-top: 3px; }
-.streak .stat-big { color: var(--pink-ink); }
 
 /* Ряд из 3 чисел внутри одной карточки (Повторение/Статистика) */
 .stat-trio { display: flex; text-align: center; }
@@ -368,12 +372,6 @@ html[data-theme="dark"] .hero {
 .hero-jp { font-size: var(--text-1000); font-weight: 700; cursor: pointer; text-shadow: 0 1px 3px rgba(60, 40, 95, 0.30); }
 /* Мелкий белый текст на светлом (розовом) конце градиента — лёгкая тень держит WCAG AA */
 .hero-ru { font-size: var(--text-200); opacity: 0.95; margin-top: 3px; text-shadow: 0 1px 2px rgba(60, 40, 95, 0.32); }
-.hero-streak {
-  background: rgba(255, 255, 255, 0.16); border-radius: var(--r-lg);
-  padding: var(--space-md) var(--space-xl); text-align: center; backdrop-filter: blur(4px);
-}
-.hero-streak b { display: block; font-size: var(--text-600); }
-.hero-streak span { font-size: var(--text-75); opacity: 0.85; }
 .hero-stats { display: flex; gap: var(--space-lg); margin-top: var(--space-3xl); }
 .hs {
   flex: 1; background: rgba(255, 255, 255, 0.13); border-radius: var(--r-lg);
@@ -1914,4 +1912,11 @@ html[data-theme="dark"] .mm-cell { background: hsl(calc((var(--s) - 35) * 2.1deg
     animation: none !important;
     transition: none !important;
   }
+  /* Исключение: отложенное ПОЯВЛЕНИЕ скелетона — не «движение», а защита от
+     вспышки. Глобальное animation:none убивало fadein с задержкой 0.4с, и
+     плейсхолдеры мигали серыми прямоугольниками на КАЖДОЙ смене вкладки
+     (reduced-motion у всех, кто выключил анимации в Windows/macOS). Возвращаем
+     ту же задержку, но появление мгновенное, без движения: быстрые загрузки
+     скелетон не показывают вовсе, медленные — получают индикатор как раньше. */
+  .skel { animation: fadein 1ms linear .4s both !important; }
 }

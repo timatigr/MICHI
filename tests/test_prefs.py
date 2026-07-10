@@ -34,3 +34,13 @@ def test_values_stored_verbatim(client):
     blob = '{"source":"neural","volume":0.7}'
     client.post("/api/prefs", json={"michi_tts": blob})
     assert client.get("/api/prefs").json()["michi_tts"] == blob
+
+
+def test_oversized_value_rejected(client):
+    # Защита диска: мегабайтные «настройки» — абуз, отсекаются до записи (413).
+    # Худший легитимный случай (словарь мнемоник, десятки КБ) проходит.
+    big = "x" * 1_000_000
+    assert client.post("/api/prefs", json={"michi_mnemo_custom": big}).status_code == 413
+    assert "michi_mnemo_custom" not in client.get("/api/prefs").json()
+    ok = "x" * 50_000
+    assert client.post("/api/prefs", json={"michi_mnemo_custom": ok}).status_code == 200

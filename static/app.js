@@ -22,9 +22,13 @@ async function apiError(r) {
 // сервера (см. app/main.py _tz_offset_min). getTimezoneOffset = минуты к западу.
 const TZ_OFFSET = String(-new Date().getTimezoneOffset());
 
+/* Обрыв сети: fetch кидает TypeError с английским текстом браузера («Failed to
+   fetch») — он утекал в тосты как есть. Подменяем на переводимое сообщение. */
+const netFail = () => { throw new Error(tr("Нет сети — проверьте соединение.")); };
+
 const api = {
   async get(url) {
-    const r = await fetch(url, { headers: { "X-TZ-Offset": TZ_OFFSET } });
+    const r = await fetch(url, { headers: { "X-TZ-Offset": TZ_OFFSET } }).catch(netFail);
     if (!r.ok) throw await apiError(r);
     return r.json();
   },
@@ -33,23 +37,50 @@ const api = {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-TZ-Offset": TZ_OFFSET },
       body: JSON.stringify(body || {}),
-    });
+    }).catch(netFail);
     if (!r.ok) throw await apiError(r);
     return r.json();
   },
 };
 
-/* Кэш /api/overview: его тянут и «Сегодня», и «Повторение» — без кэша переключение
-   вкладок = лишний round-trip. Короткий TTL + явная инвалидация после сессии
-   (closePlayer), когда данные реально меняются. */
-let _ov = { data: null, t: 0 };
-async function getOverview() {
-  if (_ov.data && Date.now() - _ov.t < 15000) return _ov.data;
-  _ov.data = await api.get("/api/overview");
-  _ov.t = Date.now();
-  return _ov.data;
+/* Кэш GET-эндпоинтов вкладок: без него каждое переключение = round-trip, причём
+   рендер ждёт сети ВНУТРИ View Transition — экран замирает после клика (см. show).
+   Храним промис (дедупликация параллельных запросов), ошибки не кэшируем.
+   Короткий TTL + явная инвалидация, когда данные реально меняются: после
+   сессии/урока (closePlayer) и смены настроек SRS. Overview — TTL покороче:
+   там очередь «созревает» со временем. */
+const _getCache = new Map();
+function cachedGet(url, ttl = 60000) {
+  const c = _getCache.get(url);
+  if (c && Date.now() - c.t < ttl) return c.p;
+  const p = api.get(url);
+  _getCache.set(url, { p, t: Date.now() });
+  p.catch(() => _getCache.delete(url));
+  return p;
 }
-function invalidateOverview() { _ov = { data: null, t: 0 }; }
+const getOverview = () => cachedGet("/api/overview", 15000).then(o => (setQueueBadge(o), o));
+
+/* Бейдж на иконке установленного PWA: сколько карточек ждёт (та же цифра, что
+   на кнопке «Начать сессию») — приложение зовёт повторять само, без открытия.
+   Обновляется с каждым свежим overview: после сессии/урока кэш инвалидируется
+   и show("today") приносит новое число. Вне установленного PWA и в браузерах
+   без Badging API — тихий no-op. */
+function setQueueBadge(o) {
+  if (!("setAppBadge" in navigator)) return;
+  const n = o.srs.due + o.srs.new_available;
+  (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+}
+function invalidateData() { _getCache.clear(); }
+
+/* Прогрев кэша в простое после первого экрана: первый тап по любой вкладке
+   рендерится из кэша, и View Transition стартует сразу, без паузы на сеть. */
+function prefetchTabs() {
+  const warm = () => ["/api/lessons", "/api/learned", "/api/stats",
+    "/api/achievements", "/api/confusions?limit=6"]
+    .forEach(u => cachedGet(u).catch(() => {}));
+  if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 2000 });
+  else setTimeout(warm, 800);
+}
 
 /* ---------- UI-настройки: зеркало в БД (перенос между устройствами + бэкап) ----------
    Источник истины на клиенте — localStorage (читается синхронно на старте всеми
@@ -381,7 +412,7 @@ function fillVoiceSelect() {
       vvHint.style.display = "block";
     }
     sel.innerHTML = TTS.neuralVoices.map(v =>
-      `<option value="${v.id}" ${v.id === TTS.prefs.neuralVoice ? "selected" : ""}>${v.label}</option>`
+      `<option value="${escAttr(v.id)}" ${v.id === TTS.prefs.neuralVoice ? "selected" : ""}>${escapeHtml(v.label)}</option>`
     ).join("") || `<option>— недоступно —</option>`;
   } else {
     TTS.refreshBrowser();
@@ -389,9 +420,10 @@ function fillVoiceSelect() {
       warn.textContent = tr("В браузере нет японских голосов. Установите: Параметры Windows → Время и язык → Речь → Добавить голоса → «Японский».");
       warn.style.display = "block";
     }
+    // Имена голосов приходят из ОС/браузера — экранируем, как любой внешний текст
     sel.innerHTML = TTS.browserVoices.map(v =>
-      `<option value="${v.voiceURI}" ${TTS.browserVoice && v.voiceURI === TTS.browserVoice.voiceURI ? "selected" : ""}>
-        ${v.name}${v.localService ? "" : " (онлайн)"}</option>`
+      `<option value="${escAttr(v.voiceURI)}" ${TTS.browserVoice && v.voiceURI === TTS.browserVoice.voiceURI ? "selected" : ""}>
+        ${escapeHtml(v.name)}${v.localService ? "" : " (онлайн)"}</option>`
     ).join("") || `<option>— нет голосов —</option>`;
   }
 }
@@ -507,13 +539,13 @@ const Theme = {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     const btn = $("#btn-theme");
     btn.innerHTML = Icons.ui(this.icons[this.pref]);
-    btn.title = `Тема: ${this.labels[this.pref]} (нажмите, чтобы сменить)`;
+    btn.title = tr("Тема: {t} (нажмите, чтобы сменить)", { t: tr(this.labels[this.pref]) });
     btn.setAttribute("aria-label", btn.title);     // имя для скринридера = подсказка
     // Кнопка в плеере: показывает «куда переключим» (месяц в светлой, солнце в тёмной)
     const pbtn = document.getElementById("player-theme");
     if (pbtn) {
       pbtn.innerHTML = Icons.ui(dark ? "sun" : "moon");
-      pbtn.title = dark ? "Дневной режим" : "Ночной режим";
+      pbtn.title = tr(dark ? "Дневной режим" : "Ночной режим");
       pbtn.setAttribute("aria-label", pbtn.title);
     }
   },
@@ -686,7 +718,7 @@ const TIER_LABEL = { bronze: "Бронза", silver: "Серебро", gold: "З
 
 async function checkAchievements(celebrate, ach) {
   if (!ach) {
-    try { ach = await api.get("/api/achievements"); }
+    try { ach = await cachedGet("/api/achievements"); }
     catch { return null; }   // ИИ/сеть недоступны — курс работает как раньше
   }
   const prev = localStorage.getItem("michi_ach_seen");   // null => база ещё не засеяна
@@ -786,12 +818,17 @@ function celebrateOne(a) {
       ctx.fill();
       ctx.restore();
     }
-    if (!document.hidden) requestAnimationFrame(frame);
+    if (!document.hidden) raf = requestAnimationFrame(frame);
   }
+  /* Один живой rAF-цикл: при скрытии вкладки отложенный кадр не сгорает, а
+     ждёт показа — без cancel каждый цикл «скрыл/показал» добавлял бы ещё один
+     параллельный цикл (лепестки ускоряются, CPU растёт). */
+  let raf = 0;
+  const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); };
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) requestAnimationFrame(frame);
+    if (!document.hidden) schedule();
   });
-  requestAnimationFrame(frame);
+  schedule();
 })();
 
 /* ---------- Доступность модальных оверлеев: focus-trap + изоляция фона ----------
@@ -863,10 +900,14 @@ const ModalA11y = {
 ["#player", "#settings", "#confirm", "#about", "#onboarding"].forEach(
   sel => ModalA11y.watch($(sel)));
 
-/* Enter/Space продолжают сессию, когда на экране есть кнопка «Дальше» */
+/* Enter/Space продолжают сессию, когда на экране есть кнопка «Дальше».
+   Плеер должен быть ВЕРХНИМ слоем: когда поверх открыты настройки/подтверждение,
+   ModalA11y делает его inert — клавиши не должны «отвечать» на упражнение под
+   модалкой (то же в awaitChoice для цифр 1–4). */
 document.addEventListener("keydown", e => {
   if (e.key !== "Enter" && e.key !== " ") return;
-  if (!$("#player").classList.contains("open")) return;
+  const p = $("#player");
+  if (!p.classList.contains("open") || p.inert) return;
   // Не перехватывать пробел/Enter, когда фокус в поле свободного ввода: иначе
   // пробел не печатается, а Enter дублировал бы собственный сабмит поля (N1).
   const a = document.activeElement;
@@ -881,6 +922,13 @@ const renderers = { today: renderToday, lessons: renderLessons, review: renderRe
 const TAB_ORDER = ["today", "lessons", "review", "stats", "dict"];
 let _curTab = "today";
 let _navSeq = 0;   // быстрые клики по вкладкам: устаревший переход не дорисовывается
+
+/* Подрезка #view до вьюпорта на время View Transition (см. show ниже): снапшот
+   именованного элемента снимается в полный рост, и очень длинные экраны не
+   влезают в текстуру GPU — переход обрывался бы. Клип не scroll-контейнер и
+   не меняет видимую область; после перехода высота возвращается. */
+function clampView() { view.style.maxHeight = "100vh"; view.style.overflow = "clip"; }
+function unclampView() { view.style.maxHeight = ""; view.style.overflow = ""; }
 
 async function show(name) {
   // Направление перехода между вкладками — для горизонтального въезда контента
@@ -911,28 +959,60 @@ async function show(name) {
   // Основной путь — View Transitions API: старый экран ОСТАЁТСЯ на месте, пока
   // готовится новый (в норме скелетон не показывается вовсе — пустой промежуток
   // «фон мелькнул между экранами» исчезает по построению), затем один
-  // перекрёстный сдвиг по направлению (CSS ::view-transition-*(view)). Гонка с
-  // таймаутом, чтобы совсем медленная сеть не замораживала страницу: через
-  // 700мс переходим на скелетон, а контент позже мягко проявится (у .skel —
+  // перекрёстный сдвиг по направлению (CSS ::view-transition-*(view)).
+  //
+  // Пока колбэк не разрешился, браузер показывает СТАТИЧНЫЙ снимок старого
+  // экрана — большой бюджет ожидания читался бы как «клик — и всё замерло»
+  // (так и было при 700мс). Поэтому данные вкладок кэшируются и прогреваются
+  // заранее (cachedGet/prefetchTabs — рендер обычно без сети, переход стартует
+  // мгновенно), а гонка с таймаутом — короткая страховка на холодный кэш:
+  // через 250мс переходим на скелетон, контент позже мягко проявится (у .skel —
   // отложенный fade-in, плюс подъём ниже).
+  //
+  // Подводный камень: снапшот именованного элемента снимается В ПОЛНЫЙ РОСТ,
+  // а «Путь» — десятки тысяч px в высоту; такая текстура не влезает в GPU, и
+  // Chrome обрывает переход (ready реджектится InvalidStateError). Без
+  // обработки это давало жёсткую подмену экрана и тост «Что-то пошло не так»
+  // на каждом переходе в/из «Пути». Поэтому: (1) на время перехода #view
+  // подрезается до вьюпорта — видно всё равно только его, зато снапшот всегда
+  // влезает; (2) если переход всё же оборвался (глубокий скролл длинного
+  // экрана, скрытая вкладка) — тихий фолбэк на обычный въезд.
   if (dir !== 0 && document.startViewTransition &&
       !matchMedia("(prefers-reduced-motion: reduce)").matches) {
     document.documentElement.dataset.navDir = dir > 0 ? "fwd" : "back";
     const t0 = performance.now();
-    document.startViewTransition(() => {
+    if (!scrollY) clampView();       // старый экран: на топе подрезка невидима
+    const t = document.startViewTransition(() => {
       scrollTo(0, 0);                // прыжок скрыт снимком старого экрана
+      clampView();                   // новый экран рисуется с топа — подрезка невидима
       const p = render().then(() => {
+        // Внутренний каскад .stagger гасим на время перехода: контейнер въезжает
+        // единым снимком VT, а каскад под ним продолжает «подъём» карточек уже
+        // после приезда — на стыке снимок→живой DOM карточки допрыгивают, и
+        // хвост перехода читается рывком. Глушим на свежих карточках (следующая
+        // навигация пересоздаёт DOM — повторно не сработает): экран приезжает
+        // одним слитным движением. Каскад остаётся на первой загрузке и
+        // перерисовках на месте (dir 0 — сюда не заходит).
+        view.querySelectorAll(".stagger > *").forEach(el => el.style.animation = "none");
         // Контент опоздал к переходу (в переходе был показан скелетон) —
-        // подменяем его с мягким подъёмом, а не «хлопком»
-        if (seq === _navSeq && performance.now() - t0 > 720) animateIn(view, 0);
+        // подменяем его с мягким подъёмом всего экрана, а не «хлопком»
+        if (seq === _navSeq && performance.now() - t0 > 270) animateIn(view, 0);
       });
-      return Promise.race([p, new Promise(r => setTimeout(r, 700))]);
+      return Promise.race([p, new Promise(r => setTimeout(r, 250))]);
     });
+    t.ready.catch(() => {            // обрыв: DOM уже подменён, даём въезд как в фолбэке
+      if (seq !== _navSeq) return;   // (перебит более новым переходом — не мешаем)
+      unclampView();
+      animateIn(view, dir);
+    });
+    const done = () => { if (seq === _navSeq) unclampView(); };
+    t.finished.then(done, done);
     return;
   }
 
   // Фолбэк (нет View Transitions / reduced-motion / перерисовка на месте dir=0):
   // уход → въезд классами .anim-*; скелетон, если успеет мелькнуть, едет въездом.
+  unclampView();                     // если перебили переход на полпути — вернуть высоту
   await animateOut(view, dir);
   if (seq !== _navSeq) return;       // пока уходил — кликнули другую вкладку
   if (dir !== 0) {
@@ -957,6 +1037,34 @@ document.querySelectorAll("nav.tabs button").forEach(b =>
     if (b.dataset.view === _curTab) { scrollTo({ top: 0, behavior: "smooth" }); return; }
     show(b.dataset.view);
   }));
+
+/* Свайп влево/вправо по контенту — соседняя вкладка (мобильный жест; въезд
+   и так направленный, жест напрашивается). Срабатывает только на явный
+   горизонтальный и быстрый жест: |dx| ≥ 60 и заметно больше |dy| (вертикаль —
+   скролл), длительность ≤ 500мс (долгий — выделение текста/раздумья).
+   Жест считается только внутри #view: плеер, онбординг и модалки — отдельные
+   оверлеи, их не задевает. Горизонтальные скроллеры (.course-tabs) и поля
+   ввода не перехватываем. Слушатели пассивные — скролл не тормозят. */
+(() => {
+  let x0, y0, t0, armed = false;
+  addEventListener("touchstart", e => {
+    if (e.touches.length > 1) { armed = false; return; }   // пинч — не свайп
+    armed = !!e.target.closest("#view") &&
+            !e.target.closest(".course-tabs, input, select, textarea");
+    const t = e.touches[0];
+    x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
+  }, { passive: true });
+  addEventListener("touchend", e => {
+    if (!armed) return;
+    armed = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Date.now() - t0 > 500) return;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) return;
+    const i = TAB_ORDER.indexOf(_curTab) - Math.sign(dx);  // влево = следующая
+    if (i >= 0 && i < TAB_ORDER.length) show(TAB_ORDER[i]);
+  }, { passive: true });
+})();
 
 /* Скользящая «пилюля» активной вкладки: подложка плавно едет к активной кнопке
    вместо мгновенной перекраски. Видима только на десктопе (см. CSS); класс
@@ -985,13 +1093,19 @@ function moveTabGlider() {
 addEventListener("resize", () => requestAnimationFrame(moveTabGlider));
 document.fonts?.ready?.then(() => moveTabGlider());
 
-function setStreakPill(streak) {
+function setStreakPill(streak, freezes = 0) {
   const pill = $("#streak-pill");
-  // Единственное место для серии — пилюля в шапке (видна на всех вкладках)
+  // Единственное место для серии — пилюля в шапке (видна на всех вкладках).
+  // Щит «выходного» (см. _streak_info на сервере) — рядом с огоньком: видно,
+  // что серия застрахована от одного пропуска.
   const dayWord = LANG === "en"
     ? (streak === 1 ? "day" : "days")
     : plural(streak, ["день", "дня", "дней"]);
-  pill.innerHTML = `${Icons.ui("flame")} ${streak} ${dayWord}`;
+  const shield = freezes > 0
+    ? `<span class="pill-shield" title="${escAttr(tr("Щит выходного: один пропущенный день не сожжёт серию"))}">${
+        Icons.ui("shield")}${freezes > 1 ? `×${freezes}` : ""}</span>`
+    : "";
+  pill.innerHTML = `${Icons.ui("flame")} ${streak} ${dayWord}${shield}`;
   pill.style.display = streak > 0 ? "" : "none";
 }
 
@@ -1007,7 +1121,7 @@ function greeting() {
 async function renderToday() {
   view.innerHTML = skeleton("today");
   const o = await getOverview();
-  setStreakPill(o.streak);
+  setStreakPill(o.streak, o.streak_freezes);
   Romaji.syncProgress(o.courses);
   const next = o.next_lesson;
   const queueTotal = o.srs.due + o.srs.new_available;
@@ -1112,6 +1226,15 @@ async function renderToday() {
         </div>
         <button class="mini-btn indigo" id="btn-freshen">${tr("Освежить")}</button>
       </div>` : ""}
+      ${!queueTotal && !freshUser ? `
+      <div class="plan-item">
+        <div class="pi-ico jp c4">遊</div>
+        <div class="pi-info">
+          <div class="t">${tr("Практика без расписания")}</div>
+          <div class="s">${tr("Сиритори, счётчики, каллиграфия и другие мини-игры")}</div>
+        </div>
+        <button class="mini-btn" id="btn-practice">${tr("Играть")}</button>
+      </div>` : ""}
     </div>
 
     <div class="card">
@@ -1144,6 +1267,7 @@ async function renderToday() {
   $("#btn-review")?.addEventListener("click", startReview);
   $("#btn-lesson")?.addEventListener("click", () => startLesson(next.id));
   $("#btn-freshen")?.addEventListener("click", startFreshen);
+  $("#btn-practice")?.addEventListener("click", () => show("review"));
   if (heroAct) $("#hero-cta")?.addEventListener("click", heroAct.fn);
 }
 
@@ -1154,7 +1278,7 @@ let lessonFilter = localStorage.getItem("michi_lesson_filter") || "all";
 
 async function renderLessons() {
   view.innerHTML = skeleton("lessons");
-  const lessons = await api.get("/api/lessons");
+  const lessons = await cachedGet("/api/lessons");
 
   // Курсы в порядке появления — для переключателя
   const present = [];
@@ -1339,7 +1463,7 @@ function closePlayer() {
   if (exerciseCleanup) exerciseCleanup();
   fireAbort();                 // завершить ожидание текущего шага (без зависших фреймов)
   player.classList.remove("open");
-  invalidateOverview();        // за сессию изменились серия/XP/очередь — обновить
+  invalidateData();            // за сессию изменились серия/XP/очередь/словарь — обновить
   show("today");
 }
 async function askClosePlayer() {
@@ -1411,6 +1535,7 @@ function awaitChoice(buttons) {
     };
     const finish = i => { cleanup(); res(i); };
     const onKey = e => {
+      if (player.inert) return;   // поверх плеера модалка — цифры не отвечают на карточку
       const n = +e.key;
       if (n >= 1 && n <= buttons.length) finish(n - 1);
     };
@@ -2410,8 +2535,8 @@ async function startFreshen() {
 async function renderReviewTab() {
   view.innerHTML = skeleton("review");
   const o = await getOverview();
-  const conf = await api.get("/api/confusions?limit=6").catch(() => ({ pairs: [] }));
-  setStreakPill(o.streak);
+  const conf = await cachedGet("/api/confusions?limit=6").catch(() => ({ pairs: [] }));
+  setStreakPill(o.streak, o.streak_freezes);
   Romaji.syncProgress(o.courses);
   const total = o.srs.due + o.srs.new_available;
   const estMin = Math.max(1, Math.round(total * 0.15));
@@ -3288,7 +3413,7 @@ function memoryMapHtml(courses) {
 
 async function renderDict() {
   view.innerHTML = skeleton("dict");
-  const data = await api.get("/api/learned");
+  const data = await cachedGet("/api/learned");
   if (!data.courses.length) {
     view.innerHTML = `<div class="dict-wrap"><div class="card empty-state">
       <div class="empty-mascot">${Art.mascotTile("wave")}</div>
@@ -3425,7 +3550,7 @@ function optionList(values, current, label) {
 async function renderStats() {
   view.innerHTML = skeleton("stats");
   const [s, ach] = await Promise.all([
-    api.get("/api/stats"), api.get("/api/achievements")]);
+    cachedGet("/api/stats"), cachedGet("/api/achievements")]);
   const c = s.cards;
   const hasActivity = s.activity.some(d => d.reviews > 0);
   view.innerHTML = `
@@ -3511,7 +3636,11 @@ async function renderStats() {
     if (ok) srsHint._t = setTimeout(() => { h.style.display = "none"; }, 1600);
   };
   const saveSrs = async patch => {
-    try { await api.post("/api/settings", patch); srsHint(tr("Сохранено ✓"), true); }
+    try {
+      await api.post("/api/settings", patch);
+      invalidateData();          // лимиты/retention меняют очередь и цифры статистики
+      srsHint(tr("Сохранено ✓"), true);
+    }
     catch (e) { srsHint(tr("Не удалось сохранить: {e}", { e: e.message }), false); }
   };
   $("#srs-new").addEventListener("change", e => saveSrs({ new_per_day: +e.target.value }));
@@ -3709,6 +3838,7 @@ function boot() {
   applyI18n();              // перевод статической разметки (навигация, настройки)
   checkAchievements(false); // тихо засеять базу «увиденных» — без салюта на старте
   show("today");
+  prefetchTabs();           // прогреть остальные вкладки — переключение без паузы на сеть
   Onboarding.maybeShow();   // первый запуск — приветствие, выбор языка и цели
   Prefs.sync();             // подтянуть UI-настройки из БД (после импорта/нов. устройства)
 }

@@ -31,17 +31,28 @@ _UID_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 # (read-only ФС), cookie всё равно подписываются — просто сбросятся на рестарте.
 _PROCESS_SECRET = secrets.token_bytes(32)
 
+# Секрет из файла кэшируется после первого чтения: подпись проверяется на КАЖДОМ
+# запросе (дважды: parse и, у новичков, sign), и без кэша это два дисковых чтения
+# на запрос. Файл при жизни процесса не меняется (смена секрета = рестарт).
+# Env-путь не кэшируем: он дёшев, а тесты подменяют его monkeypatch-ем.
+_FILE_SECRET: bytes | None = None
+
 
 def _secret() -> bytes:
+    global _FILE_SECRET
     env = os.environ.get(_SECRET_ENV)
     if env:
         return env.encode("utf-8")
+    if _FILE_SECRET is not None:
+        return _FILE_SECRET
     try:
         if _SECRET_FILE.exists():
-            return _SECRET_FILE.read_bytes()
+            _FILE_SECRET = _SECRET_FILE.read_bytes()
+            return _FILE_SECRET
         _SECRET_FILE.parent.mkdir(parents=True, exist_ok=True)
         s = secrets.token_bytes(32)
         _SECRET_FILE.write_bytes(s)
+        _FILE_SECRET = s
         return s
     except Exception:
         return _PROCESS_SECRET

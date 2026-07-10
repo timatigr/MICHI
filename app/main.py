@@ -10,10 +10,10 @@ import os
 import sqlite3
 import tempfile
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -272,24 +272,53 @@ def _lesson_statuses(conn):
     return out
 
 
-def _streak(conn, tz_offset_min=None):
-    # Дни считаем по локальным суткам пользователя: занятие после полуночи — «сегодня»
+# «Щиты выходного»: каждые FREEZE_EVERY подряд активных дней дают щит (запас
+# ≤ FREEZE_MAX); пропуск РОВНО одного дня при наличии щита не сжигает серию
+# (щит тратится). Потеря длинной серии из-за одного пропуска — главный
+# демотиватор ежедневных стриков; щит даёт право на выходной, не обесценивая
+# серию (2+ дней подряд пропуска сжигают её всегда).
+STREAK_FREEZE_EVERY = 7
+STREAK_FREEZE_MAX = 2
+
+
+def _streak_info(conn, tz_offset_min=None):
+    # Дни считаем по локальным суткам пользователя: занятие после полуночи — «сегодня».
+    # Всё выводится из журнала (append-only), нового состояния в БД нет: идём по
+    # активным дням хронологически, копим щиты и тратим их на одиночные пропуски.
     rev_day = srs_engine.day_sql("reviewed_at", tz_offset_min)
     comp_day = srs_engine.day_sql("completed_at", tz_offset_min)
-    days = {r["d"] for r in conn.execute(
+    days = sorted({r["d"] for r in conn.execute(
         f"SELECT DISTINCT {rev_day} AS d FROM reviews"
     )} | {r["d"] for r in conn.execute(
         f"SELECT DISTINCT {comp_day} AS d FROM lesson_progress "
         "WHERE completed_at IS NOT NULL"
-    )}
-    today = srs_engine.local_today(tz_offset_min)
-    streak, day = 0, today
-    if today.isoformat() not in days:
-        day = today - timedelta(days=1)  # сегодня ещё не занимался — серия не сгорела
-    while day.isoformat() in days:
-        streak += 1
-        day -= timedelta(days=1)
-    return streak
+    )})
+    streak = freezes = run = 0   # run — активные дни серии (мостики не в счёт)
+    prev = None
+    for s in days:
+        d = date.fromisoformat(s)
+        gap = (d - prev).days if prev else 1
+        if gap == 1:                          # соседний день — серия растёт
+            streak, run = streak + 1, run + 1
+        elif gap == 2 and freezes:            # мостик через один выходной
+            streak, run, freezes = streak + 1, run + 1, freezes - 1
+        else:                                 # разрыв — серия заново
+            streak, run, freezes = 1, 1, 0
+        if run % STREAK_FREEZE_EVERY == 0:
+            freezes = min(freezes + 1, STREAK_FREEZE_MAX)
+        prev = d
+    if prev is None:
+        return {"streak": 0, "freezes": 0}
+    gap = (srs_engine.local_today(tz_offset_min) - prev).days
+    # 0 — занимался сегодня; 1 — вчера (сегодня ещё успеет); 2 при щите — вчера
+    # был выходной, серия жива (щит спишется мостиком при следующем занятии)
+    if gap > 1 and not (gap == 2 and freezes):
+        return {"streak": 0, "freezes": 0}
+    return {"streak": streak, "freezes": freezes}
+
+
+def _streak(conn, tz_offset_min=None):
+    return _streak_info(conn, tz_offset_min)["streak"]
 
 
 # ---------- Сегодня ----------
@@ -322,9 +351,11 @@ def overview(request: Request):
                  if statuses[lid]["status"] == "completed")}
             for course in COURSES
         ]
+        sk = _streak_info(conn, tz)
         return {
             "srs": c,
-            "streak": _streak(conn, tz),
+            "streak": sk["streak"],
+            "streak_freezes": sk["freezes"],
             "xp": gamification.xp_summary(conn, tz),
             "today": {
                 "reviews": today_row["total"],
@@ -489,8 +520,14 @@ def complete_lesson(lesson_id: str, result: LessonResult, request: Request):
 
 # ---------- SRS ----------
 
+# Границы limit у практик/очередей: генераторы внутри и так зажимают выборку,
+# но отрицательное значение в срезах вида queue[:limit] молча отдавало бы почти
+# всё без лимита — валидируем на входе (422), а не чиним по месту.
+_LIMIT = {"ge": 1, "le": 100}
+
+
 @app.get("/api/srs/queue")
-def srs_queue(request: Request, limit: int = 20):
+def srs_queue(request: Request, limit: int = Query(20, **_LIMIT)):
     tz = _tz_offset_min(request)
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
@@ -516,7 +553,9 @@ def srs_queue(request: Request, limit: int = 20):
 class Answer(BaseModel):
     card_id: int
     correct: bool
-    duration_ms: int | None = None
+    # Потолок часа: авто-оценка всё равно доверяет только 200–60000 мс, а
+    # неограниченный int (10**30) ронял бы запись в SQLite (переполнение 64 бит)
+    duration_ms: int | None = Field(default=None, ge=0, le=3_600_000)
     exercise_type: str = ""
     used_hint: bool = False
     confused_with: str | None = None    # знак, выбранный ошибочно (радар путаницы)
@@ -549,7 +588,7 @@ def srs_answer(answer: Answer, request: Request):
 # ---------- Упреждающее повторение «Скоро потускнеет» ----------
 
 @app.get("/api/srs/upcoming")
-def srs_upcoming(request: Request, limit: int = 20):
+def srs_upcoming(request: Request, limit: int = Query(20, **_LIMIT)):
     """Карточки, которые скоро войдут в зону забывания (см. srs_engine.UPCOMING_WINDOW)
     — для раннего освежения. В отличие от «разбора ошибок» это НАСТОЯЩИЙ повтор:
     фронт шлёт ответы в обычный /api/srs/answer, FSRS сам учитывает ранний показ,
@@ -577,7 +616,7 @@ def srs_upcoming(request: Request, limit: int = 20):
 # ---------- Разбор ошибок дня (практика, не влияет на расписание SRS) ----------
 
 @app.get("/api/review/mistakes")
-def review_mistakes(request: Request, limit: int = 30):
+def review_mistakes(request: Request, limit: int = Query(30, **_LIMIT)):
     """Карточки, в которых пользователь сегодня ошибся, как набор упражнений для
     «работы над ошибками». Это практика: фронт НЕ отправляет ответы в SRS, поэтому
     расписание/статистика не затрагиваются (эффект тестирования + «остывание»)."""
@@ -607,7 +646,7 @@ def review_mistakes(request: Request, limit: int = 30):
 # ---------- Тренировка слуха: минимальные пары (SRS.md 5.5) ----------
 
 @app.get("/api/listen/pairs")
-def listen_pairs(limit: int = 8):
+def listen_pairs(limit: int = Query(8, **_LIMIT)):
     """Раунды дрилла «минимальные пары на слух» (おばさん/おばあさん, きて/きって).
     Чистый контент — БД не нужна; это практика, в SRS ничего не пишется."""
     return {"rounds": minimal_pair_rounds(limit)}
@@ -616,13 +655,13 @@ def listen_pairs(limit: int = 8):
 # ---------- Счётные суффиксы 助数詞 (пара «предмет → счётное слово») ----------
 
 @app.get("/api/counters/rounds")
-def counters(limit: int = 8):
+def counters(limit: int = Query(8, **_LIMIT)):
     """Раунды мини-игры про счётные суффиксы. Чистый контент — БД не нужна."""
     return {"rounds": counter_rounds(limit)}
 
 
 @app.get("/api/pitch/rounds")
-def pitch_drill(limit: int = 8):
+def pitch_drill(limit: int = Query(8, **_LIMIT)):
     """Раунды дрилла высотного ударения 高低. Чистый контент — БД не нужна."""
     return {"rounds": pitch_rounds(limit)}
 
@@ -640,7 +679,7 @@ def exam(listening: int = 1):
 # ---------- Радар путаницы: личные ошибки → точечный дрилл-различение ----------
 
 @app.get("/api/confusions")
-def confusions_list(request: Request, limit: int = 8):
+def confusions_list(request: Request, limit: int = Query(8, **_LIMIT)):
     """Самые частые путаницы знаков (для карточки-радара). Только кана с
     валидным отображением; читает личную базу, ничего не пишет."""
     conn = db.connect(_uid(request), create_if_missing=False)
@@ -659,7 +698,7 @@ def confusions_list(request: Request, limit: int = 8):
 
 
 @app.get("/api/confusions/rounds")
-def confusions_drill(request: Request, limit: int = 8):
+def confusions_drill(request: Request, limit: int = Query(8, **_LIMIT)):
     """Раунды различения по личным путаницам. Read-only практика — в SRS не пишет."""
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
@@ -672,7 +711,7 @@ def confusions_drill(request: Request, limit: int = 8):
 # ---------- Кузница кандзи: сборка из компонентов (6.3, граф знаний) ----------
 
 @app.get("/api/forge/rounds")
-def forge_rounds(request: Request, limit: int = 8):
+def forge_rounds(request: Request, limit: int = Query(8, **_LIMIT)):
     """Раунды «Кузницы кандзи»: собрать изученный иероглиф из компонентов.
     Только выученные разложимые кандзи (i+1); практика, в SRS не пишется."""
     conn = db.connect(_uid(request), create_if_missing=False)
@@ -689,7 +728,7 @@ def forge_rounds(request: Request, limit: int = 8):
 # ---------- Сиритори しりとり: словесная цепочка (японская игра) ----------
 
 @app.get("/api/shiritori/rounds")
-def shiritori(request: Request, limit: int = 8):
+def shiritori(request: Request, limit: int = Query(8, **_LIMIT)):
     """Цепочка сиритори из изученных слов (i+1). Практика, в SRS не пишется."""
     conn = db.connect(_uid(request), create_if_missing=False)
     try:
@@ -951,8 +990,17 @@ def prefs_get(request: Request):
         conn.close()
 
 
+# Худший легитимный случай — словарь личных мнемоник (сотни знаков × 140 симв.,
+# десятки КБ). Значения на порядки больше — только абуз (запись мегабайт в БД
+# мимо лимита /api/import), отсекаем до записи.
+_PREF_MAX_LEN = 200_000
+
+
 @app.post("/api/prefs")
 def prefs_set(patch: dict[str, str | None], request: Request):
+    for value in patch.values():
+        if value is not None and len(value) > _PREF_MAX_LEN:
+            raise HTTPException(413, "Слишком длинное значение настройки")
     conn = db.connect(_uid(request))
     try:
         for key, value in patch.items():

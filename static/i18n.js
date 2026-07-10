@@ -178,8 +178,13 @@ const EN = {
   "Пар на слух: {n} · точность {p}%": "Pairs by ear: {n} · accuracy {p}%",
   "Прервать тренировку слуха?": "Stop the listening practice?",
   "Нет сети — попробуйте позже.": "No connection — try again later.",
+  "Нет сети — проверьте соединение.": "No connection — check your network.",
 
   // --- Настройки (⚙) ---
+  "Тема: {t} (нажмите, чтобы сменить)": "Theme: {t} (click to switch)",
+  "светлая": "light", "тёмная": "dark", "как в системе": "system",
+  "Дневной режим": "Day mode",
+  "Ночной режим": "Night mode",
   "Озвучка": "Audio",
   "Источник": "Source",
   "Нейроголос Microsoft (онлайн, лучший звук)": "Microsoft neural voice (online, best sound)",
@@ -195,8 +200,10 @@ const EN = {
   "Лёгкая — 10 XP": "Light — 10 XP",
   "Обычная — 20 XP": "Normal — 20 XP",
   "Серьёзная — 40 XP": "Serious — 40 XP",
-  "Серия 🔥 растёт за любой день с занятием. Цель — личный дневной ориентир. XP: повторение +2, урок +20.":
-    "Your 🔥 streak grows on any day you study. The goal is a personal daily target. XP: review +2, lesson +20.",
+  "Серия 🔥 растёт за любой день с занятием. Каждые 7 дней подряд дают щит (запас до 2): один пропущенный день не сжигает серию. Цель — личный дневной ориентир. XP: повторение +2, урок +20.":
+    "Your 🔥 streak grows on any day you study. Every 7 days in a row earn a shield (up to 2 in stock): one missed day won't burn the streak. The goal is a personal daily target. XP: review +2, lesson +20.",
+  "Щит выходного: один пропущенный день не сожжёт серию":
+    "Rest-day shield: one missed day won't burn your streak",
   "Вибрация при нажатиях": "Vibration on taps",
   "Лёгкий тактильный отклик на телефоне: нажатия и вердикт ответа. На компьютере не ощущается.":
     "A light tactile response on the phone: taps and answer verdicts. Not felt on desktop.",
@@ -226,6 +233,10 @@ const EN = {
   "Новый урок": "New lesson",
   "Все доступные уроки пройдены": "All available lessons completed",
   "Прогресс курсов": "Course progress",
+  "Практика без расписания": "Practice, no schedule",
+  "Сиритори, счётчики, каллиграфия и другие мини-игры":
+    "Shiritori, counters, calligraphy and other mini-games",
+  "Играть": "Play",
   "Катакану можно учить параллельно с хираганой, слова N5 откроются после хираганы.":
     "You can learn katakana alongside hiragana; N5 words unlock after hiragana.",
   "Хирагана пройдена — ромадзи скрыт, чтобы вы читали каной.\n       Вернуть можно в ⚙ настройках.":

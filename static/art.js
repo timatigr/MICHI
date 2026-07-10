@@ -378,9 +378,13 @@ const Art = {
      перекроет SVG (как у достижений). mood: wave (обычный) | cheer (радость). */
   mascotTile(mood = "wave", cls = "") {
     const p = "m" + (this._uid++) + "-";
+    // Файла-перекрытия обычно нет — пробуем раз за загрузку страницы, иначе
+    // каждый рендер маскота шлёт новый запрос и сорит 404 в консоль/логи.
+    const photo = Art._noPhoto ? "" :
+      `<img class="mascot-photo" src="/img/mascot.png" alt="" loading="lazy"`
+      + ` onload="this.classList.add('ok')" onerror="Art._noPhoto=true;this.remove()">`;
     return `<span class="mascot-art ${cls}">${this._wrap(this._mascot(mood, p))}`
-      + `<img class="mascot-photo" src="/img/mascot.png" alt="" loading="lazy"`
-      + ` onload="this.classList.add('ok')" onerror="this.remove()"></span>`;
+      + photo + `</span>`;
   },
 
   _sakuraMini(cx, cy, s = 1) {
