@@ -6,6 +6,8 @@ __pycache__
 .pytest_cache
 tests
 scripts
+# …но stamp_sw.py нужен сборке: Dockerfile штампует им версию Service Worker
+!scripts/stamp_sw.py
 data
 tts_cache
 ai_cache
