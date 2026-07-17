@@ -177,8 +177,9 @@ const TTS = {
     source: "neural",                    // neural | browser
     neuralVoice: "nanami",
     voiceURI: null,                      // голос браузера
-    volume: 0.9,
-    rate: 0.85,
+    volume: 0.8,
+    rate: 1.0,   // естественный темп по умолчанию (решение владельца, 2026-07);
+                 // замедление — осознанный выбор в ⚙, а не стартовое состояние
     ...JSON.parse(localStorage.getItem("michi_tts") || "{}"),
   },
   neuralVoices: [],   // [{id, label}] с сервера
