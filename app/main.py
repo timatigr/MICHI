@@ -29,9 +29,9 @@ from .content.registry import (
     srs_items_for_lesson,
 )
 from .exercises import (
-    _mnemonics_for, confusion_rounds, counter_rounds, exam_paper, item_info,
-    kanji_forge_rounds, make_lesson_steps, minimal_pair_rounds, pitch_rounds,
-    review_exercise, shiritori_rounds,
+    _mnemonics_for, confusion_rounds, counter_rounds, dictation_rounds,
+    exam_paper, item_info, kanji_forge_rounds, make_lesson_steps,
+    minimal_pair_rounds, pitch_rounds, review_exercise, shiritori_rounds,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -753,6 +753,27 @@ def shiritori(request: Request, limit: int = Query(8, **_LIMIT)):
         conn.close()
     words = [VOCAB_BY_ID[r["item_id"]] for r in rows if r["item_id"] in VOCAB_BY_ID]
     return {"rounds": shiritori_rounds(words, limit)}
+
+
+# ---------- «Диктант» 書き取り: услышал → записал/собрал ----------
+
+@app.get("/api/dictation/rounds")
+def dictation_practice(request: Request, limit: int = Query(8, **_LIMIT)):
+    """Диктант из изученного (i+1): слова — свободный ввод, предложения
+    изученной грамматики — сборка из плиток по звуку. Практика, в SRS не пишется."""
+    conn = db.connect(_uid(request), create_if_missing=False)
+    try:
+        vrows = conn.execute(
+            "SELECT DISTINCT item_id FROM srs_cards "
+            "WHERE item_type LIKE 'vocab%' AND reps > 0").fetchall()
+        grows = conn.execute(
+            "SELECT DISTINCT item_id FROM srs_cards "
+            "WHERE item_type = 'grammar' AND reps > 0").fetchall()
+    finally:
+        conn.close()
+    words = [VOCAB_BY_ID[r["item_id"]] for r in vrows if r["item_id"] in VOCAB_BY_ID]
+    points = [GRAMMAR_BY_ID[r["item_id"]] for r in grows if r["item_id"] in GRAMMAR_BY_ID]
+    return {"rounds": dictation_rounds(words, points, limit)}
 
 
 # ---------- «Свиток истории» 物語 (обучение через контекст, i+1) ----------

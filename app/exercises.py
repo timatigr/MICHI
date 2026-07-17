@@ -709,6 +709,36 @@ def shiritori_rounds(words, limit=8):
     return rounds[:limit]
 
 
+def sentence_dictation(point, example):
+    """Диктант предложения (5.5, аудирование → продукция): УСЛЫШАЛ → собрал из
+    плиток. Та же сборка, что sentence_scramble, но подсказка — звук, а не
+    перевод. Тип оставлен sentence_scramble: клиентский рендер общий
+    (runWordBuild понимает prompt.style=audio). Без озвучки — деградация к
+    переводу (fallback_text): упражнение превращается в обычную сборку."""
+    ex = sentence_scramble(point, example)
+    ex["prompt"] = {"text": "", "style": "audio",
+                    "tts": _sentence_reading(example),
+                    "fallback_text": example["ru"]}
+    ex["question"] = "Соберите, что услышали"
+    ex["speak_after"] = False   # звук и есть задание — играет сразу
+    return ex
+
+
+def dictation_rounds(words, points, limit=8):
+    """Раунды «Диктанта» 書き取り: услышал → записал (слово, свободный ввод,
+    тип 37) или собрал предложение из плиток. Материал — только изученное
+    (i+1): слова с reps>0 и примеры изученных грамматических точек. Чистая
+    практика, в SRS не пишется. Слов ~2/3, предложений ~1/3 — фразы заметно
+    тяжелее. Вернёт меньше limit, если изученного пока мало (как мин. пары)."""
+    examples = [(p, e) for p in points for e in p.get("examples", [])]
+    n_sent = min(len(examples), limit // 3)
+    n_words = min(len(words), limit - n_sent)
+    rounds = ([dictation(w) for w in random.sample(words, n_words)]
+              + [sentence_dictation(p, e) for p, e in random.sample(examples, n_sent)])
+    random.shuffle(rounds)
+    return rounds
+
+
 def _decomposable_kanji():
     """Кандзи, у которых есть разбор на ≥2 компонента (6.3) — пул для «Кузницы»."""
     return [k for k in KANJI if len(k.get("components") or []) >= 2]

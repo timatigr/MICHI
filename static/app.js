@@ -1430,7 +1430,8 @@ function openPlayer(mode) {
                    calligraphy: "Каллиграфия 書道", forge: "Кузница кандзи 鍛冶",
                    shiritori: "Сиритори しりとり", counters: "Счётные слова 助数詞",
                    pitch: "Высотное ударение 高低", story: "Свиток истории 物語",
-                   confusion: "Радар путаницы", exam: "Пробный тест N5" };
+                   confusion: "Радар путаницы", exam: "Пробный тест N5",
+                   dictation: "Диктант 書き取り" };
   player.setAttribute("aria-label", tr(labels[mode] || "Урок"));
   player.classList.add("open");
   resetProgress();
@@ -1485,6 +1486,8 @@ async function askClosePlayer() {
                   ? tr("Прервать тренировку различения?")
                 : playerMode === "counters"
                   ? tr("Прервать тренировку счётных слов?")
+                : playerMode === "dictation"
+                  ? tr("Прервать диктант?")
                 : tr("Прервать повторение? Все ответы уже сохранены.");
   if (await confirmDialog(msg)) closePlayer();
 }
@@ -2075,10 +2078,18 @@ async function runChoice(ex, afterAnswer) {
 async function runWordBuild(ex, afterAnswer) {
   // speak_after: озвучка слова до ответа выдала бы его (тип vocab_build)
   const quiet = !!ex.speak_after;
+  // Диктант предложения: подсказка — только звук; без озвучки (офлайн)
+  // деградирует к переводу — как dictation в runInput
+  const isAudio = ex.prompt.style === "audio";
+  const audioMode = isAudio && TTS.available;
+  const promptTop = audioMode
+    ? `<button class="audio-prompt" data-tts="${ex.prompt.tts}" title="${tr("Прослушать ещё раз")}">${Icons.ui("speaker")}</button>`
+    : `<div class="prompt-text">${trBuildPrompt(isAudio ? ex.prompt.fallback_text : ex.prompt.text)}</div>` +
+      (quiet ? "" : ttsButton(ex.prompt.tts));
+  const question = (isAudio && !audioMode) ? "Соберите предложение" : ex.question;
   playerBody.innerHTML = `
-    <p class="question">${tr(ex.question)}</p>
-    <div class="prompt-text">${trBuildPrompt(ex.prompt.text)}</div>
-    ${quiet ? "" : ttsButton(ex.prompt.tts)}
+    <p class="question">${tr(question)}</p>
+    ${promptTop}
     <div class="build-slots" id="slots"></div>
     <div class="tiles" id="tiles">
       ${ex.tiles.map((t, i) => `<button data-i="${i}">${t}</button>`).join("")}
@@ -2087,7 +2098,7 @@ async function runWordBuild(ex, afterAnswer) {
     <div class="spacer"></div>
     <button class="primary" id="check" disabled>${tr("Проверить")}</button>`;
   animateIn(playerBody);
-  if (!quiet) speak(ex.prompt.tts);
+  if (audioMode || !quiet) speak(ex.prompt.tts);
 
   const slots = $("#slots", playerBody);
   const checkBtn = $("#check", playerBody);
@@ -2580,6 +2591,7 @@ async function renderReviewTab() {
       <div class="practice-grid">
         <button class="practice-tile story-tile" data-practice="story"><span class="pt-ico">${Icons.art("story")}</span><span class="pt-label">${tr("Свиток")}</span><span class="pt-jp jp">物語</span></button>
         ${TTS.available ? `<button class="practice-tile" data-practice="listen"><span class="pt-ico">${Icons.art("listen")}</span><span class="pt-label">${tr("Слух")}</span><span class="pt-jp jp">耳</span></button>` : ""}
+        ${TTS.available ? `<button class="practice-tile" data-practice="dictation"><span class="pt-ico">${Icons.art("dictation")}</span><span class="pt-label">${tr("Диктант")}</span><span class="pt-jp jp">書き取り</span></button>` : ""}
         <button class="practice-tile" data-practice="pitch"><span class="pt-ico">${Icons.art("pitch")}</span><span class="pt-label">${tr("Тон")}</span><span class="pt-jp jp">高低</span></button>
         <button class="practice-tile" data-practice="shiritori"><span class="pt-ico">${Icons.art("shiritori")}</span><span class="pt-label">${tr("Сиритори")}</span><span class="pt-jp jp">しりとり</span></button>
         <button class="practice-tile" data-practice="counters"><span class="pt-ico">${Icons.art("counters")}</span><span class="pt-label">${tr("Счётчики")}</span><span class="pt-jp jp">助数詞</span></button>
@@ -2591,7 +2603,7 @@ async function renderReviewTab() {
     </div>`;
   const PRACTICE = { story: startStory, listen: startListening, shiritori: startShiritori,
                      counters: startCounters, forge: startForge, calligraphy: startCalligraphy,
-                     pitch: startPitch };
+                     pitch: startPitch, dictation: startDictation };
   $("#btn-start")?.addEventListener("click", startReview);
   $("#btn-mistakes")?.addEventListener("click", startMistakes);
   $("#btn-exam")?.addEventListener("click", startExam);
@@ -2632,6 +2644,56 @@ async function startMistakes() {
       <h2>${tr("Разбор ошибок завершён")}</h2>
       <p>${done ? tr("Повторено: {n} · сейчас верно {p}%", { n: done, p: Math.round(okCount / done * 100) })
                 : tr("Сегодня ошибок нет — отлично!")}</p>
+      <button class="primary" id="finish">${tr("Готово")}</button>
+    </div>`;
+  animateIn(playerBody);
+  if (await waitClick($("#finish", playerBody)) === ABORT) return;
+  closePlayer();
+}
+
+/* ---------- «Диктант» 書き取り: услышал → записал/собрал (SRS.md 5.5) ----------
+   Слова — свободный ввод (тип 37 dictation), предложения изученной грамматики —
+   сборка из плиток по звуку (sentence_dictation на сервере). Материал только
+   из изученного (i+1). Read-only: runExercise без afterAnswer — SRS не трогаем. */
+async function startDictation() {
+  const token = openPlayer("dictation");
+  let data;
+  try { data = await api.get("/api/dictation/rounds?limit=8"); }
+  catch { toast(tr("Нет сети — попробуйте позже."), true); closePlayer(); return; }
+  if (token !== sessionToken) return;
+  const rounds = data.rounds;
+  if (!rounds.length) {
+    playerBody.classList.add("center-step");
+    playerBody.innerHTML = `
+      <div class="result">
+        <div class="empty-mascot">${Art.mascotTile("wave")}</div>
+        <p>${tr("Диктант собирается из изученных слов — сначала пройдите пару уроков.")}</p>
+        <button class="primary" id="finish">${tr("Понятно")}</button>
+      </div>`;
+    animateIn(playerBody);
+    if (await waitClick($("#finish", playerBody)) === ABORT) return;
+    closePlayer();
+    return;
+  }
+  let done = 0, okCount = 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (token !== sessionToken) return;
+    setProgress(done / rounds.length);
+    $("#player-counter").textContent = tr("{n} · осталось ~{m}", { n: done, m: Math.max(rounds.length - i, 1) });
+    const res = await runExercise(rounds[i]);   // без afterAnswer → не пишем в SRS
+    if (token !== sessionToken) return;
+    done++;
+    if (res.correct) okCount++;
+    Combo.update(res.correct);
+  }
+  if (token !== sessionToken) return;
+  setProgress(1);
+  playerBody.classList.add("center-step");
+  playerBody.innerHTML = `
+    <div class="result">
+      <div class="mark">書</div>
+      <h2>${tr("Диктант завершён")}</h2>
+      <p>${tr("Записано: {n} · верно {p}%", { n: done, p: Math.round(okCount / done * 100) })}</p>
       <button class="primary" id="finish">${tr("Готово")}</button>
     </div>`;
   animateIn(playerBody);

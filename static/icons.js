@@ -112,5 +112,16 @@ const Icons = {
         fill="#4A4458" stroke="#4A4458" stroke-width="2" stroke-linejoin="round"/>
       <path d="M24,80 Q48,66 76,74"
         fill="none" stroke="#8E7CC3" stroke-width="6.5" stroke-linecap="round"/>`,
+    // Лист с записью + звуковые дуги + карандаш — «Диктант» 書き取り
+    dictation: `<rect x="26" y="18" width="42" height="58" rx="6"
+        fill="#FFF7E9" stroke="#4A4458" stroke-width="2.4"/>
+      <g stroke="#C9A6CE" stroke-width="3.2" stroke-linecap="round">
+        <path d="M34,32 H60"/><path d="M34,42 H60"/><path d="M34,52 H48"/></g>
+      <g stroke="#7FD4E0" stroke-width="3.4" stroke-linecap="round" fill="none">
+        <path d="M76,26 a9,9 0 0 1 0,14"/><path d="M83,21 a15,15 0 0 1 0,24"/></g>
+      <path d="M78,52 L86,60 L64,82 L54,84 L56,74 Z"
+        fill="#F4C84B" stroke="#4A4458" stroke-width="2.4" stroke-linejoin="round"/>
+      <path d="M78,52 L86,60 L81,65 L73,57 Z"
+        fill="#EF7FA8" stroke="#4A4458" stroke-width="2.4" stroke-linejoin="round"/>`,
   },
 };
