@@ -28,7 +28,8 @@ KANJI_CHARS = ("一二三四五六七八九十日月火水木金土林森明本�
                "年時分半今何学校先生父母男女子友行来見聞話読書食飲"
                "高安新古多長東西南北山川天気雨"
                "百千万円出入立休国語外車電駅"
-               "右左前後午毎週間文字名")
+               "右左前後午毎週間文字名"
+               "手足白空花魚犬町店社道会買歩走帰")
 
 URL = "https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{:05x}.svg"
 PATH_RE = re.compile(r'<path[^>]*\bd="([^"]+)"')
