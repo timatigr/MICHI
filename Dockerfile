@@ -17,6 +17,11 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Прегенерированная озвучка курса (scripts/build_tts.py): нейроголос на проде
+# без живого Edge TTS. Слой большой (десятки МБ) и меняется реже кода —
+# копируем ДО кода, чтобы правки app/static не пересобирали его.
+COPY tts_baked ./tts_baked
+
 COPY app ./app
 COPY static ./static
 

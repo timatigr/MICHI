@@ -30,7 +30,11 @@ const api = {
   async get(url) {
     const r = await fetch(url, { headers: { "X-TZ-Offset": TZ_OFFSET } }).catch(netFail);
     if (!r.ok) throw await apiError(r);
-    return r.json();
+    const data = await r.json();
+    // Прогрев озвучки урока/сессии (не-сессионные URL отсекаются внутри).
+    // TDZ-безопасно: первый ответ приходит после исполнения всего модуля.
+    ttsPrefetchSession(url, data);
+    return data;
   },
   async post(url, body) {
     const r = await fetch(url, {
@@ -232,6 +236,7 @@ const TTS = {
     }
   },
 
+  _fails: 0,          // подряд неудачных нейро-воспроизведений
   speakNeural(text) {
     if (this.audio) this.audio.pause();
     // Новый элемент на каждое воспроизведение — без гонок при смене src
@@ -242,8 +247,35 @@ const TTS = {
     a.defaultPlaybackRate = this.prefs.rate;
     a.playbackRate = this.prefs.rate;
     if ("preservesPitch" in a) a.preservesPitch = true;
-    a.onerror = () => { this.neuralOk = false; this.speakBrowser(text); };
+    a.onplaying = () => { this._fails = 0; };
+    a.onerror = () => {
+      // Единичный промах (фразы нет в прегенерированном кэше на проде) —
+      // браузерным голосом озвучиваем только её. Нейроголос выключаем лишь
+      // после серии ошибок (реально легла сеть/сервер): раньше ПЕРВЫЙ же
+      // промах глушил его до конца вкладки.
+      if (++this._fails >= 3) this.neuralOk = false;
+      this.speakBrowser(text);
+    };
     a.play().catch(() => {});
+  },
+
+  /* Тихий прогрев: скачать файлы фраз заранее (SW кэширует /api/tts
+     cache-first — каждая фраза ходит в сеть один раз). По 3 параллельно,
+     чтобы не спорить с запросами сессии; уже прогретые тексты пропускаются. */
+  _prefetched: new Set(),
+  prefetch(texts) {
+    if (!(this.prefs.source === "neural" && this.neuralOk && this.neuralVoices.length)) return;
+    const voice = this.prefs.neuralVoice;
+    const queue = texts.filter(t => t && !this._prefetched.has(`${voice}|${t}`));
+    queue.forEach(t => this._prefetched.add(`${voice}|${t}`));
+    let i = 0;
+    const next = () => {
+      if (i >= queue.length || !this.neuralOk) return;
+      const t = queue[i++];
+      fetch(`/api/tts?text=${encodeURIComponent(t)}&voice=${encodeURIComponent(voice)}`)
+        .catch(() => {}).finally(next);
+    };
+    for (let n = 0; n < 3; n++) next();
   },
 
   speakBrowser(text) {
@@ -266,6 +298,27 @@ if ("speechSynthesis" in window) {
   speechSynthesis.onvoiceschanged = () => TTS.refreshBrowser();
 }
 TTS.init();
+
+/* Прогрев озвучки сессии: пришли данные урока/SRS-сессии/мини-игры — тихо
+   выкачиваем все их фразы (см. TTS.prefetch). Первый клик по «послушать» и
+   авто-озвучка карточек звучат мгновенно даже на медленной сети, а открытая
+   заранее сессия озвучена и офлайн. Вызывается из api.get на каждый ответ;
+   ключи — зеркало scripts/build_tts.py (что клиент передаёт в speak/data-tts). */
+const _TTS_SESSION_URLS = /^\/api\/(lessons\/|srs\/(queue|upcoming)|review\/mistakes|listen\/pairs|exam|story|(counters|pitch|confusions|forge|shiritori)\/rounds)/;
+const _TTS_SPEAK_KEYS = new Set(["tts", "answer_tts", "char", "jp", "r", "reading", "kana"]);
+function ttsPrefetchSession(url, data) {
+  if (!_TTS_SESSION_URLS.test(url)) return;
+  const texts = new Set();
+  (function walk(o) {
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    if (!o || typeof o !== "object") return;
+    for (const [k, v] of Object.entries(o)) {
+      if (_TTS_SPEAK_KEYS.has(k) && typeof v === "string" && v) texts.add(v);
+      else walk(v);
+    }
+  })(data);
+  TTS.prefetch([...texts]);
+}
 
 /* ---------- ИИ-разбор ошибок «Сэнсэй» (SRS.md 7.2) ---------- */
 const AI = {
@@ -492,7 +545,7 @@ aboutModal.addEventListener("click", e => {
 });
 $("#set-source").addEventListener("change", e => {
   TTS.prefs.source = e.target.value;
-  if (e.target.value === "neural") TTS.neuralOk = true; // дать второй шанс сети
+  if (e.target.value === "neural") { TTS.neuralOk = true; TTS._fails = 0; } // дать второй шанс сети
   TTS.save();
   fillVoiceSelect();
 });
@@ -607,39 +660,12 @@ const Romaji = {
 Romaji.apply();
 
 /* ---------- Анимация появления экранов ----------
-   dir: 0 — подъём (по умолчанию, для перерисовок и плеера); +1/-1 — горизонтальный
-   въезд под направление смены вкладки (как в нативных приложениях). */
-function animateIn(el, dir = 0) {
-  const cls = dir > 0 ? "anim-in-right" : dir < 0 ? "anim-in-left" : "anim-in";
-  el.classList.remove("anim-in", "anim-in-left", "anim-in-right");
+   Мягкий подъём готового контента: перерисовки на месте, шаги плеера и фолбэк
+   смены вкладки без View Transitions. */
+function animateIn(el) {
+  el.classList.remove("anim-in");
   void el.offsetWidth; // перезапуск CSS-анимации
-  el.classList.add(cls);
-}
-
-/* Короткий уход старого экрана перед сменой вкладки (симметрия с animateIn):
-   переключение читается как непрерывное движение, а не подмена картинки.
-   fill:forwards держит экран прозрачным до конца анимации; класс снимается в
-   finish(), а следующий рендер подменяет DOM в той же микрозадаче — кадра со
-   «вернувшимся» старым контентом не бывает. Резолвится сразу при reduced-motion
-   и на пустом экране; setTimeout — страховка, если animationend не пришёл. */
-function animateOut(el, dir) {
-  return new Promise(resolve => {
-    if (dir === 0 || !el.childElementCount ||
-        matchMedia("(prefers-reduced-motion: reduce)").matches) { resolve(); return; }
-    el.classList.remove("anim-in", "anim-in-left", "anim-in-right");
-    const cls = dir > 0 ? "anim-out-left" : "anim-out-right";
-    el.classList.add(cls);
-    let done = false;
-    const finish = e => {
-      if (done || (e && e.target !== el)) return;  // animationend детей — не наш
-      done = true;
-      el.removeEventListener("animationend", finish);
-      el.classList.remove(cls);
-      resolve();
-    };
-    el.addEventListener("animationend", finish);
-    setTimeout(finish, 220);
-  });
+  el.classList.add("anim-in");
 }
 
 /* Плавный счёт числа 0→to (ease-out cubic). Под reduced-motion — конечное сразу. */
@@ -931,8 +957,9 @@ function clampView() { view.style.maxHeight = "100vh"; view.style.overflow = "cl
 function unclampView() { view.style.maxHeight = ""; view.style.overflow = ""; }
 
 async function show(name) {
-  // Направление перехода между вкладками — для горизонтального въезда контента
-  const dir = Math.sign(TAB_ORDER.indexOf(name) - TAB_ORDER.indexOf(_curTab));
+  // Смена вкладки или перерисовка на месте? (после урока/сессии show зовут
+  // с той же вкладкой — там переход не нужен, только мягкое обновление)
+  const switched = name !== _curTab;
   _curTab = name;
   const seq = ++_navSeq;
   document.querySelectorAll("nav.tabs button").forEach(b => {
@@ -958,8 +985,8 @@ async function show(name) {
 
   // Основной путь — View Transitions API: старый экран ОСТАЁТСЯ на месте, пока
   // готовится новый (в норме скелетон не показывается вовсе — пустой промежуток
-  // «фон мелькнул между экранами» исчезает по построению), затем один
-  // перекрёстный сдвиг по направлению (CSS ::view-transition-*(view)).
+  // «фон мелькнул между экранами» исчезает по построению), затем один тихий
+  // кросс-фейд (CSS ::view-transition-*(view)).
   //
   // Пока колбэк не разрешился, браузер показывает СТАТИЧНЫЙ снимок старого
   // экрана — большой бюджет ожидания читался бы как «клик — и всё замерло»
@@ -976,57 +1003,48 @@ async function show(name) {
   // на каждом переходе в/из «Пути». Поэтому: (1) на время перехода #view
   // подрезается до вьюпорта — видно всё равно только его, зато снапшот всегда
   // влезает; (2) если переход всё же оборвался (глубокий скролл длинного
-  // экрана, скрытая вкладка) — тихий фолбэк на обычный въезд.
-  if (dir !== 0 && document.startViewTransition &&
+  // экрана, скрытая вкладка) — тихий фолбэк на обычное появление.
+  if (switched && document.startViewTransition &&
       !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    document.documentElement.dataset.navDir = dir > 0 ? "fwd" : "back";
     const t0 = performance.now();
     if (!scrollY) clampView();       // старый экран: на топе подрезка невидима
     const t = document.startViewTransition(() => {
       scrollTo(0, 0);                // прыжок скрыт снимком старого экрана
       clampView();                   // новый экран рисуется с топа — подрезка невидима
       const p = render().then(() => {
-        // Внутренний каскад .stagger гасим на время перехода: контейнер въезжает
+        // Внутренний каскад .stagger гасим на время перехода: экран проявляется
         // единым снимком VT, а каскад под ним продолжает «подъём» карточек уже
-        // после приезда — на стыке снимок→живой DOM карточки допрыгивают, и
-        // хвост перехода читается рывком. Глушим на свежих карточках (следующая
-        // навигация пересоздаёт DOM — повторно не сработает): экран приезжает
+        // после — на стыке снимок→живой DOM карточки допрыгивают, и хвост
+        // перехода читается рывком. Глушим на свежих карточках (следующая
+        // навигация пересоздаёт DOM — повторно не сработает): экран проявляется
         // одним слитным движением. Каскад остаётся на первой загрузке и
-        // перерисовках на месте (dir 0 — сюда не заходит).
+        // перерисовках на месте (сюда не заходят: switched=false).
         view.querySelectorAll(".stagger > *").forEach(el => el.style.animation = "none");
         // Контент опоздал к переходу (в переходе был показан скелетон) —
         // подменяем его с мягким подъёмом всего экрана, а не «хлопком»
-        if (seq === _navSeq && performance.now() - t0 > 270) animateIn(view, 0);
+        if (seq === _navSeq && performance.now() - t0 > 270) animateIn(view);
       });
       return Promise.race([p, new Promise(r => setTimeout(r, 250))]);
     });
-    t.ready.catch(() => {            // обрыв: DOM уже подменён, даём въезд как в фолбэке
+    t.ready.catch(() => {            // обрыв: DOM уже подменён, проявляем как в фолбэке
       if (seq !== _navSeq) return;   // (перебит более новым переходом — не мешаем)
       unclampView();
-      animateIn(view, dir);
+      animateIn(view);
     });
     const done = () => { if (seq === _navSeq) unclampView(); };
     t.finished.then(done, done);
     return;
   }
 
-  // Фолбэк (нет View Transitions / reduced-motion / перерисовка на месте dir=0):
-  // уход → въезд классами .anim-*; скелетон, если успеет мелькнуть, едет въездом.
+  // Фолбэк (нет View Transitions / reduced-motion / перерисовка на месте):
+  // рендер, затем мягкий подъём готового контента — без промежуточного «ухода»:
+  // под reduced-motion движения не положены, а перерисовка на месте и раньше
+  // обходилась одним animateIn.
   unclampView();                     // если перебили переход на полпути — вернуть высоту
-  await animateOut(view, dir);
-  if (seq !== _navSeq) return;       // пока уходил — кликнули другую вкладку
-  if (dir !== 0) {
-    scrollTo(0, 0);                  // экран сейчас прозрачен — сброс скролла невидим
-    animateIn(view, dir);
-  }
+  if (switched) scrollTo(0, 0);
   render().then(() => {
     if (seq !== _navSeq) return;
-    // Перерисовка на месте (dir 0) — мягкий подъём готового контента, как раньше.
-    // Медленная загрузка (въезд уже кончился) — тоже, иначе контент подменяет
-    // скелетон «хлопком». Быстрый путь не трогаем: перезапуск анимации на
-    // полпути и был главным источником дёрганья.
-    const entering = view.getAnimations?.().some(a => a.playState === "running");
-    if (dir === 0 || !entering) animateIn(view, 0);
+    animateIn(view);
   });
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>

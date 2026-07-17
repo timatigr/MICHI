@@ -15,7 +15,10 @@ primary_region = "fra"          # Франкфурт; смените при же
 
 [env]
   MICHI_COOKIE_SECURE = "1"     # cookie только по HTTPS (за TLS Fly — обязательно)
-  MICHI_TTS_ENABLED = "0"       # Edge TTS троттлит под нагрузкой → браузерный голос
+  # Живой синтез выключен (Edge TTS троттлит под нагрузкой), но нейроголос у
+  # посетителей ЕСТЬ: /api/tts раздаёт прегенерированную озвучку курса из
+  # tts_baked/ (собирается scripts/build_tts.py и коммитится в репозиторий).
+  MICHI_TTS_ENABLED = "0"
 
   # ВАЖНО: задайте постоянный секрет подписи cookie ДО первого деплоя —
   #   fly secrets set MICHI_SECRET_KEY=$(openssl rand -hex 32)

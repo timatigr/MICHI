@@ -187,7 +187,13 @@ async def _identify(request: Request, call_next):
     первом визите — выдаём новый и ставим cookie (см. identity.py)."""
     # Рейт-лимит только на /api/*: статика дёшева и кэшируется, а абуз-вектор —
     # поток запросов без cookie, плодящий per-user базы (см. ratelimit.py).
-    if request.url.path.startswith("/api/"):
+    # Исключение — /api/tts при ВЫКЛЮЧЕННОМ синтезе (публичный хостинг):
+    # раздаются готовые файлы из tts_baked/ (дёшево, баз не создаёт), а префетч
+    # озвучки сессии шлёт их пачками и упирался бы в лимит. При живом синтезе
+    # (локально / свой VOICEVOX) лимит остаётся: синтез дорогой.
+    path = request.url.path
+    tts_baked_only = path == "/api/tts" and not _TTS_SYNTH_ENABLED
+    if path.startswith("/api/") and not tts_baked_only:
         allowed, retry = ratelimit.check(ratelimit.client_ip(request))
         if not allowed:
             return JSONResponse(
@@ -851,27 +857,34 @@ def ai_explain_grammar(req: ExplainGrammarRequest, request: Request):
 
 # ---------- Озвучка (Edge TTS, нейроголоса) ----------
 # На публичном хостинге серверный Edge TTS под потоком людей Microsoft троттлит,
-# а дисковый кэш растёт без границ. MICHI_TTS_ENABLED=0 выключает серверную
-# озвучку — фронт мягко откатывается на браузерный голос (Web Speech): пустой
-# список голосов → neuralOk=false, а ошибка на /api/tts → onerror → speakBrowser.
-_TTS_SERVER_ENABLED = os.environ.get("MICHI_TTS_ENABLED", "1") != "0"
+# а дисковый кэш растёт без границ. MICHI_TTS_ENABLED=0 выключает синтез НА
+# ЛЕТУ, но готовые файлы из tts_baked/ (прегенерация всего курса —
+# scripts/build_tts.py) раздаются как обычно: нейроголос работает у всех
+# посетителей без единого обращения к Microsoft. Промах мимо кэша (фразы нет
+# в курсе) → 503 → фронт озвучивает эту фразу голосом браузера. Если
+# tts_baked/ не собран, список голосов пуст — фронт целиком на браузерном
+# голосе, как раньше.
+_TTS_SYNTH_ENABLED = os.environ.get("MICHI_TTS_ENABLED", "1") != "0"
 
 
 @app.get("/api/tts/voices")
 async def tts_voices():
-    if not _TTS_SERVER_ENABLED:
-        return []
+    if not _TTS_SYNTH_ENABLED:
+        return tts.baked_voices()
     return await tts.list_voices()
 
 
 @app.get("/api/tts")
 async def tts_synthesize(text: str, voice: str = tts.DEFAULT_VOICE):
-    if not _TTS_SERVER_ENABLED:
-        raise HTTPException(503, "Серверная озвучка выключена")
     if not text.strip():
         raise HTTPException(400, "Пустой текст")
     try:
-        path, media_type = await tts.synthesize(text, voice)
+        path, media_type = await tts.synthesize(
+            text, voice, allow_synth=_TTS_SYNTH_ENABLED)
+    except FileNotFoundError:
+        raise HTTPException(503, "Фразы нет в прегенерированной озвучке")
+    except ValueError:
+        raise HTTPException(400, "Неизвестный голос")
     except Exception:
         raise HTTPException(502, "Озвучка недоступна (нет сети?)")
     return FileResponse(path, media_type=media_type,

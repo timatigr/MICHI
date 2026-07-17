@@ -6,6 +6,7 @@
 ничего не устанавливая (синтез серверный, браузер ходит только в /api/tts).
 """
 import asyncio
+import hashlib
 import json
 
 import pytest
@@ -93,3 +94,62 @@ def test_synthesize_voicevox_routes_and_caches(monkeypatch, tmp_path):
 def test_synthesize_rejects_bad_speaker():
     with pytest.raises(ValueError):
         asyncio.run(tts.synthesize("ねこ", "vv:3; rm -rf"))
+
+
+# --- Прегенерированная озвучка (tts_baked/, публичный хостинг) ---
+# Инвариант: с MICHI_TTS_ENABLED=0 нейроголос жив за счёт готовых файлов,
+# живого синтеза нет, промах мимо кэша — мягкий фолбэк (503 → голос браузера).
+
+def _bake(dirpath, text, voice="nanami"):
+    """Файл в кэше именно так, как его ищет synthesize: sha1(голос|текст),
+    текст — после _prepare (короткие фразы получают завершающую точку)."""
+    prepared = tts._prepare(text)
+    key = hashlib.sha1(f"{voice}|{prepared}".encode("utf-8")).hexdigest()
+    p = dirpath / f"{key}.mp3"
+    p.write_bytes(b"ID3fake")
+    return p
+
+
+def test_baked_voices_empty_without_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path / "missing")
+    assert tts.baked_voices() == []
+
+
+def test_synthesize_serves_baked_without_synth(monkeypatch, tmp_path):
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path)
+    monkeypatch.setattr(tts, "CACHE_DIR", tmp_path / "runtime")
+    _bake(tmp_path, "ねこ")
+    assert [v["id"] for v in tts.baked_voices()] == ["nanami", "nanami-kawaii", "keita"]
+
+    path, media = asyncio.run(tts.synthesize("ねこ", "nanami", allow_synth=False))
+    assert media == "audio/mpeg" and path.read_bytes() == b"ID3fake"
+
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(tts.synthesize("いぬ", "nanami", allow_synth=False))
+
+
+def test_api_tts_baked_mode(make_client, monkeypatch, tmp_path):
+    """Роуты при выключенном синтезе: голоса из baked, попадание 200, промах 503."""
+    from app import main
+    monkeypatch.setattr(main, "_TTS_SYNTH_ENABLED", False)
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path)
+    monkeypatch.setattr(tts, "CACHE_DIR", tmp_path / "runtime")
+    _bake(tmp_path, "ねこ")
+    c = make_client()
+
+    ids = [v["id"] for v in c.get("/api/tts/voices").json()]
+    assert ids == ["nanami", "nanami-kawaii", "keita"]   # без VOICEVOX: движка нет
+
+    r = c.get("/api/tts", params={"text": "ねこ", "voice": "nanami"})
+    assert r.status_code == 200 and r.content == b"ID3fake"
+    assert r.headers["cache-control"] == "public, max-age=31536000"
+
+    assert c.get("/api/tts", params={"text": "いぬ"}).status_code == 503
+
+
+def test_api_tts_voices_empty_without_baked(make_client, monkeypatch, tmp_path):
+    """Синтез выключен и baked не собран — поведение как раньше: голосов нет."""
+    from app import main
+    monkeypatch.setattr(main, "_TTS_SYNTH_ENABLED", False)
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path / "missing")
+    assert make_client().get("/api/tts/voices").json() == []

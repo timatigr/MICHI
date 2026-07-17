@@ -11,6 +11,15 @@
   ничего не устанавливая (синтез серверный, браузер ходит только в /api/tts).
 
 Файлы кэшируются на диске; скорость/громкость применяются на клиенте.
+
+Два уровня кэша:
+- tts_baked/ — прегенерированная озвучка всего курса (scripts/build_tts.py),
+  коммитится в репозиторий и попадает в образ. Благодаря ей на публичном
+  хостинге нейроголос работает БЕЗ живого синтеза (MICHI_TTS_ENABLED=0):
+  Edge TTS под потоком посетителей Microsoft троттлит, а готовые файлы
+  раздаются мгновенно.
+- tts_cache/ — рантайм-кэш фраз, синтезированных на лету (локальная
+  разработка, VOICEVOX); не коммитится.
 """
 import asyncio
 import hashlib
@@ -23,7 +32,9 @@ from pathlib import Path
 
 import edge_tts
 
-CACHE_DIR = Path(__file__).resolve().parent.parent / "tts_cache"
+_ROOT = Path(__file__).resolve().parent.parent
+BAKED_DIR = _ROOT / "tts_baked"
+CACHE_DIR = _ROOT / "tts_cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
 MAX_TEXT_LEN = 120
@@ -108,6 +119,24 @@ async def list_voices():
     return public_edge + await voicevox_voices()
 
 
+def baked_voices():
+    """Голоса, доступные без живого синтеза: Edge-список, если рядом лежит
+    прегенерированный кэш (scripts/build_tts.py). Пусто (кэш не собран) —
+    фронт мягко откатится на голос браузера, как раньше."""
+    if BAKED_DIR.is_dir() and any(BAKED_DIR.glob("*.mp3")):
+        return [{"id": v["id"], "label": v["label"]} for v in EDGE_VOICES]
+    return []
+
+
+def _cached(filename: str):
+    """Готовый файл в одном из кэшей: прегенерированный → рантаймовый."""
+    for d in (BAKED_DIR, CACHE_DIR):
+        p = d / filename
+        if p.exists():
+            return p
+    return None
+
+
 def _prepare(text: str) -> str:
     """Edge TTS обрезает хвост у очень коротких фраз (одиночные слоги
     вроде «い»). Точка в конце даёт движку законченную фразу с
@@ -125,8 +154,12 @@ def _tmp_for(path: Path) -> Path:
     return path.with_name(f"{path.stem}.{os.getpid()}.{time.time_ns()}.tmp")
 
 
-async def synthesize(text: str, voice: str):
-    """Вернуть (путь к файлу, media_type); синтез при отсутствии в кэше."""
+async def synthesize(text: str, voice: str, allow_synth: bool = True):
+    """Вернуть (путь к файлу, media_type); синтез при отсутствии в кэше.
+
+    allow_synth=False (публичный хостинг, MICHI_TTS_ENABLED=0): раздаём только
+    готовые файлы; промах → FileNotFoundError, роут отвечает 503, и фронт
+    озвучивает эту фразу голосом браузера."""
     voice = LEGACY_IDS.get(voice, voice)
     text = _prepare(text)
 
@@ -135,24 +168,33 @@ async def synthesize(text: str, voice: str):
         if not speaker.isdigit():
             raise ValueError("bad voicevox speaker")
         key = hashlib.sha1(f"{voice}|{text}".encode("utf-8")).hexdigest()
+        hit = _cached(f"{key}.wav")
+        if hit is not None:
+            return hit, "audio/wav"
+        if not allow_synth:
+            raise FileNotFoundError(f"{key}.wav")
         path = CACHE_DIR / f"{key}.wav"
-        if not path.exists():
-            def synth():
-                query = _vv_post(
-                    f"/audio_query?text={urllib.parse.quote(text)}&speaker={speaker}")
-                return _vv_post(f"/synthesis?speaker={speaker}", query)
-            wav = await asyncio.to_thread(synth)
-            tmp = _tmp_for(path)
-            tmp.write_bytes(wav)
-            tmp.replace(path)
+
+        def synth():
+            query = _vv_post(
+                f"/audio_query?text={urllib.parse.quote(text)}&speaker={speaker}")
+            return _vv_post(f"/synthesis?speaker={speaker}", query)
+        wav = await asyncio.to_thread(synth)
+        tmp = _tmp_for(path)
+        tmp.write_bytes(wav)
+        tmp.replace(path)
         return path, "audio/wav"
 
     v = EDGE_BY_ID.get(voice, EDGE_BY_ID[DEFAULT_VOICE])
     key = hashlib.sha1(f"{v['id']}|{text}".encode("utf-8")).hexdigest()
+    hit = _cached(f"{key}.mp3")
+    if hit is not None:
+        return hit, "audio/mpeg"
+    if not allow_synth:
+        raise FileNotFoundError(f"{key}.mp3")
     path = CACHE_DIR / f"{key}.mp3"
-    if not path.exists():
-        tmp = _tmp_for(path)
-        await edge_tts.Communicate(
-            text, v["voice"], pitch=v["pitch"], rate=v["rate"]).save(str(tmp))
-        tmp.replace(path)
+    tmp = _tmp_for(path)
+    await edge_tts.Communicate(
+        text, v["voice"], pitch=v["pitch"], rate=v["rate"]).save(str(tmp))
+    tmp.replace(path)
     return path, "audio/mpeg"

@@ -168,36 +168,28 @@ html[data-theme="dark"] body::before {
   to   { opacity: 1; transform: none; }
 }
 .anim-in { animation: rise .28s cubic-bezier(.21, .8, .36, 1) both; }
-/* Горизонтальный въезд контента под направление смены вкладки (как в нативных) */
-@keyframes slide-from-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
-@keyframes slide-from-left  { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: none; } }
-.anim-in-right { animation: slide-from-right .2s cubic-bezier(.21, .8, .36, 1) both; }
-.anim-in-left  { animation: slide-from-left  .2s cubic-bezier(.21, .8, .36, 1) both; }
-/* Уход старого экрана перед въездом нового (animateOut в app.js): короче и с
-   ease-in — уходящее ускоряется, приходящее тормозит, как в нативной навигации.
-   forwards держит конечную прозрачность до подмены DOM. */
-@keyframes slide-to-left  { to { opacity: 0; transform: translateX(-16px); } }
-@keyframes slide-to-right { to { opacity: 0; transform: translateX(16px); } }
-.anim-out-left  { animation: slide-to-left  .1s ease-in forwards; }
-.anim-out-right { animation: slide-to-right .1s ease-in forwards; }
 
-/* Переход вкладок через View Transitions API (show в app.js; без поддержки
-   работает фолбэк на .anim-* классах). Контент-область — своя именованная
-   группа: шапка, навигация и фон в переходе не участвуют. Старый экран
-   держится на месте, пока готовится новый, затем перекрёстный сдвиг по
-   направлению (data-nav-dir на <html>). mix-blend-mode: normal вместо
-   дефолтного plus-lighter обязателен: полупрозрачный перехлёст двух слоёв
-   в plus-lighter складывает яркость — и получается та самая вспышка.
-   Длительности старого и нового РАВНЫ: если старый гаснет вдвое быстрее
-   (было .1s против .2s), в середине оба слоя полупрозрачны и переход
+/* Переход вкладок через View Transitions API (show в app.js; без поддержки —
+   фолбэк: рендер + .anim-in). Контент-область — своя именованная группа:
+   шапка, навигация и фон в переходе не участвуют. Старый экран держится на
+   месте, пока готовится новый, затем ТИХИЙ КРОСС-ФЕЙД: старый гаснет, новый
+   проявляется коротким подъёмом на 8px. Горизонтальный слайд по направлению
+   вкладок убран сознательно (решение владельца): движение на всю ширину
+   читалось суетливо. mix-blend-mode: normal вместо дефолтного plus-lighter
+   обязателен: полупрозрачный перехлёст двух слоёв в plus-lighter складывает
+   яркость — и получается вспышка. Длительности старого и нового РАВНЫ: если
+   старый гаснет быстрее, в середине оба слоя полупрозрачны и переход
    читается двухфазно — «исчез… потом появился». */
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
 #view { view-transition-name: view; }
 ::view-transition-old(view),
 ::view-transition-new(view) { mix-blend-mode: normal; }
-::view-transition-old(view) { animation: slide-to-left .2s ease-in both; }
-::view-transition-new(view) { animation: slide-from-right .2s cubic-bezier(.21, .8, .36, 1) both; }
-:root[data-nav-dir="back"]::view-transition-old(view) { animation-name: slide-to-right; }
-:root[data-nav-dir="back"]::view-transition-new(view) { animation-name: slide-from-left; }
+::view-transition-old(view) { animation: vt-fade-out .14s ease-in both; }
+::view-transition-new(view) { animation: vt-rise .14s cubic-bezier(.21, .8, .36, 1) both; }
 
 /* Каскадное появление карточек внутри экрана (premium «list appear» как в iOS):
    контейнер въезжает целиком (.anim-in на #view), а его карточки «оседают» по

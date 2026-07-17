@@ -7,3 +7,5 @@ Dockerfile text eol=lf
 # Шрифты бинарные: явно отключаем нормализацию EOL (защита woff2 от порчи).
 *.woff2 binary
 *.woff binary
+# Прегенерированная озвучка (tts_baked/) — тоже бинарь.
+*.mp3 binary
