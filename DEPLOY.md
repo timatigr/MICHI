@@ -172,16 +172,18 @@ Edge TTS под потоком посетителей троттлит. Но н�
 `/api/tts` раздаёт прегенерированную озвучку всего курса из `tts_baked/`
 (собрать локально: `python -m scripts.build_tts`, закоммитить — попадёт в
 образ; после добавления контента перезапустить). Фраза вне кэша тихо
-озвучивается голосом браузера. Хотите ещё и аниме-голоса (Дзундамон и др.):
+озвучивается голосом браузера.
 
-- поднять рядом контейнер `voicevox/voicevox_engine`
-  (<https://hub.docker.com/r/voicevox/voicevox_engine>, движок:
-  <https://voicevox.hiroshiba.jp/>) — на Fly это второе приложение в приватной
-  сети (<https://fly.io/docs/networking/private-networking/>), адрес прокинуть:
-  `fly secrets set MICHI_VOICEVOX_URL=http://<vv-app>.internal:50021`;
-- на VPS то же самое даёт готовый [docker-compose.yml](docker-compose.yml).
-- Учтите условия использования голосов персонажей VOICEVOX (кредит вида
-  «VOICEVOX:ずんだもん»): <https://voicevox.hiroshiba.jp/term/>.
+**Аниме-голоса** (Дзундамон, Сикоку Мэтан) прегенерируются так же — сервер
+и посетители движок не ставят. Один раз локально: запустить VOICEVOX
+(<https://voicevox.hiroshiba.jp/>), затем
+`python -m scripts.build_tts --vv-speakers 3,2` (нужен `lameenc` из
+requirements-dev.txt; WAV пережимается в mp3), закоммитить `tts_baked/`
+вместе с манифестом `voices.json`. Альтернатива с живым синтезом (не нужна
+для fly.dev-настройки): контейнер `voicevox/voicevox_engine` рядом и
+`MICHI_VOICEVOX_URL` — см. [docker-compose.yml](docker-compose.yml).
+Условия использования голосов персонажей (кредит вида «VOICEVOX:ずんだもん»):
+<https://voicevox.hiroshiba.jp/term/>.
 
 **ИИ-Сэнсэй** (разбор ошибок; по умолчанию выключен, курс работает без него):
 

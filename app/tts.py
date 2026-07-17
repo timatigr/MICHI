@@ -121,11 +121,19 @@ async def list_voices():
 
 def baked_voices():
     """Голоса, доступные без живого синтеза: Edge-список, если рядом лежит
-    прегенерированный кэш (scripts/build_tts.py). Пусто (кэш не собран) —
-    фронт мягко откатится на голос браузера, как раньше."""
-    if BAKED_DIR.is_dir() and any(BAKED_DIR.glob("*.mp3")):
-        return [{"id": v["id"], "label": v["label"]} for v in EDGE_VOICES]
-    return []
+    прегенерированный кэш (scripts/build_tts.py), плюс аниме-голоса VOICEVOX
+    из манифеста voices.json (пишется тем же скриптом при --vv-speakers:
+    сами файлы прегенерированы, живой движок посетителям не нужен). Пусто
+    (кэш не собран) — фронт мягко откатится на голос браузера, как раньше."""
+    if not (BAKED_DIR.is_dir() and any(BAKED_DIR.glob("*.mp3"))):
+        return []
+    voices = [{"id": v["id"], "label": v["label"]} for v in EDGE_VOICES]
+    try:
+        extra = json.loads((BAKED_DIR / "voices.json").read_text("utf-8"))
+        voices += [{"id": v["id"], "label": v["label"]} for v in extra]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass  # манифеста нет / битый — только Edge
+    return voices
 
 
 def _cached(filename: str):
@@ -168,6 +176,11 @@ async def synthesize(text: str, voice: str, allow_synth: bool = True):
         if not speaker.isdigit():
             raise ValueError("bad voicevox speaker")
         key = hashlib.sha1(f"{voice}|{text}".encode("utf-8")).hexdigest()
+        # Прегенерированные аниме-голоса пережаты в mp3 (WAV в разы тяжелее
+        # для репозитория/образа); рантайм-кэш живого синтеза остаётся WAV.
+        hit = _cached(f"{key}.mp3")
+        if hit is not None:
+            return hit, "audio/mpeg"
         hit = _cached(f"{key}.wav")
         if hit is not None:
             return hit, "audio/wav"

@@ -14,6 +14,8 @@ michi.db-shm
 michi.db.bak
 tts_cache/
 ai_cache/
+# Оборванная прегенерация озвучки (scripts/build_tts.py пишет атомарно через .tmp)
+tts_baked/*.tmp
 
 # Публичный хостинг: per-user базы и серверный секрет подписи cookie
 data/

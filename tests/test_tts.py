@@ -75,6 +75,8 @@ def test_voices_cache_keyed_by_url(monkeypatch):
 def test_synthesize_voicevox_routes_and_caches(monkeypatch, tmp_path):
     """vv:-голос идёт в движок (audio_query → synthesis) и кэшируется на диск."""
     monkeypatch.setattr(tts, "CACHE_DIR", tmp_path)
+    # Иначе живой синтез найдёт настоящий прегенерированный файл фразы
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path / "baked")
     calls = []
 
     def fake_post(path, body=b"", timeout=20):
@@ -153,3 +155,33 @@ def test_api_tts_voices_empty_without_baked(make_client, monkeypatch, tmp_path):
     monkeypatch.setattr(main, "_TTS_SYNTH_ENABLED", False)
     monkeypatch.setattr(tts, "BAKED_DIR", tmp_path / "missing")
     assert make_client().get("/api/tts/voices").json() == []
+
+
+def test_baked_vv_mp3_served_without_engine(monkeypatch, tmp_path):
+    """Прегенерированный аниме-голос (mp3) раздаётся без живого движка."""
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path)
+    monkeypatch.setattr(tts, "CACHE_DIR", tmp_path / "runtime")
+    _bake(tmp_path, "ねこ", voice="vv:3")
+    path, media = asyncio.run(tts.synthesize("ねこ", "vv:3", allow_synth=False))
+    assert media == "audio/mpeg" and path.read_bytes() == b"ID3fake"
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(tts.synthesize("いぬ", "vv:3", allow_synth=False))
+
+
+def test_baked_voices_include_vv_manifest(monkeypatch, tmp_path):
+    """voices.json (пишет scripts/build_tts.py) добавляет аниме-голоса к Edge."""
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path)
+    _bake(tmp_path, "ねこ")
+    (tmp_path / "voices.json").write_text(
+        json.dumps([{"id": "vv:3", "label": "Дзундамон — аниме (VOICEVOX)"}]),
+        encoding="utf-8")
+    ids = [v["id"] for v in tts.baked_voices()]
+    assert ids == ["nanami", "nanami-kawaii", "keita", "vv:3"]
+
+
+def test_baked_voices_survive_broken_manifest(monkeypatch, tmp_path):
+    """Битый voices.json не роняет список — остаются Edge-голоса."""
+    monkeypatch.setattr(tts, "BAKED_DIR", tmp_path)
+    _bake(tmp_path, "ねこ")
+    (tmp_path / "voices.json").write_text("{оборванный", encoding="utf-8")
+    assert [v["id"] for v in tts.baked_voices()] == ["nanami", "nanami-kawaii", "keita"]
