@@ -74,7 +74,7 @@ function setQueueBadge(o) {
   const n = o.srs.due + o.srs.new_available;
   (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
 }
-function invalidateData() { _getCache.clear(); }
+function invalidateData() { _getCache.clear(); invalidatePanels(); }
 
 /* Прогрев кэша в простое после первого экрана: первый тап по любой вкладке
    рендерится из кэша, и View Transition стартует сразу, без паузы на сеть. */
@@ -942,25 +942,36 @@ document.addEventListener("keydown", e => {
   if (btn) { e.preventDefault(); btn.click(); }
 });
 
-/* ---------- Роутер вкладок ---------- */
-const view = $("#view");
+/* ---------- Роутер вкладок: живые панели, переключение без анимаций ----------
+   «Нативная» модель (решение владельца, 2026-07-17; прежний направленный слайд
+   и кросс-фейд читались дёргано): каждая вкладка живёт в СВОЁМ DOM-узле и при
+   переключении НЕ перерисовывается — узел просто подменяется внутри #view,
+   позиция скролла вкладки сохраняется и восстанавливается. Единственное
+   движение — пилюля в nav (moveTabGlider), как в нативных таб-барах, где
+   контент меняется мгновенно. Скелетон виден один раз — при самом первом
+   открытии вкладки.
+
+   Свежесть: после сессий/уроков и смены настроек invalidateData() помечает
+   панели устаревшими — вкладка перерисуется при следующем показе. «Сегодня» и
+   «Повторение» дополнительно протухают по времени (_STALE_MS: очередь SRS
+   «созревает» сама), остальные меняются только действиями пользователя.
+   Неактивные панели держатся ОТСОЕДИНЁННЫМИ от документа: document.getElementById
+   и $-запросы рендереров не находят одноимённые id в чужих скрытых вкладках. */
+const viewHost = $("#view");
+let view = viewHost;   // активная панель; рендереры пишут в неё через это имя
 const renderers = { today: renderToday, lessons: renderLessons, review: renderReviewTab, stats: renderStats, dict: renderDict };
 const TAB_ORDER = ["today", "lessons", "review", "stats", "dict"];
-let _curTab = "today";
-let _navSeq = 0;   // быстрые клики по вкладкам: устаревший переход не дорисовывается
+const _panels = {};      // name → {el, renderedAt} (renderedAt 0 = надо перерисовать)
+const _scrollPos = {};   // name → scrollY на момент ухода с вкладки
+const _STALE_MS = { today: 60000, review: 60000 };
+let _curTab = null;
+let _navSeq = 0;   // быстрые клики по вкладкам: устаревший рендер не побеждает
 
-/* Подрезка #view до вьюпорта на время View Transition (см. show ниже): снапшот
-   именованного элемента снимается в полный рост, и очень длинные экраны не
-   влезают в текстуру GPU — переход обрывался бы. Клип не scroll-контейнер и
-   не меняет видимую область; после перехода высота возвращается. */
-function clampView() { view.style.maxHeight = "100vh"; view.style.overflow = "clip"; }
-function unclampView() { view.style.maxHeight = ""; view.style.overflow = ""; }
+function invalidatePanels() {
+  for (const p of Object.values(_panels)) p.renderedAt = 0;
+}
 
 async function show(name) {
-  // Смена вкладки или перерисовка на месте? (после урока/сессии show зовут
-  // с той же вкладкой — там переход не нужен, только мягкое обновление)
-  const switched = name !== _curTab;
-  _curTab = name;
   const seq = ++_navSeq;
   document.querySelectorAll("nav.tabs button").forEach(b => {
     const on = b.dataset.view === name;
@@ -969,83 +980,52 @@ async function show(name) {
   });
   moveTabGlider();
 
-  // Граница ошибки: упавший рендер (обрыв сети на /api/overview и т.п.) не должен
-  // оставлять скелетон навсегда — показываем восстановимое состояние с «Повторить».
-  const render = () => Promise.resolve(renderers[name]()).catch(err => {
+  const p = _panels[name] ??= { el: document.createElement("div"), renderedAt: 0 };
+  if (name !== _curTab) {
+    if (_curTab) _scrollPos[_curTab] = scrollY;
+    _curTab = name;
+    viewHost.replaceChildren(p.el);
+    scrollTo(0, _scrollPos[name] || 0);
+  }
+  view = p.el;
+
+  // Панель свежая — показали мгновенно и вышли; тихий getOverview держит
+  // актуальным бейдж очереди на иконке PWA (DOM не трогает).
+  const ttl = _STALE_MS[name];
+  const fresh = p.renderedAt && !(ttl && Date.now() - p.renderedAt > ttl);
+  if (fresh) { getOverview().catch(() => {}); return; }
+
+  const first = !p.el.childElementCount;
+  try {
+    await renderers[name]();
+    if (seq !== _navSeq) {
+      // Перебиты более новым show. Рендереры пишут через глобальную `view`,
+      // так что этот рендер мог попасть в ЧУЖУЮ панель — пометить и начисто
+      // перерисовать текущую. Окно гонки крошечное (кэш вкладок прогрет,
+      // рендер обычно без сети), но самовосстановление обязано быть.
+      p.renderedAt = 0;
+      if (_curTab !== name && _panels[_curTab]) {
+        _panels[_curTab].renderedAt = 0;
+        show(_curTab);
+      }
+      return;
+    }
+    p.renderedAt = Date.now();
+    if (first) animateIn(view);   // мягкое появление только самого первого рендера
+  } catch (err) {
+    // Граница ошибки: упавший рендер (обрыв сети на /api/overview и т.п.) не
+    // должен оставлять скелетон навсегда — восстановимое состояние с «Повторить».
     if (seq !== _navSeq) return;
     console.error(err);
-    view.innerHTML = `
+    p.renderedAt = 0;
+    p.el.innerHTML = `
       <div class="card empty-state error-state" role="alert">
         <div class="empty-mascot">${Art.mascotTile("wave")}</div>
         <p class="note center">${tr("Не удалось загрузить. Проверьте соединение.")}</p>
         <button class="primary" id="retry-view">${tr("Повторить")}</button>
       </div>`;
-    $("#retry-view")?.addEventListener("click", () => show(name));
-  });
-
-  // Основной путь — View Transitions API: старый экран ОСТАЁТСЯ на месте, пока
-  // готовится новый (в норме скелетон не показывается вовсе — пустой промежуток
-  // «фон мелькнул между экранами» исчезает по построению), затем один тихий
-  // кросс-фейд (CSS ::view-transition-*(view)).
-  //
-  // Пока колбэк не разрешился, браузер показывает СТАТИЧНЫЙ снимок старого
-  // экрана — большой бюджет ожидания читался бы как «клик — и всё замерло»
-  // (так и было при 700мс). Поэтому данные вкладок кэшируются и прогреваются
-  // заранее (cachedGet/prefetchTabs — рендер обычно без сети, переход стартует
-  // мгновенно), а гонка с таймаутом — короткая страховка на холодный кэш:
-  // через 250мс переходим на скелетон, контент позже мягко проявится (у .skel —
-  // отложенный fade-in, плюс подъём ниже).
-  //
-  // Подводный камень: снапшот именованного элемента снимается В ПОЛНЫЙ РОСТ,
-  // а «Путь» — десятки тысяч px в высоту; такая текстура не влезает в GPU, и
-  // Chrome обрывает переход (ready реджектится InvalidStateError). Без
-  // обработки это давало жёсткую подмену экрана и тост «Что-то пошло не так»
-  // на каждом переходе в/из «Пути». Поэтому: (1) на время перехода #view
-  // подрезается до вьюпорта — видно всё равно только его, зато снапшот всегда
-  // влезает; (2) если переход всё же оборвался (глубокий скролл длинного
-  // экрана, скрытая вкладка) — тихий фолбэк на обычное появление.
-  if (switched && document.startViewTransition &&
-      !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    const t0 = performance.now();
-    if (!scrollY) clampView();       // старый экран: на топе подрезка невидима
-    const t = document.startViewTransition(() => {
-      scrollTo(0, 0);                // прыжок скрыт снимком старого экрана
-      clampView();                   // новый экран рисуется с топа — подрезка невидима
-      const p = render().then(() => {
-        // Внутренний каскад .stagger гасим на время перехода: экран проявляется
-        // единым снимком VT, а каскад под ним продолжает «подъём» карточек уже
-        // после — на стыке снимок→живой DOM карточки допрыгивают, и хвост
-        // перехода читается рывком. Глушим на свежих карточках (следующая
-        // навигация пересоздаёт DOM — повторно не сработает): экран проявляется
-        // одним слитным движением. Каскад остаётся на первой загрузке и
-        // перерисовках на месте (сюда не заходят: switched=false).
-        view.querySelectorAll(".stagger > *").forEach(el => el.style.animation = "none");
-        // Контент опоздал к переходу (в переходе был показан скелетон) —
-        // подменяем его с мягким подъёмом всего экрана, а не «хлопком»
-        if (seq === _navSeq && performance.now() - t0 > 270) animateIn(view);
-      });
-      return Promise.race([p, new Promise(r => setTimeout(r, 250))]);
-    });
-    t.ready.catch(() => {            // обрыв: DOM уже подменён, проявляем как в фолбэке
-      if (seq !== _navSeq) return;   // (перебит более новым переходом — не мешаем)
-      unclampView();
-      animateIn(view);
-    });
-    const done = () => { if (seq === _navSeq) unclampView(); };
-    t.finished.then(done, done);
-    return;
+    p.el.querySelector("#retry-view")?.addEventListener("click", () => show(name));
   }
-
-  // Фолбэк (нет View Transitions / reduced-motion / перерисовка на месте):
-  // рендер, затем мягкий подъём готового контента — без промежуточного «ухода»:
-  // под reduced-motion движения не положены, а перерисовка на месте и раньше
-  // обходилась одним animateIn.
-  unclampView();                     // если перебили переход на полпути — вернуть высоту
-  if (switched) scrollTo(0, 0);
-  render().then(() => {
-    if (seq !== _navSeq) return;
-    animateIn(view);
-  });
 }
 document.querySelectorAll("nav.tabs button").forEach(b =>
   b.addEventListener("click", () => {
@@ -3764,6 +3744,7 @@ const Onboarding = {
       setLang(el.dataset.lang);
       Prefs.push("michi_lang");
       applyI18n();            // перевести статику (навигацию/настройки) под низом
+      invalidateData();       // живые панели вкладок отрисованы на старом языке
       this.render();
     }));
     b.querySelectorAll(".ob-goal").forEach(el => (el.onclick = () => {
